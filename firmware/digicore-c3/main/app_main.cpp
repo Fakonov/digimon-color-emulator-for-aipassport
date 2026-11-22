@@ -110,9 +110,11 @@ static constexpr uint16_t kPortB3 = 0x0020;
 static constexpr int kPressFrames = 6;
 
 // Hold B for this long and the emulator's own settings menu opens.  The retail
-// handset uses 2 s for its menu (long C, per the manual); B is the confirm key
-// here, so the gesture was moved off C to keep the guest's own cancels clean.
-static constexpr int64_t kMenuHoldUs = 2000000;
+// handset uses 1.5 s for its menu (long C); B is the confirm key here, so the
+// gesture was moved off C to keep the guest's own cancels clean.  1.5 s is the
+// reference port's tuned value: it is ten times the ROM's ~120 ms key sampling
+// window, and their notes record that going shorter starts misreading the hold.
+static constexpr int64_t kMenuHoldUs = 1500000;
 
 // Long-press A -> A+C.  The handset has three keys on one resistor ladder, so a
 // real A+C chord can never be produced: the ladder reports a single contact.
@@ -126,11 +128,19 @@ static constexpr int64_t kMenuHoldUs = 2000000;
 // change independent of the ROM's menu state: the only cost is that a long A in
 // some other screen also emits the chord, and that is observable in one test
 // pass rather than inferred from a guess about internal addresses.
-// Runtime so the console can shorten it: a real hand press must be held for
-// the full interval, and 800 ms makes bench testing by hand tedious.
-// H <ms> changes it without a reflash.
-static int64_t s_ac_hold_us = 800000;
-static constexpr int64_t kAcHoldDefaultUs = 800000;
+// Runtime so the console can shorten it while bench testing; H <ms> changes it
+// without a reflash.  1.2 s matches the reference port, whose notes measured the
+// same ROM family ignoring a 700 ms chord and only reacting at 3.2 s.
+static int64_t s_ac_hold_us = 1200000;
+static constexpr int64_t kAcHoldDefaultUs = 1200000;
+
+// The chord is held, not pulsed.  The reference port releases A and then keeps
+// A+C down until the ROM reacts, and their notes measured this ROM family
+// ignoring a 700 ms chord entirely and only reacting at 3.2 s -- which is three
+// times the old six-frame pulse, so the old shape was almost certainly invisible.
+// Released when the finger lifts or the deadline passes, whichever comes first.
+static bool s_ac_active = false;
+static int64_t s_ac_until_us = 0;
 // diagnostic: press B1 once at this guest frame (0 = disabled)
 static constexpr uint32_t kAutoPressAt = 0;   // diagnostic auto-press, off by default
 
@@ -966,20 +976,21 @@ static void update_buttons(void)
     // it.
     {
         static int64_t s_a_down_us;
-        static bool s_ac_fired;
-        // A press that came from the console injector has to count here too:
+        static bool s_ac_fired;        // A press that came from the console injector has to count here too:
         // it is the same physical gesture as far as the guest is concerned, and
         // without this the detector only ever sees real fingers.
         const int pressed = instant | (s_inject_left > 0 ? s_inject_mask : 0);
-        if ((pressed & BTN_KEY0) != 0) {
+        // Not while the settings menu owns the panel: the injected C would read
+        // back as a fresh edge and close the menu the user just opened.
+        if ((pressed & BTN_KEY0) != 0 && !menu_is_open()) {
             const int64_t now = esp_timer_get_time();
             if (s_a_down_us == 0)
                 s_a_down_us = now;
             else if (!s_ac_fired && now - s_a_down_us >= s_ac_hold_us) {
                 s_ac_fired = true;
-                s_inject_mask = BTN_KEY0 | BTN_KEY2;
-                s_inject_left = kPressFrames;
-                ESP_LOGI(TAG, "long A (%lld ms) -> A+C chord",
+                s_ac_active = true;
+                s_ac_until_us = now + 3200000;
+                ESP_LOGI(TAG, "long A (%lld ms) -> A+C chord held",
                          (long long)((now - s_a_down_us) / 1000));
             }
         } else {
@@ -995,16 +1006,24 @@ static void update_buttons(void)
     }
 
     // Long B opens the emulator's settings menu.  It is chrome, not a guest
-    // input: the hold is timed here and the guest never sees the press.
+    // input: the hold is timed here, and once it fires the guest gets its own B
+    // released rather than sitting on a two second hold, which this ROM reads as
+    // a burst of repeats.
     {
         static int64_t s_b_down_us = 0;
         static bool s_b_fired = false;
-        if ((instant & BTN_KEY1) != 0) {
+        if ((instant & BTN_KEY1) != 0 && !menu_is_open()) {
             const int64_t now = esp_timer_get_time();
             if (s_b_down_us == 0)
                 s_b_down_us = now;
             else if (!s_b_fired && now - s_b_down_us >= kMenuHoldUs) {
                 s_b_fired = true;
+                if (s_port_bits != 0xffff) {
+                    s_port_bits = 0xffff;
+                    s_soc.set_port(0, 0xffff);
+                }
+                s_hold_left = 0;
+                s_held_frames = 0;
                 menu_open();
                 s_menu_pad_prev = instant | latched;
                 ESP_LOGI(TAG, "long B (%lld ms) -> settings menu",
@@ -1084,7 +1103,15 @@ static void update_buttons(void)
         s_hold_mask = BTN_KEY0;
         s_hold_left = kPressFrames;
     }
-    const int mask = instant != 0 ? instant : (s_hold_left > 0 ? s_hold_mask : 0);
+
+    // A held chord outranks the physical pad: A is released and C pressed, so
+    // the guest sees exactly the combination the two-screen gestures want.
+    if (s_ac_active &&
+        ((instant & BTN_KEY0) == 0 || esp_timer_get_time() >= s_ac_until_us))
+        s_ac_active = false;
+    const int pad = s_ac_active ? (BTN_KEY0 | BTN_KEY2) : instant;
+
+    const int mask = pad != 0 ? pad : (s_hold_left > 0 ? s_hold_mask : 0);
 
     uint16_t bits = 0xffff;
     if (mask & BTN_KEY0)
@@ -1347,7 +1374,10 @@ static void update_sleep_backlight(void)
     // of text in the panel's top margin: that strip is outside the guest
     // window, so it covers no game pixels, it survives whatever the guest
     // pushes next, and fb[] -- and therefore the frame CRC -- is untouched.
-    if (auto_off > kMachineIdleSec && !s_off_notice_done &&
+    // NEVER (0) means "keep the panel lit", which is also longer than the
+    // handset's own 16 s, so it needs the notice just as much as 30 s and up.
+    const bool past_machine = (auto_off == 0) || (auto_off > kMachineIdleSec);
+    if (past_machine && !s_off_notice_done &&
         idle >= int64_t(kMachineIdleSec) * 1000000) {
         s_off_notice_done = true;
         s_notice_until_us = now + 3000000;
@@ -1590,6 +1620,12 @@ extern "C" void app_main(void)
              unsigned(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
              unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
 
+    // Read the stored panel settings before the backlight comes on.  Doing this
+    // after guest_init() meant the panel lit at the compile-time default and
+    // then jumped to the stored level a few hundred ms later.
+    menu_load();
+    s_brightness_pct = menu_bright_pct();
+
     if (display_init() == ESP_OK) {
         s_display_ok = true;
         // Wipe the panel's random power-on GRAM before the guest draws anything,
@@ -1606,6 +1642,10 @@ extern "C" void app_main(void)
 	// be a revision without the codec, and silence is a valid outcome.
 	if (audio_init())
 	{
+		// Apply the stored volume before the chime: audio_init() leaves the
+		// amplitude at its compiled-in default, so without this the boot sound
+		// would ignore the setting entirely.
+		audio_set_volume(menu_volume_pct());
 		// Boot chime: if the deck is mute the cause is visible without a key
 		// press, and if it is audible the whole I2C + I2S + codec chain is
 		// proven in one second.
@@ -1692,7 +1732,7 @@ extern "C" void app_main(void)
         if (s_slices_frame > s_slices_max) s_slices_max = s_slices_frame;
 
         const bool content = window_has_content();
-        if (s_display_ok) {
+        if (s_display_ok && !menu_is_open()) {
             const int64_t t_blit0 = esp_timer_get_time();
             blit_frame();
             s_blit_us += uint32_t(esp_timer_get_time() - t_blit0);

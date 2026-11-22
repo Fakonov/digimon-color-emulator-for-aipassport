@@ -59,7 +59,7 @@ static const int kAutoSaveCount = (int)(sizeof(kAutoSaveChoices) / sizeof(kAutoS
 
 static int s_auto_idx = 0;
 static int s_bright_idx = 3;      // 80%, the value the firmware shipped with
-static int s_volume_idx = 3;      // 60%, the value audio.c defaults to
+static int s_volume_idx = 1;      // 20%: quiet enough to be safe on a fresh flash
 static int s_save_idx = 0;        // 60 s, the period the feature was asked for
 static int s_sel = MENU_IDX_AUTO_OFF;
 static bool s_open = false;
@@ -79,6 +79,8 @@ static void persist_u8(const char *key, uint8_t v)
 
 void menu_load()
 {
+    if (s_nvs_ok)
+        return;             // app_main loads early for the backlight, guest_init again
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         // A partition left over from an older layout.  Nothing of value lives
@@ -96,12 +98,28 @@ void menu_load()
     }
     s_nvs_ok = true;
 
+    // Volume is deliberately reset on every flash.  A freshly written image
+    // should never come up loud in someone's hands, so the stored level is
+    // compared against the build stamp: a different binary means the volume goes
+    // back to the 20% default while every other setting survives.
+    char stamp[24];
+    size_t stamp_len = sizeof(stamp);
+    const bool fresh_build =
+        nvs_get_str(s_nvs, "volbuild", stamp, &stamp_len) != ESP_OK ||
+        strcmp(stamp, __DATE__ " " __TIME__) != 0;
+    if (fresh_build) {
+        s_volume_idx = 1;
+        nvs_set_u8(s_nvs, "vol", (uint8_t)s_volume_idx);
+        nvs_set_str(s_nvs, "volbuild", __DATE__ " " __TIME__);
+        nvs_commit(s_nvs);
+    }
+
     uint8_t v = 0;
     if (nvs_get_u8(s_nvs, "auto", &v) == ESP_OK && v < kAutoOffCount)
         s_auto_idx = v;
     if (nvs_get_u8(s_nvs, "bright", &v) == ESP_OK && v < kBrightCount)
         s_bright_idx = v;
-    if (nvs_get_u8(s_nvs, "vol", &v) == ESP_OK && v < kVolumeCount)
+    if (!fresh_build && nvs_get_u8(s_nvs, "vol", &v) == ESP_OK && v < kVolumeCount)
         s_volume_idx = v;
     if (nvs_get_u8(s_nvs, "save", &v) == ESP_OK && v < kAutoSaveCount)
         s_save_idx = v;
@@ -203,25 +221,25 @@ static constexpr int kRowPitch = 30;
 static constexpr int kTitleY = kCardY + kEdge + kPad - 1;  // 24, TOP_MID offset -1
 static constexpr int kVerY = kCardY + kEdge + kPad + 1;    // 26, TOP_RIGHT offset +1
 static constexpr int kVerRight = kCardX + kCardW - kEdge - kPad - 6;  // 299
-static constexpr int kLabelPad = 2;   // LV_ALIGN_LEFT_MID, 2
-static constexpr int kValuePad = 2;   // LV_ALIGN_RIGHT_MID, -2
+static constexpr int kLabelPad = 4;   // LV_ALIGN_LEFT_MID, 2 plus the row pad of 2
+static constexpr int kValuePad = 4;   // LV_ALIGN_RIGHT_MID, -2 plus the row pad of 2
 
 // Colour literals from the reference theme.  The reference hands 24-bit values
 // to lv_color_hex(), which does the RGB565 conversion internally; here that
 // conversion is done once, by hand, with the source value kept in the comment.
 static constexpr uint16_t kPanelBg   = 0xFFDD;   // #FBF9F0 ivory card
-static constexpr uint16_t kPanelEdge = 0x29A4;   // #2C3324 dark olive border
-static constexpr uint16_t kInk       = 0x2164;   // #252C1F body text
+static constexpr uint16_t kPanelEdge = 0x2984;   // #2C3324 dark olive border
+static constexpr uint16_t kInk       = 0x2163;   // #252C1F body text
 static constexpr uint16_t kSelBar    = 0xFEC5;   // #FFD928 yellow selection bar
-static constexpr uint16_t kSelInk    = 0x1905;   // #17202A text on the bar
+static constexpr uint16_t kSelInk    = 0x2163;   // #252C1F -- the reference sets a bar-local colour but its labels override it, so selected rows render like any other
 static constexpr uint16_t kMuted     = 0x5B0A;   // #5A6350 version tag, help text
 static constexpr uint16_t kPage      = 0x0000;   // everything outside the card
 
 // How far the left edge of a rounded row pulls in, per row from the corner.
 // Integer approximations of r - sqrt(r^2 - (r-dy)^2); four rows are enough at
 // this size because the arc is only a few pixels tall.
-static const uint8_t kCardRound[8] = {8, 5, 3, 2, 2, 1, 1, 1};
-static const uint8_t kRowRound[5] = {5, 2, 1, 1, 1};
+static const uint8_t kCardRound[8] = {8, 4, 3, 2, 1, 1, 0, 0};
+static const uint8_t kRowRound[5] = {5, 2, 1, 0, 0};
 
 static uint16_t s_row[320];
 static uint16_t s_wide[320];
@@ -338,7 +356,7 @@ static void label_for(char *buf, size_t n, int item)
     case MENU_IDX_BRIGHT:   snprintf(buf, n, "%d%%", kBrightChoices[s_bright_idx]); break;
     case MENU_IDX_VOLUME:   snprintf(buf, n, "%d%%", kVolumeChoices[s_volume_idx]); break;
     case MENU_IDX_AUTOSAVE: snprintf(buf, n, "%s", kAutoSaveNames[s_save_idx]); break;
-    default:                snprintf(buf, n, "v%s", DIGICORE_VERSION); break;
+    default:                snprintf(buf, n, "%s", DIGICORE_VERSION); break;
     }
 }
 
@@ -369,14 +387,16 @@ static void render_line(int y)
     // Version tag, top right in the muted tone.
     {
         char tag[16];
-        snprintf(tag, sizeof(tag), "v%s", DIGICORE_VERSION);
+        snprintf(tag, sizeof(tag), "%s", DIGICORE_VERSION);
         text_scanline(s_row, 320, kVerRight - text_width(tag), tag, y - kVerY, kMuted);
     }
 
     for (int i = 0; i < MENU_ITEMS; ++i) {
         const int row_y = kRowY0 + i * kRowPitch;
         const int ty = row_y + (kRowH - kTextH) / 2;
-        const uint16_t ink = (i == s_sel) ? kSelInk : kInk;
+        // The reference tries to darken the selected row's text but its own
+        // label styles override that, so both states render in kInk.
+        const uint16_t ink = kInk;
 
         text_scanline(s_row, 320, kRowX + kLabelPad, name_for(i), y - ty, ink);
 
@@ -386,13 +406,8 @@ static void render_line(int y)
                       y - ty, ink);
     }
 
-    // Help line lives on the black margin below the card, which keeps the card
-    // itself as clean as the reference panel's.
-    {
-        const char *h = "A NEXT   B CHANGE   C EXIT";
-        const int hx = (320 - text_width(h)) / 2;
-        text_scanline(s_row, 320, hx, h, y - (kCardY + kCardH + 3), kMuted);
-    }
+    // The reference's first-level menu carries no help line and no separator,
+    // so neither does this one: the card ends where it ends.
 }
 
 // One line of text in the panel's top margin, above the guest window.  Used to
