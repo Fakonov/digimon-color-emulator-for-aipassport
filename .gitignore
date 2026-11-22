@@ -46,6 +46,7 @@ ref/*.png
 
 # ---- 构建日志噪音 ----
 docs/build_*.log
+firmware/*/build.log
 
 # ---- 整片备份 ----
 docs/backup/

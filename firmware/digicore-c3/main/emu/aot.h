@@ -74,6 +74,24 @@ static inline void aot_set_pc(AotCtx *c, uint32_t lpc)
 	c->r[7] = lpc & 0xffffu;
 }
 
+// ---- 块级寄存器局部化（AOT_LOCAL）----
+//
+// 局部化块把 r0..r7 与 sb 收进同名局部变量：AOT_LOAD_REGS 在块首载入，
+// 每个退出点 AOT_SAVE_REGS 写回。用宏而不是函数，编译器才能看见这 10 个
+// 变量的完整生命周期、把它们一直留在寄存器里 —— 经 c->r[] 的写法每条指令
+// 都要两次访存，那正是 63 主机周期/guest 指令里最大的一块。
+#define AOT_LOAD_REGS(c) do { \
+	r0 = (c)->r[0]; r1 = (c)->r[1]; r2 = (c)->r[2]; r3 = (c)->r[3]; \
+	r4 = (c)->r[4]; r5 = (c)->r[5]; r6 = (c)->r[6]; r7 = (c)->r[7]; \
+	sb = (c)->sb; \
+} while (0)
+
+#define AOT_SAVE_REGS(c) do { \
+	(c)->r[0] = r0; (c)->r[1] = r1; (c)->r[2] = r2; (c)->r[3] = r3; \
+	(c)->r[4] = r4; (c)->r[5] = r5; (c)->r[6] = r6; (c)->r[7] = r7; \
+	(c)->sb = sb; \
+} while (0)
+
 // Counters for where the block body's memory traffic actually lands.  The
 // fast path (guest RAM below ram_limit) is two instructions; everything else
 // is an indirect call into aot_bus_rd/wr and then a virtual call into
@@ -121,30 +139,36 @@ static inline void aot_wr(AotCtx *c, uint32_t address, uint16_t value)
 	c->bus_wr(c->dev, address, value);
 }
 
+// ---- 寄存器局部化形式（AOT_LOCAL 用）----
+//
+// AOT 的块可以把 r0..r7 与 sb 收进 C 局部变量，只在退出点写回。下面这组
+// *_sr 接受寄存器引用而不是 AotCtx：内联之后编译器能把值留在寄存器里，
+// 而经 c->r[] 的写法每条指令都要两次访存。转发版本见文件末尾，逻辑只留一份。
+
 // unsp_device::update_nz()
-static inline void aot_nz(AotCtx *c, uint32_t value)
+static inline void aot_nz_sr(uint32_t &sr, uint32_t value)
 {
-	uint32_t sr = c->r[6] & ~(AOT_N | AOT_Z);
+	uint32_t v = sr & ~(AOT_N | AOT_Z);
 	if (value & 0x8000u)
-		sr |= AOT_N;
+		v |= AOT_N;
 	if ((uint16_t)value == 0)
-		sr |= AOT_Z;
-	c->r[6] = sr;
+		v |= AOT_Z;
+	sr = v;
 }
 
 // unsp_device::update_nzsc()
-static inline void aot_nzsc(AotCtx *c, uint32_t value, uint32_t r0, uint32_t r1)
+static inline void aot_nzsc_sr(uint32_t &sr, uint32_t value, uint32_t r0, uint32_t r1)
 {
-	uint32_t sr = c->r[6] & ~(AOT_N | AOT_Z | AOT_S | AOT_C);
+	uint32_t v = sr & ~(AOT_N | AOT_Z | AOT_S | AOT_C);
 	if (((value >> 16) & 1u) != (((r0 ^ r1) >> 15) & 1u))
-		sr |= AOT_S;
+		v |= AOT_S;
 	if (value & 0x8000u)
-		sr |= AOT_N;
+		v |= AOT_N;
 	if ((uint16_t)value == 0)
-		sr |= AOT_Z;
+		v |= AOT_Z;
 	if (value & 0x10000u)
-		sr |= AOT_C;
-	c->r[6] = sr;
+		v |= AOT_C;
+	sr = v;
 }
 
 // unsp_device::do_basic_alu_ops(), as a value-returning helper.  Returns
@@ -156,54 +180,54 @@ static inline void aot_nzsc(AotCtx *c, uint32_t value, uint32_t r0, uint32_t r1)
 // dropping the write-back of e.g. "sub r5, 1" once r5 reached 1.
 #define AOT_NO_WRITE 0x80000000u
 
-static inline uint32_t aot_op(AotCtx *c, unsigned op0, uint16_t r0, uint16_t r1, bool fl)
+static inline uint32_t aot_op_sr(uint32_t &sr, unsigned op0, uint16_t r0, uint16_t r1, bool fl)
 {
 	uint32_t v;
 	switch (op0)
 	{
 	case 0x0: // Add
 		v = (uint32_t)r0 + r1;
-		if (fl) aot_nzsc(c, v, r0, r1);
+		if (fl) aot_nzsc_sr(sr, v, r0, r1);
 		return v;
 	case 0x1: // Add w/ carry
-		v = (uint32_t)r0 + r1 + ((c->r[6] & AOT_C) ? 1u : 0u);
-		if (fl) aot_nzsc(c, v, r0, r1);
+		v = (uint32_t)r0 + r1 + ((sr & AOT_C) ? 1u : 0u);
+		if (fl) aot_nzsc_sr(sr, v, r0, r1);
 		return v;
 	case 0x2: // Subtract
 		v = (uint32_t)r0 + (uint16_t)~r1 + 1u;
-		if (fl) aot_nzsc(c, v, r0, (uint16_t)~r1);
+		if (fl) aot_nzsc_sr(sr, v, r0, (uint16_t)~r1);
 		return v;
 	case 0x3: // Subtract w/ carry
-		v = (uint32_t)r0 + (uint16_t)~r1 + ((c->r[6] & AOT_C) ? 1u : 0u);
-		if (fl) aot_nzsc(c, v, r0, (uint16_t)~r1);
+		v = (uint32_t)r0 + (uint16_t)~r1 + ((sr & AOT_C) ? 1u : 0u);
+		if (fl) aot_nzsc_sr(sr, v, r0, (uint16_t)~r1);
 		return v;
 	case 0x4: // Compare
 		v = (uint32_t)r0 + (uint16_t)~r1 + 1u;
-		if (fl) aot_nzsc(c, v, r0, (uint16_t)~r1);
+		if (fl) aot_nzsc_sr(sr, v, r0, (uint16_t)~r1);
 		return AOT_NO_WRITE;
 	case 0x6: // Negate
 		v = (uint32_t)(uint16_t)(0u - (uint32_t)r1);
-		if (fl) aot_nz(c, v);
+		if (fl) aot_nz_sr(sr, v);
 		return v;
 	case 0x8: // XOR
 		v = (uint32_t)r0 ^ r1;
-		if (fl) aot_nz(c, v);
+		if (fl) aot_nz_sr(sr, v);
 		return v;
 	case 0x9: // Load
 		v = r1;
-		if (fl) aot_nz(c, v);
+		if (fl) aot_nz_sr(sr, v);
 		return v;
 	case 0xa: // OR
 		v = (uint32_t)r0 | r1;
-		if (fl) aot_nz(c, v);
+		if (fl) aot_nz_sr(sr, v);
 		return v;
 	case 0xb: // AND
 		v = (uint32_t)r0 & r1;
-		if (fl) aot_nz(c, v);
+		if (fl) aot_nz_sr(sr, v);
 		return v;
 	case 0xc: // Test
 		v = (uint32_t)r0 & r1;
-		if (fl) aot_nz(c, v);
+		if (fl) aot_nz_sr(sr, v);
 		return AOT_NO_WRITE;
 	default: // illegal ALU type: the interpreter logs and does nothing
 		return AOT_NO_WRITE;
@@ -211,17 +235,43 @@ static inline uint32_t aot_op(AotCtx *c, unsigned op0, uint16_t r0, uint16_t r1,
 }
 
 // push(): store then post-decrement, i.e. SP points at the last pushed word.
-static inline void aot_push(AotCtx *c, unsigned sp, uint16_t value)
+static inline void aot_push_sr(AotCtx *c, uint32_t &sp_reg, uint16_t value)
 {
-	aot_wr(c, (uint16_t)c->r[sp], value);
-	c->r[sp] = (uint16_t)(c->r[sp] - 1u);
+	aot_wr(c, (uint16_t)sp_reg, value);
+	sp_reg = (uint16_t)(sp_reg - 1u);
 }
 
 // pop(): pre-increment then load.
+static inline uint16_t aot_pop_sr(AotCtx *c, uint32_t &sp_reg)
+{
+	sp_reg = (uint16_t)(sp_reg + 1u);
+	return aot_rd(c, (uint16_t)sp_reg);
+}
+
+// ---- 转发版本：既有调用点（经 c->r[]）照旧可用，逻辑只有一份 ----
+static inline void aot_nz(AotCtx *c, uint32_t value)
+{
+	aot_nz_sr(c->r[6], value);
+}
+
+static inline void aot_nzsc(AotCtx *c, uint32_t value, uint32_t r0, uint32_t r1)
+{
+	aot_nzsc_sr(c->r[6], value, r0, r1);
+}
+
+static inline uint32_t aot_op(AotCtx *c, unsigned op0, uint16_t r0, uint16_t r1, bool fl)
+{
+	return aot_op_sr(c->r[6], op0, r0, r1, fl);
+}
+
+static inline void aot_push(AotCtx *c, unsigned sp, uint16_t value)
+{
+	aot_push_sr(c, c->r[sp], value);
+}
+
 static inline uint16_t aot_pop(AotCtx *c, unsigned sp)
 {
-	c->r[sp] = (uint16_t)(c->r[sp] + 1u);
-	return aot_rd(c, (uint16_t)c->r[sp]);
+	return aot_pop_sr(c, c->r[sp]);
 }
 
 // Instruction-entry hook.  AOT_I is for the first instruction of a block: the
@@ -315,7 +365,6 @@ inline const AotPageDesc *g_aot_pg_ref[128];
 // boundary), so the block set is spread over all 71 pages and caching whole
 // 2 KB pages is a net loss.  Kept at zero so the log format stays stable.
 inline uint32_t g_aot_pg_switch;
-
 #endif
 
 static inline AotFn aot_lookup(uint32_t lpc, uint8_t *cnt = nullptr, uint16_t *cyc = nullptr)

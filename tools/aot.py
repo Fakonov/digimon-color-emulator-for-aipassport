@@ -61,6 +61,12 @@ OUT = os.environ.get("AOT_OUT") or os.path.join(ROOT, "emu", "aot_blocks.c")
 
 MAX_BLOCK_INSNS = 256
 MIN_NATIVE_INSNS = 1
+# Blocks with at least this many translated instructions get the register
+# localisation pass.  Keeping r0..r7 and sb in C locals costs ~20 stores on every
+# way out, which only amortises once the block is long enough; a one-instruction
+# block would spend more time saving than running, and 15% of the static blocks
+# are exactly that short.
+LOCAL_MIN_INSNS = int(os.environ.get("AOT_LOCAL_MIN") or 4)
 PC_MASK = 0x3FFFFF
 _AOT_CYC_RE = re.compile(r"^(\s*)AOT_CYC\(c, 0x[0-9A-Fa-f]+u, (\d+)\);$")
 
@@ -103,8 +109,50 @@ ALU_OP0 = (0x00, 0x01, 0x02, 0x03, 0x04, 0x06, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0
 REASONS = {}
 
 
+_NOTE_ON = True
+
+
 def note(reason):
+    if not _NOTE_ON:
+        return
     REASONS[reason] = REASONS.get(reason, 0) + 1
+
+
+# r0..r7 reach the emitted text as c->r[N]; to_locals() moves them into the
+# block's local variables.  Only the single-index form is rewritten here:
+# push/pop address a register *range* (c->r[4 - i]), which cannot become a C
+# variable reference, so their emitter expands the loop instead.
+_REG_REF = re.compile(r"c->r\[(\d)\]")
+_PUSH_REF = re.compile(r"aot_push\(c, (\d+), ")
+_POP_REF = re.compile(r"aot_pop\(c, (\d+)\)")
+
+
+def to_locals(lines):
+    """Rewrite a block body so that r0..r7 and sb live in C locals.
+
+    The emitters stay written against c->r[] because that is the shape the
+    interpreter uses and therefore the easiest thing to audit against it; this
+    pass only relocates the accesses and makes every exit publish them again.
+    The arithmetic is untouched -- which is exactly what the four-window trace
+    comparison is there to prove.
+
+    Every exit saves first: aot_set_pc() writes c->r[6]/c->r[7] directly, and
+    the fallback path hands the block back to the interpreter, which reads
+    c->r[].
+    """
+    out = []
+    for ln in lines:
+        ln = _REG_REF.sub(lambda m: "r" + m.group(1), ln)
+        ln = ln.replace("c->sb", "sb")
+        ln = _PUSH_REF.sub(lambda m: "aot_push_sr(c, r" + m.group(1) + ", ", ln)
+        ln = _POP_REF.sub(lambda m: "aot_pop_sr(c, r" + m.group(1) + ")", ln)
+        ln = ln.replace("aot_op(c, ", "aot_op_sr(r6, ")
+        if "aot_set_pc(c, " in ln:
+            ln = ln.replace("aot_set_pc(c, ", "AOT_SAVE_REGS(c); aot_set_pc(c, ")
+        if "c->fallback(" in ln:
+            ln = ln.replace("c->fallback(", "AOT_SAVE_REGS(c); c->fallback(")
+        out.append(ln)
+    return out
 
 
 def ds_expr(opb):
@@ -112,7 +160,21 @@ def ds_expr(opb):
     return "(((c->r[6] << 6) & 0x3f0000u) | c->r[%d])" % opb
 
 
-def emit(img, pc, first):
+def emit(img, pc, first, loc=False):
+    """Translate one instruction, rewriting it for block-local registers if asked.
+
+    Keeping the two steps apart means the emitters never have to know about the
+    localisation: they always describe the interpreter's c->r[] accesses, and
+    to_locals() is the single place that moves them into r0..r7.
+    """
+    insn = _emit(img, pc, first, loc)
+    if insn is None or not loc:
+        return insn
+    lines, length, term = insn
+    return (to_locals(lines), length, term)
+
+
+def _emit(img, pc, first, loc=False):
     """Translate the single instruction at pc.
 
     Returns (lines, length_words, term) or None when the form is not covered.
@@ -317,7 +379,12 @@ def emit(img, pc, first):
             return None
         n = 4 + 2 * opn
         lines = [hook, "\t{"]
-        if opn:
+        if opn and loc:
+            # r0..r7 are separate C variables, so the interpreter's c->r[opa-i]
+            # cannot stay an index expression: unroll the range instead.
+            for k in range(opn):
+                lines.append("\t\taot_push_sr(c, r%d, (uint16_t)r%d);" % (opb, opa - k))
+        elif opn:
             lines.append("\t\tfor (unsigned i = 0; i < %du; i++)" % opn)
             lines.append("\t\t\taot_push(c, %du, (uint16_t)c->r[%d - i]);" % (opb, opa))
         lines.append(cyc_line.format(pc, n))
@@ -336,7 +403,10 @@ def emit(img, pc, first):
             return None
         n = 4 + 2 * opn
         lines = [hook, "\t{"]
-        if opn:
+        if opn and loc:
+            for k in range(1, opn + 1):
+                lines.append("\t\tr%d = aot_pop_sr(c, r%d);" % (opa + k, opb))
+        elif opn:
             lines.append("\t\tfor (unsigned i = 1; i <= %du; i++)" % opn)
             lines.append("\t\t\tc->r[%d + i] = aot_pop(c, %du);" % (opa, opb))
         lines.append(cyc_line.format(pc, n))
@@ -505,7 +575,7 @@ def emit(img, pc, first):
     return (lines, length, None)
 
 
-def emit_body(img, entry):
+def emit_body(img, entry, loc=False):
     """Translate one block.  Returns (lines, native_count, worst_cycles).
 
     Every instruction charges its own cycles through AOT_CYC and then checks the
@@ -514,17 +584,29 @@ def emit_body(img, entry):
     at the end instead would let the block overshoot the slice budget by several
     instructions, which desynchronises the slice boundaries (and therefore the
     interrupt landings) from interpreter-only runs.
+
+    With loc=True the body runs on block-local r0..r7/sb: AOT_LOAD_REGS on entry,
+    one AOT_SAVE_REGS per exit.  callers pick that form by block length, because
+    the save/restore pair costs more than it saves on a one-instruction block.
     """
     lines = []
+    if loc:
+        # The declaration has to live in the function scope, not inside the
+        # load macro: the macro only assigns, so it cannot introduce names that
+        # the rest of the block goes on to use.
+        lines.append("\tuint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;")
+        lines.append("\tAOT_LOAD_REGS(c);")
     pc = entry
     native = 0
     worst = 0
     pcs = []
     for index in range(MAX_BLOCK_INSNS):
         pcs.append(pc)
-        insn = emit(img, pc, index == 0)
+        insn = emit(img, pc, index == 0, loc)
         if insn is None:
             lines.append("\t%s(c, 0x%06Xu);" % ("AOT_I" if index == 0 else "AOT_IH", pc))
+            if loc:
+                lines.append("\tAOT_SAVE_REGS(c);")
             lines.append("\tc->fallback(c->dev, c, 0x%06Xu);" % pc)
             lines.append("\treturn;")
             return lines, native, worst, pcs
@@ -541,7 +623,12 @@ def emit_body(img, entry):
             # block keeps r7 (the PC low half) parked on the block entry, so
             # writing SR alone leaves it stale: publish the fall-through PC.
             if term[1] == "sr":
-                lines.append("\tc->r[7] = 0x%04Xu;" % (nxt & 0xFFFF))
+                if loc:
+                    lines.append("\tr7 = 0x%04Xu;" % (nxt & 0xFFFF))
+                else:
+                    lines.append("\tc->r[7] = 0x%04Xu;" % (nxt & 0xFFFF))
+            if loc:
+                lines.append("\tAOT_SAVE_REGS(c);")
             lines.append("\treturn;")
             return lines, native, worst, pcs
         # Leaving the block half way must publish the PC the next instruction
@@ -549,11 +636,14 @@ def emit_body(img, entry):
         # comes first because the interpreter's run loop takes a pending IRQ
         # right after the instruction, before it looks at the cycle budget.
         if not LOOSE:
-            lines.append("\tif (*c->sirq) { aot_set_pc(c, 0x%06Xu); return; }" % nxt)
-            lines.append("\tif (c->icount < 0) { aot_set_pc(c, 0x%06Xu); return; }" % nxt)
+            save = "AOT_SAVE_REGS(c); " if loc else ""
+            lines.append("\tif (*c->sirq) { %saot_set_pc(c, 0x%06Xu); return; }" % (save, nxt))
+            lines.append("\tif (c->icount < 0) { %saot_set_pc(c, 0x%06Xu); return; }" % (save, nxt))
         pc = nxt
 
     lines.append("\tAOT_IH(c, 0x%06Xu);" % pc)
+    if loc:
+        lines.append("\tAOT_SAVE_REGS(c);")
     lines.append("\tc->fallback(c->dev, c, 0x%06Xu);" % pc)
     lines.append("\treturn;")
     return lines, native, worst, pcs
@@ -584,6 +674,7 @@ def finish_block(lines):
 
 
 def main():
+    global _NOTE_ON
     blocks = []
     with open(BLOCKS, "r", encoding="utf-8") as f:
         for line in f:
@@ -608,6 +699,7 @@ def main():
     native_total = 0
     registered = 0
     truncated = 0
+    localised = 0
     insn_total = 0
     covered = set()
     # Real block entries first, then any remaining hot PC that no block already
@@ -637,6 +729,29 @@ def main():
             continue
         emitted.add(entry)
         lines, native, worst, pcs = emit_body(img, entry)
+        if LOOSE and native >= LOCAL_MIN_INSNS:
+            # Second pass with r0..r7 held in C locals.  Only blocks long enough
+            # for the save/restore pair to amortise take it: measured dispatch is
+            # 68 cycles and a short block cannot pay that back twice.
+            #
+            # PC builds stay on the c->r[] form on purpose.  They check the
+            # interrupt and cycle budget after *every* instruction, so every one
+            # of those exits would need a full 10-register flush (12444 of them
+            # across the table) -- which costs more than the localisation saves,
+            # and the unmodified form is what the four-window trace comparison
+            # is calibrated against.  The device build is LOOSE, exits once per
+            # block, and is the one that needs the speed.
+            _NOTE_ON = False
+            l2, n2, w2, p2 = emit_body(img, entry, True)
+            _NOTE_ON = True
+            if n2 == native and p2 == pcs:
+                lines, worst = l2, w2
+                localised += 1
+            else:
+                # A translation that terminates elsewhere is a bug in the
+                # rewriting pass; keep the audited form and say so loudly.
+                print("LOCALISATION MISMATCH at %06X: %d/%d insns, tails %s/%s"
+                      % (entry, native, n2, pcs[-1:], p2[-1:]))
         lines = finish_block(lines)
         insn_total += native
         # A static block entry is a real function in the original code, so it is
@@ -753,6 +868,7 @@ def main():
     print("hot PCs covered  : %d / %d" % (len(extra) - skipped_overlap, len(extra)))
     print("skipped (<%d ins) : %d" % (MIN_NATIVE_INSNS, truncated))
     print("native insns     : %d" % native_total)
+    print("localised blocks : %d (>= %d insns)" % (localised, LOCAL_MIN_INSNS))
     print("avg native/block : %.2f" % (native_total / registered if registered else 0.0))
     print("pages            : %d" % len(pages))
     if REASONS:
