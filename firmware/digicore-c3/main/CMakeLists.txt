@@ -9,6 +9,8 @@ idf_component_register(
     SRCS "app_main.cpp"
          "rom_esp.cpp"
          "saveimg.cpp"
+         "gueststate.cpp"
+         "menu.cpp"
          "buttons.c"
          "audio.c"
          "display.c"
@@ -18,7 +20,7 @@ idf_component_register(
          "emu/isa/unsp_amalgam.cpp"
          "emu/aot_blocks.c"
     INCLUDE_DIRS "." "emu" "emu/compat"
-    REQUIRES spi_flash esp_partition esp_timer esp_lcd driver esp_adc esp_rom
+    REQUIRES spi_flash esp_partition esp_timer esp_lcd driver esp_adc esp_rom nvs_flash
 )
 
 # The MAME-derived copies (emu/gpce4.cpp, emu/unsp_glue.cpp) print uint32_t

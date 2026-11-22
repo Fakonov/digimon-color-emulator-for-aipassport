@@ -68,6 +68,16 @@ MIN_NATIVE_INSNS = 1
 # are exactly that short.
 LOCAL_MIN_INSNS = int(os.environ.get("AOT_LOCAL_MIN") or 4)
 PC_MASK = 0x3FFFFF
+# Superblock grouping.  Blocks whose statically known successors form a region
+# with a single entry are emitted as one C function: the intermediate exits skip
+# the 10-register flush, the 10-register reload and the table walk, which is
+# ~20 memory accesses plus a page lookup per block boundary.  The cycle charge
+# and the interrupt test still happen at every block boundary (LAB_BC labels), so
+# slice boundaries stay where they were - that is what keeps the frame CRC
+# identical to the ungrouped build.
+GROUP = bool(os.environ.get("AOT_GROUP"))
+MAX_GROUP_BLOCKS = int(os.environ.get("AOT_GROUP_BLOCKS") or 4)
+MAX_GROUP_INSNS = int(os.environ.get("AOT_GROUP_INSNS") or 48)
 _AOT_CYC_RE = re.compile(r"^(\s*)AOT_CYC\(c, 0x[0-9A-Fa-f]+u, (\d+)\);$")
 
 # Blocks listed in AOT_IRAM_LIST are placed in IRAM on the device (the C3 has
@@ -673,6 +683,144 @@ def finish_block(lines):
     return out
 
 
+_SET_PC_RE = re.compile(r"aot_set_pc\(c, 0x([0-9A-Fa-f]{6})u\);")
+_SET_PC_ANY_RE = re.compile(r"aot_set_pc\(c, ")
+
+
+def exit_targets(lines):
+    """Literal targets reachable from the block tail, as ints.
+
+    The per-instruction guards (`if (*c->sirq) { ...; return; }`) also publish a
+    PC, but they return straight to the dispatcher instead of falling into the
+    next block, so they are not group edges.
+    """
+    out = []
+    for ln in lines:
+        if " return; }" in ln:
+            continue
+        for m in _SET_PC_RE.finditer(ln):
+            out.append(int(m.group(1), 16))
+    return out
+
+
+def groupable(lines):
+    """True when every way out of the block names its successor literally.
+
+    Blocks that leave on a computed PC (CALL16 / JMPF / JMPR), on an SR write
+    (the PC high half is only known at run time) or on the one-instruction
+    fallback cannot be chained: their successor set is not known statically, so
+    the group would lose its single-entry property.
+    """
+    if not exit_targets(lines):
+        return False
+    for ln in lines:
+        if ln.strip().startswith("c->fallback("):
+            return False
+        if re.match(r"^\s*(r7|c->r\[7\]) = 0x[0-9A-Fa-f]{4}u;\s*$", ln):
+            return False
+        if _SET_PC_ANY_RE.search(ln) and not _SET_PC_RE.search(ln):
+            return False
+    return True
+
+
+def groupify(members, loc):
+    """Rewrite a group's blocks into one function body plus its exit labels."""
+    # Only members that somebody actually jumps to need a label; labelling the
+    # leader unconditionally provokes -Wunused-label on acyclic groups.
+    mset = set(m[0] for m in members)
+    need = set()
+    for entry, native, lines, worst in members:
+        for ln in lines:
+            m = _SET_PC_RE.search(ln)
+            if m and " return; }" not in ln:
+                t = int(m.group(1), 16)
+                if t in mset:
+                    need.add(t)
+    body = []
+    targets = []
+    for entry, native, lines, worst in members:
+        if entry in need:
+            body.append("L_%06X:" % entry)
+        for ln in lines:
+            s = ln.strip()
+            if s.startswith("uint32_t r0, r1,") or s == "AOT_LOAD_REGS(c);":
+                continue
+            if s == "c->icount -= cyc;" or s == "return;":
+                continue
+            m = _SET_PC_RE.search(ln)
+            if m and " return; }" not in ln:
+                tgt = int(m.group(1), 16)
+                targets.append(tgt)
+                ind = ln[:len(ln) - len(ln.lstrip())]
+                if loc:
+                    body.append("%sr6 = (r6 & 0xffc0u) | 0x%02Xu; r7 = 0x%04Xu; goto LAB_%06X;"
+                                % (ind, (tgt >> 16) & 0x3F, tgt & 0xFFFF, tgt))
+                else:
+                    body.append("%saot_set_pc(c, 0x%06Xu); goto LAB_%06X;" % (ind, tgt, tgt))
+                continue
+            body.append(ln)
+    return body, targets
+
+
+def build_groups(bodies):
+    """Merge blocks into single-entry superblocks, longest block first.
+
+    A block may join a group only when every predecessor the generator can name
+    is already in that group: that is exactly the condition that keeps the
+    group's first block as its sole entry point.  Code that reaches the middle of
+    a group anyway (a computed jump) finds a null table slot and drops to the
+    interpreter, so a wrong static guess costs speed, never correctness.
+    """
+    info = dict((entry, (native, worst)) for entry, native, lines, worst in bodies)
+    body_of = dict((entry, lines) for entry, native, lines, worst in bodies)
+    # Mixing the two register forms inside one function is not expressible: a
+    # localised block reads r0..r7 and an unlocalised one reads c->r[].  Only
+    # chain blocks that agree.
+    loc_of = dict((entry, lines[0].strip().startswith("uint32_t r0,"))
+                  for entry, native, lines, worst in bodies)
+    succ = dict((entry, exit_targets(lines)) for entry, native, lines, worst in bodies)
+    pred = {}
+    for entry, succs in succ.items():
+        for t in succs:
+            pred.setdefault(t, set()).add(entry)
+
+    order = sorted(bodies, key=lambda b: (-b[1], b[0]))
+    assigned = set()
+    groups = []
+    for entry, native, lines, worst in order:
+        if entry in assigned or not groupable(lines) or not succ[entry]:
+            continue
+        members = [entry]
+        gset = {entry}
+        cur = native
+        assigned.add(entry)
+        progress = True
+        while progress and len(members) < MAX_GROUP_BLOCKS:
+            progress = False
+            for n in list(members):
+                for t in succ[n]:
+                    if t in gset or t not in info or t in assigned:
+                        continue
+                    if len(members) >= MAX_GROUP_BLOCKS:
+                        break
+                    if cur + info[t][0] > MAX_GROUP_INSNS:
+                        continue
+                    if not groupable(body_of[t]):
+                        continue
+                    if loc_of[t] != loc_of[entry]:
+                        continue
+                    if any(p not in gset and p != t for p in pred.get(t, ())):
+                        continue
+                    members.append(t)
+                    gset.add(t)
+                    cur += info[t][0]
+                    assigned.add(t)
+                    progress = True
+        if len(members) >= 2:
+            groups.append((entry, [(e, info[e][0], body_of[e], info[e][1]) for e in members]))
+    return groups
+
+
 def main():
     global _NOTE_ON
     blocks = []
@@ -768,6 +916,14 @@ def main():
         pages.setdefault((entry >> 8) & 0x3FFF, []).append((entry & 0xFF, entry, worst))
         native_total += native
         registered += 1
+    groups = []
+    grouped = set()
+    if GROUP:
+        groups = build_groups(bodies)
+        for leader, members in groups:
+            for e, _n, _l, _w in members:
+                grouped.add(e)
+
     skipped_overlap = sum(1 for entry, is_entry in todo
                           if not is_entry and entry in covered and entry not in force)
 
@@ -796,6 +952,8 @@ def main():
     out.append("#endif")
     out.append("")
     for entry, native, lines, worst in bodies:
+        if entry in grouped:
+            continue
         out.append("// %06X: %d native instructions, %d cycles worst case" % (entry, native, worst))
         out.append(("AOT_IRAM " if entry in IRAM_SET else "") + "static void aot_b%06X(AotCtx *c)" % entry)
         out.append("{")
@@ -805,19 +963,72 @@ def main():
         out.append("}")
         out.append("")
 
+    # A group is one function with a label per member and a label per distinct
+    # exit target.  Register file loads happen once on entry; the flush, the
+    # cycle charge and the interrupt test happen once per boundary - the same
+    # points where the ungrouped build returned to the dispatcher.
+    for leader, members in groups:
+        member_set = set(m[0] for m in members)
+        loc = members[0][2][0].strip().startswith("uint32_t r0,")
+        body, targets = groupify(members, loc)
+        out.append("// superblock %06X: %d blocks, %d native instructions"
+                   % (leader, len(members), sum(m[1] for m in members)))
+        out.append("//   members: " + " ".join("%06X" % m[0] for m in members))
+        out.append(("AOT_IRAM " if leader in IRAM_SET else "")
+                   + "static void aot_g%06X(AotCtx *c)" % leader)
+        out.append("{")
+        if LOOSE:
+            out.append("\tint32_t cyc = 0;")
+        if loc:
+            out.append("\tuint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;")
+            out.append("\tAOT_LOAD_REGS(c);")
+        out.extend(body)
+        for tgt in sorted(set(targets)):
+            out.append("LAB_%06X:" % tgt)
+            if LOOSE:
+                out.append("\tc->icount -= cyc; cyc = 0;")
+            out.append("\tif (c->icount < 0 || *c->sirq)")
+            out.append("\t{")
+            if loc:
+                out.append("\t\tAOT_SAVE_REGS(c);")
+            out.append("\t\treturn;")
+            out.append("\t}")
+            if tgt in member_set:
+                out.append("\tgoto L_%06X;" % tgt)
+            else:
+                # Leaves the group: the PC is already published, so hand the
+                # block back to the dispatcher through the normal return path.
+                if loc:
+                    out.append("\tAOT_SAVE_REGS(c);")
+                out.append("\treturn;")
+        out.append("}")
+        out.append("")
+
+    # Table slots.  A group's first block owns the entry point and the summed
+    # count/cycles; the other members get a null slot, so a computed jump into
+    # the middle of a group drops to the interpreter instead of running the tail
+    # of a function whose prologue never ran.
+    fn_of = dict((entry, "aot_b%06X" % entry) for entry, native, lines, worst in bodies)
+    info = dict((entry, (native, worst)) for entry, native, lines, worst in bodies)
+    for leader, members in groups:
+        fn_of[leader] = "aot_g%06X" % leader
+        info[leader] = (sum(m[1] for m in members), sum(m[3] for m in members))
+        for e, _n, _l, _w in members[1:]:
+            fn_of[e] = "nullptr"
+            info[e] = (0, 0)
+
     if CONST_TABLES:
         # Device build: everything below is `const`, so it is placed in .rodata
         # (flash on the C3) instead of costing RAM.  Full 256-entry arrays are
         # written out because minGW rejects designated initialisers here; the
         # unused slots are plain nullptr / 0.
-        info = dict((entry, (native, worst)) for entry, native, lines, worst in bodies)
         for page in sorted(pages):
             # One 8-byte struct per block slot so fn/cyc/cnt share a cache line;
             # three parallel arrays cost three flash reads per dispatch.
             ent = ["{ nullptr, 0, 0, 0 }"] * 0x100
             for slot, entry, worst in pages[page]:
                 native, cyc = info[entry]
-                ent[slot] = "{ aot_b%06X, %d, %d, 0 }" % (entry, cyc, native)
+                ent[slot] = "{ %s, %d, %d, 0 }" % (fn_of[entry], cyc, native)
             out.append("static const AotEnt aot_ent_%03X[0x100] = {" % page)
             for i in range(0, 0x100, 4):
                 out.append("\t" + ", ".join(ent[i:i + 4]) + ",")
@@ -844,12 +1055,13 @@ def main():
             out.append("\tstd::memset(aot_pg_%03X.fn, 0, sizeof(aot_pg_%03X.fn));" % (page, page))
         for page in sorted(pages):
             for slot, entry, worst in sorted(pages[page]):
-                out.append("\taot_pg_%03X.fn[0x%02X] = aot_b%06X;" % (page, slot, entry))
+                out.append("\taot_pg_%03X.fn[0x%02X] = %s;" % (page, slot, fn_of[entry]))
         for entry, native, lines, worst in bodies:
+            cnt, cyc = info[entry]
             out.append("\taot_pg_%03X.cnt[0x%02X] = %d;"
-                       % ((entry >> 8) & 0x3FFF, entry & 0xFF, native))
+                       % ((entry >> 8) & 0x3FFF, entry & 0xFF, cnt))
             out.append("\taot_pg_%03X.cyc[0x%02X] = %d;"
-                       % ((entry >> 8) & 0x3FFF, entry & 0xFF, worst))
+                       % ((entry >> 8) & 0x3FFF, entry & 0xFF, cyc))
         for page in sorted(pages):
             out.append("\tg_aot_page[0x%03X] = &aot_pg_%03X;" % (page, page))
         out.append("}")
@@ -871,6 +1083,10 @@ def main():
     print("localised blocks : %d (>= %d insns)" % (localised, LOCAL_MIN_INSNS))
     print("avg native/block : %.2f" % (native_total / registered if registered else 0.0))
     print("pages            : %d" % len(pages))
+    if GROUP:
+        print("superblocks      : %d, %d blocks chained (%.2f blocks/group)"
+              % (len(groups), len(grouped),
+                 len(grouped) / float(len(groups)) if groups else 0.0))
     if REASONS:
         print("truncation reasons (instruction instances, not blocks):")
         for reason, count in sorted(REASONS.items(), key=lambda kv: -kv[1]):

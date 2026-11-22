@@ -41,6 +41,12 @@ struct St7735 {
     // lands the same pixels in fb[] - only the register plumbing is skipped.
     void fill_run(uint16_t pixel, uint32_t count);
 
+    // Total pixels the guest has pushed into the panel.  The ROM stops drawing
+    // when it parks the SoC (0x3036), so a growing count is the only evidence
+    // that it started again -- the pet calling, pooping or evolving redraws the
+    // screen without writing System_Sleep a second time.
+    uint32_t m_px_writes = 0;
+
     // --- internal state, mirrors st7735_lcdc_device ---
     // MAME renders out of a 256x256 word GRAM (index = y*0x200 + x) and clips to
     // the 128x128 screen.  The C3 port drops the 128 KiB GRAM and keeps only the
@@ -245,6 +251,22 @@ struct Gpce4 : public UnspBus {
     uint16_t m_timer_ctrl = 0;
     uint16_t m_cache_ctrl = 0;
     uint16_t m_wait_ctrl = 0;                // 0x3035, recorded but not acted on
+
+    // System_Sleep (0x3036) and the three IO wakeup masks (0x300c-0x300e).
+    // The retail ROM parks the SoC here 17.2 s after the last key press -- 16 s
+    // of idle timeout plus the ~1.2 s the boot animation takes to settle -- and
+    // on hardware the panel backlight goes out with it.  Any button wakes it.
+    // We do not halt the guest: the host still has to poll the key ladder, and
+    // the ROM's own wait loop is cheap.  We only remember that the game asked
+    // to sleep, so the backlight can follow and the console can report it.
+    uint16_t m_wake_mask_a = 0xffff;         // 0x300c, IOA_WakeUp_Mask
+    uint16_t m_wake_mask_b = 0xffff;         // 0x300d, IOB_WakeUp_Mask
+    uint16_t m_wake_mask_c = 0xffff;         // 0x300e, IOC_WakeUp_Mask
+    uint32_t m_sleep_writes = 0;             // how many times 0x3036 was written
+    bool m_asleep = false;
+    uint32_t sleep_writes() const { return m_sleep_writes; }
+    bool asleep() const { return m_asleep; }
+    void wake_from_sleep() { m_asleep = false; }
     uint16_t m_dac_cha1 = 0;                 // 0x3041, last sample (no audio sink)
     uint16_t m_dac_cha2 = 0;                 // 0x3042
     // How often the guest writes the DAC.  There is no sample clock in the
@@ -349,6 +371,8 @@ struct Gpce4 : public UnspBus {
     void timebase_clear_w(uint16_t data);   // :459
     void watchdog_clear_w(uint16_t data);   // :464
     void wait_ctrl_w(uint16_t data);        // :469
+    void system_sleep_w(uint16_t data);     // 0x3036 System_Sleep
+    void wakeup_mask_w(uint8_t port, uint16_t data);  // 0x300c-0x300e
     uint16_t cache_ctrl_r();    void cache_ctrl_w(uint16_t data);    // :474
 
     // DAC / PPAM (no audio sink in this port)

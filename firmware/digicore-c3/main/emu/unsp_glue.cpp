@@ -948,6 +948,7 @@ UNSP_HOT bool unsp_device::aot_step(const uint32_t lpc)
 	// the register-file pointers, the shift buffer and the cycle budget.
 	uint8_t cnt = 0;
 #if C3_SPLIT && defined(ESP_PLATFORM)
+	SPLIT_T0();
 	const uint32_t t_lk = esp_cpu_get_cycle_count();
 #endif
 	const AotFn fn = aot_lookup(lpc, &cnt, nullptr);
@@ -993,6 +994,12 @@ UNSP_HOT bool unsp_device::aot_step(const uint32_t lpc)
 	aot_mark_uniq(lpc);
 #endif
 	m_aot_blocks++;
+#if C3_SPLIT && defined(ESP_PLATFORM)
+	// The fast path used to return without touching these, so caot/daot/cpa/cfn
+	// all printed as 0 whenever the game ran out of AOT blocks (which is always).
+	SPLIT_ADD(g_cyc_aot);
+	g_disp_aot++;
+#endif
 #ifdef ESP_PLATFORM
 	aot_note_block(lpc);            // device-side frequency census only
 	// Region accounting: which part of the guest map is eating the frame.

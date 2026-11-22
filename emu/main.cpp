@@ -530,10 +530,11 @@ int main(int argc, char **argv)
 		(long long)total_frames, (long long)cycle, (double)cycle / CPU_CLOCK, wall,
 		(double)cycle / CPU_CLOCK / (wall > 0 ? wall : 1), (unsigned long long)trace.count,
 		(unsigned long long)soc.now());
-	std::printf("PC=%06X SR=%04X SP=%04X display_on=%d buttons_events=%lld\n",
+	std::printf("PC=%06X SR=%04X SP=%04X display_on=%d buttons_events=%lld asleep=%d sleep_writes=%u\n",
 		(unsigned)(((cpu.m_core->m_r[unsp_device::REG_SR] & 0x3f) << 16) | cpu.m_core->m_r[unsp_device::REG_PC]),
 		(unsigned)(cpu.m_core->m_r[unsp_device::REG_SR] & 0xffff),
-		(unsigned)(cpu.m_core->m_r[0] & 0xffff), soc.lcd.display_on ? 1 : 0, (long long)presses);
+		(unsigned)(cpu.m_core->m_r[0] & 0xffff), soc.lcd.display_on ? 1 : 0, (long long)presses,
+		soc.asleep() ? 1 : 0, unsigned(soc.sleep_writes()));
 	if (const char *stat = std::getenv("GPCE4_AOTSTAT")) aot_dump_pc_hist(stat);
 	std::printf("AOT blocks=%llu insns=%llu fallback=%llu miss=%llu\n",
 		(unsigned long long)cpu.m_aot_blocks, (unsigned long long)cpu.m_aot_insns,

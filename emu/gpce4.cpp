@@ -643,6 +643,10 @@ void Gpce4::io_w(uint16_t ofs, uint16_t data)
     case 0x3033: timebase_clear_w(data); return;
     case 0x3034: watchdog_clear_w(data); return;
     case 0x3035: wait_ctrl_w(data); return;
+    case 0x3036: system_sleep_w(data); return;
+    case 0x300c: wakeup_mask_w(0, data); return;
+    case 0x300d: wakeup_mask_w(1, data); return;
+    case 0x300e: wakeup_mask_w(2, data); return;
     case 0x3039: cache_ctrl_w(data); return;
     case 0x3040: dac_ctrl_w(data); return;
     case 0x3041: dac_cha1_data_w(data); return;
@@ -771,6 +775,32 @@ void Gpce4::wait_ctrl_w(uint16_t data)                                 // :567
 {
     m_wait_ctrl = data;
     if (trace_io) std::printf("[gpce4] Wait_Ctrl = %04x (not modelled)\n", unsigned(data));
+}
+
+// 0x3036 System_Sleep.  MAME leaves it unmapped; the ROM writes 0x5555 here
+// 16 s after the last key press (measured: nothing at 17.0 s, the write is
+// there at 17.4 s, and the boot animation accounts for the ~1.2 s offset).
+// On hardware this parks the SoC and the backlight goes out with it; any of
+// the three buttons wakes it through the masks at 0x300c-0x300e.
+//
+// We do not halt: the host has to keep polling the key ladder, and the ROM's
+// wait loop is nearly free.  Recording the request is enough for the rest of
+// the firmware to dim the panel and for the console to report the state.
+void Gpce4::system_sleep_w(uint16_t data)
+{
+    m_sleep_writes++;
+    m_asleep = true;
+    if (trace_io) std::printf("[gpce4] System_Sleep = %04x (asleep)\n", unsigned(data));
+}
+
+void Gpce4::wakeup_mask_w(uint8_t port, uint16_t data)
+{
+    if (port == 0)
+        m_wake_mask_a = data;
+    else if (port == 1)
+        m_wake_mask_b = data;
+    else
+        m_wake_mask_c = data;
 }
 
 uint16_t Gpce4::cache_ctrl_r()          { return uint16_t(m_cache_ctrl & ~0x0002); }  // :594

@@ -87,6 +87,7 @@ void St7735::log_unknown(uint8_t cmd)
 // ---------------------------------------------------------------------------
 void St7735::store_pixel(uint16_t pixel)
 {
+    m_px_writes++;
     const int idx = ((m_madctl & 0x0020) ? (m_posx + m_posy * GRAM_W)
                                          : (m_posy + (129 - m_posx) * GRAM_W)) & 0xffff;
 
@@ -280,6 +281,7 @@ void St7735::fill_run(uint16_t pixel, uint32_t count)
     if (m_command != 0x2c || count == 0u)
         return;
 
+    m_px_writes += count;
     const bool mv = (m_madctl & 0x0020) != 0;
     for (uint32_t i = 0; i < count; i++)
     {

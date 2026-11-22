@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 //  saveimg.cpp - two-slot, CRC checked persistence for the flash overlay
 //
-//  Layout of one slot (64 KiB apart so an erase never touches both):
+//  Layout of one slot (16 KiB apart so an erase never touches both):
 //
 //      +0   u32  magic   'DGSV'
 //      +4   u16  version
@@ -14,6 +14,11 @@
 //  A store erases the older slot, writes the newer one, reads it back and
 //  compares.  If power dies anywhere in that sequence the other slot still
 //  holds the previous save, so the game never loses more than one save.
+//
+//  The `save` partition is shared: gueststate.cpp keeps a ring of full machine
+//  snapshots in the first 96 KiB, and the two overlay slots live in the last
+//  32 KiB.  That is why the slots are 16 KiB apart instead of 64 KiB, and why
+//  every offset here is relative to kBase rather than to the partition start.
 // ---------------------------------------------------------------------------
 #include "saveimg.h"
 
@@ -28,7 +33,8 @@ namespace {
 constexpr const char *TAG = "saveimg";
 constexpr uint32_t kMagic = 0x56534744u;         // 'DGSV' little endian
 constexpr uint16_t kVersion = 1;
-constexpr uint32_t kSlotStride = 0x10000;        // 64 KiB: separate erase blocks
+constexpr uint32_t kSlotStride = 0x4000;         // 16 KiB: separate erase blocks
+constexpr uint32_t kBase = 0x18000;              // after the gueststate ring (96 KiB)
 constexpr uint32_t kHeaderSize = 24;             // see static_assert below
 
 #pragma pack(push, 1)
@@ -59,7 +65,7 @@ uint32_t crc_of(const SlotHeader &h, const uint8_t *data, int count)
 
 bool read_header(uint32_t index, SlotHeader &h)
 {
-    const uint32_t off = index * kSlotStride;
+    const uint32_t off = kBase + index * kSlotStride;
     if (off + kHeaderSize > s_part->size)
         return false;
     if (esp_partition_read(s_part, off, &h, sizeof(h)) != ESP_OK)
@@ -70,7 +76,7 @@ bool read_header(uint32_t index, SlotHeader &h)
 
 bool read_slot(uint32_t index, SlotHeader &h, uint8_t *data)
 {
-    const uint32_t off = index * kSlotStride;
+    const uint32_t off = kBase + index * kSlotStride;
     if (off + kHeaderSize > s_part->size)
         return false;
     if (esp_partition_read(s_part, off, &h, sizeof(h)) != ESP_OK)
@@ -160,7 +166,7 @@ bool saveimg_store(const uint32_t *pages, const uint8_t *data, int count)
     // Alternate slots by sequence parity so the slot we are about to erase is
     // never the one holding the newest save.
     const uint32_t index = s_next_seq & 1u;
-    const uint32_t off = index * kSlotStride;
+    const uint32_t off = kBase + index * kSlotStride;
     const size_t n = size_t(count) * SAVEIMG_PAGE_SIZE;
     if (off + kHeaderSize + n > s_part->size)
         return false;

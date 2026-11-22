@@ -8,7 +8,11 @@ $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $root
 
 $g = "C:\Users\DuWeisi\w64devkit\bin\g++.exe"
-$cxxflags = @("-std=c++20", "-O2", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Wno-unused-variable",
+# The AOT table in emu/aot_blocks.c is emitted in the constant-table format
+# (g_aot_desc + AotEnt), the same one the device links.  aot.h hides those types
+# behind AOT_CONST_TABLES, so the flag has to be on for every translation unit -
+# defining it only for the table would leave aot_lookup() pointing at g_aot_page.
+$cxxflags = @("-std=c++20", "-O2", "-DAOT_CONST_TABLES", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Wno-unused-variable",
               "-Wno-unused-but-set-variable", "-Wno-sign-compare", "-Wno-missing-field-initializers",
               "-I", "emu/compat", "-I", "emu")
 

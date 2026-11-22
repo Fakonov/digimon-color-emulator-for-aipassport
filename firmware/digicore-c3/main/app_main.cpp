@@ -43,6 +43,8 @@
 #include "emu/romstore.h"
 #include "rom_esp.h"
 #include "saveimg.h"
+#include "gueststate.h"
+#include "menu.h"
 #include "esp_rom_crc.h"
 
 // Embedded 64 KiB internal mask ROM (main/assets/internal_rom_221017a.bin,
@@ -106,6 +108,11 @@ static constexpr uint16_t kPortB3 = 0x0020;
 // guest's debounce can legitimately discard.  Six frames keeps an injected tap
 // visible for ~100 ms without making a real press feel sticky.
 static constexpr int kPressFrames = 6;
+
+// Hold B for this long and the emulator's own settings menu opens.  The retail
+// handset uses 2 s for its menu (long C, per the manual); B is the confirm key
+// here, so the gesture was moved off C to keep the guest's own cancels clean.
+static constexpr int64_t kMenuHoldUs = 2000000;
 
 // Long-press A -> A+C.  The handset has three keys on one resistor ladder, so a
 // real A+C chord can never be produced: the ladder reports a single contact.
@@ -204,10 +211,43 @@ static uint64_t s_insns = 0;         // guest instructions retired (for mi_s)
 static uint32_t s_frames = 0;        // guest frames executed
 static uint32_t s_host_frames = 0;   // frames pushed to the panel
 static uint16_t s_port_bits = 0xffff;
+
+// Menu pad edge detector.  File scope so the code that opens the menu can seed
+// it with the press that opened it, otherwise that first frame also counts as
+// a fresh edge and bumps the highlighted value.
+static int s_menu_pad_prev = 0;
+// Set while the menu owns the panel; the first frame after it closes has to
+// re-push the whole guest window because the menu never went into fb[].
+static bool s_menu_was_open = false;
+// blit_frame() tracks which tiles it has already sent in a function-local
+// static.  This flag is the way back in: the settings menu hands the panel
+// back by clearing it, which makes the next blit treat every tile as dirty.
+static bool s_blit_repaint_all = false;
 static int s_hold_mask = 0;          // key currently being stretched for the guest
 static int s_hold_left = 0;          // guest frames left in that stretch
 static int s_held_frames = 0;        // guest frames the key has really been down
 static bool s_display_ok = false;
+// Panel brightness.  The ROM asks the SoC to sleep 16 s after the last key
+// press (0x3036 System_Sleep); on hardware the backlight dies with it, so the
+// emulator has to remember what to restore when a button brings it back.
+static int s_brightness_pct = 80;
+// Screen-off behaviour.  The retail handset blanks 16 s after the last key
+// press; the emulator reproduces that with its own idle timer instead of
+// following the guest, because the ROM parks itself in a tight loop that
+// rewrites 0x3036 thousands of times a second and never leaves on its own.
+// s_auto_off_sec == 0 means "stay lit" and is what the settings menu writes.
+// The value lives in the menu module now (NVS-backed), so read it through a
+// function instead of caching a copy that could go stale after an edit.
+static constexpr int kMachineIdleSec = 16;   // what a real handset does
+static int64_t s_last_input_us = 0;
+static bool s_lit = true;                    // panel backlight currently on
+static bool s_off_notice_done = false;       // "machine is dark by now" shown
+static int64_t s_notice_until_us = 0;
+// Banner text currently on the panel's top margin.  Comparing the pointer is
+// enough: the only two values are two string literals, and the banner is only
+// pushed when it changes.
+static const char *s_banner_text = "";
+static const char *s_banner_shown = nullptr;
 static uint32_t s_hot_calls = 0;   // PRNG block executions since log
 static uint32_t s_tick_us = 0;    // microseconds inside SoC tick() since log
 static uint32_t s_slices = 0;     // scheduler slices since log
@@ -464,6 +504,11 @@ static void blit_frame(void)
     static uint32_t s_idle_frames = 0;
     static uint32_t s_phase = 0;
 
+    if (s_blit_repaint_all) {
+        s_blit_repaint_all = false;
+        s_have_prev = false;
+    }
+
     bool dirty[kTilesY][kTilesX];
     uint32_t cur[kTilesY][kTilesX];
     bool any = false;
@@ -578,6 +623,9 @@ static int s_inject_left = 0;      // guest frames still to hold them
 static volatile bool s_force_full = false;
 static int s_pattern = 0;          // 0 = guest picture, 1 = alignment pattern
 
+// Defined next to the snapshot code below; the console needs them here.
+static void snapshot_machine_state(void);
+
 static void console_exec(char *line)
 {
     while (*line == ' ')
@@ -654,6 +702,26 @@ static void console_exec(char *line)
     case 'R':                      // force a full repaint
         s_force_full = true;
         std::printf("ACK R\n");
+        break;
+    case 'D':                      // D: take a machine snapshot now
+        // Snapshot of the whole machine - CPU registers plus the 8 KiB RAM
+        // window - not just the flash overlay 'W' injects into.
+        snapshot_machine_state();
+        std::printf("ACK D seq=%u\n", unsigned(gueststate_newest_seq()));
+        break;
+    case 'U':                      // U: resume from the newest snapshot now
+        if (!gueststate_ready()) {
+            std::printf("NAK U no partition\n");
+            break;
+        }
+        if (!gueststate_load(s_cpu.m_core, uint32_t(sizeof(*s_cpu.m_core)), s_soc.ram,
+                             uint32_t(sizeof(s_soc.ram)))) {
+            std::printf("NAK U no valid record\n");
+            break;
+        }
+        s_force_full = true;
+        std::printf("ACK U seq=%u pc=%06X\n", unsigned(gueststate_newest_seq()),
+                    unsigned(((s_cpu.m_core->m_r[6] & 0x3fu) << 16) | s_cpu.m_core->m_r[7]));
         break;
     case 'F': {                    // F <hz>: guest cycles covered by one rendered frame
         const char *a = line + 1;
@@ -926,6 +994,41 @@ static void update_buttons(void)
         s_inject_left--;
     }
 
+    // Long B opens the emulator's settings menu.  It is chrome, not a guest
+    // input: the hold is timed here and the guest never sees the press.
+    {
+        static int64_t s_b_down_us = 0;
+        static bool s_b_fired = false;
+        if ((instant & BTN_KEY1) != 0) {
+            const int64_t now = esp_timer_get_time();
+            if (s_b_down_us == 0)
+                s_b_down_us = now;
+            else if (!s_b_fired && now - s_b_down_us >= kMenuHoldUs) {
+                s_b_fired = true;
+                menu_open();
+                s_menu_pad_prev = instant | latched;
+                ESP_LOGI(TAG, "long B (%lld ms) -> settings menu",
+                         (long long)((now - s_b_down_us) / 1000));
+            }
+        } else {
+            s_b_down_us = 0;
+            s_b_fired = false;
+        }
+    }
+
+    // Any key restarts the idle timer that drives the screen-off behaviour.
+    // This has to sit after the injector above, otherwise a console-injected
+    // press cannot wake the panel and the check tests nothing.
+    if (instant != 0 || latched != 0) {
+        s_last_input_us = esp_timer_get_time();
+        s_off_notice_done = false;
+        if (!s_lit) {
+            s_lit = true;
+            display_backlight_set(s_brightness_pct);
+            ESP_LOGI(TAG, "key -> panel lit");
+        }
+    }
+
     if (instant != 0) {
         if (s_hold_mask != instant) {
             s_hold_mask = instant;
@@ -953,6 +1056,27 @@ static void update_buttons(void)
     } else {
         s_hold_mask = 0;
         s_held_frames = 0;
+    }
+
+    // While the menu is up the guest is parked, so the pad belongs to the menu.
+    // Edge, not level: the console injector holds a key down for N frames and
+    // the latch mirrors that level, so a held B would walk the value through
+    // every choice.  A real finger produces the same edge, and the hold that
+    // opened the menu lands in s_pad_prev here, so it cannot self-trigger.
+    if (menu_is_open()) {
+        const int edge = latched & ~s_menu_pad_prev;
+        s_menu_pad_prev = latched;
+        if ((edge & BTN_KEY0) != 0)
+            menu_press_a();
+        else if ((edge & BTN_KEY1) != 0)
+            menu_press_b();
+        else if ((edge & BTN_KEY2) != 0)
+            menu_press_c();
+        if (s_port_bits != 0xffff) {   // hand the guest a released pad
+            s_port_bits = 0xffff;
+            s_soc.set_port(0, 0xffff);
+        }
+        return;
     }
 
     // diagnostic: emulate a physical B1 hold for a few guest frames
@@ -985,6 +1109,7 @@ static void update_buttons(void)
 //  guest
 // ---------------------------------------------------------------------------
 static void restore_save_image(void);
+static void restore_machine_state(void);
 
 // Trampoline so the CPU side (which only knows UnspBus / unsp_device) can paint
 // a constant run into the panel without a virtual call chain per pixel.
@@ -1041,7 +1166,9 @@ static bool guest_init(void)
              unsigned(internal_rom_length),
              unsigned(s_cpu.m_core->m_r[unsp_device::REG_PC]));
 
+    menu_load();
     restore_save_image();
+    restore_machine_state();
     return true;
 }
 
@@ -1112,6 +1239,142 @@ static void persist_save_image(void)
     }
     if (saveimg_store(pages, s_save_buf, n))
         ESP_LOGI(TAG, "game saved: %d page(s), %u flash write(s)", n, unsigned(writes));
+}
+
+// ---------------------------------------------------------------------------
+//  machine snapshots
+//
+//  The retail ROM never programs the cartridge save area (see the 'W' command),
+//  so the flash overlay saveimg.cpp persists carries no player progress at all.
+//  What does describe progress is the CPU register file plus the 8 KiB RAM
+//  window, so those go into gueststate.cpp's ring once a minute: a power cut
+//  then costs at most a minute of play.
+//
+//  The snapshot is taken from the host loop, i.e. always between two guest
+//  instructions, never inside a CALL or an interrupt handler, so the whole
+//  internal_unsp_state can be copied verbatim.  m_icount is restored too but is
+//  overwritten before the next execute_run(), so its stale value is harmless.
+// ---------------------------------------------------------------------------
+static int64_t s_snap_last_us = 0;
+static uint32_t s_snap_count = 0;
+static uint32_t s_snap_ram_crc = 0;
+static bool s_snap_ram_crc_valid = false;
+
+static void snapshot_machine_state(void)
+{
+    if (!gueststate_ready())
+        return;
+
+    // Skip the write when nothing in guest RAM moved: a pet sitting on an idle
+    // screen changes nothing, and flash endurance is the scarce resource here.
+    const uint32_t crc = esp_rom_crc32_le(
+        0, reinterpret_cast<const uint8_t *>(s_soc.ram), sizeof(s_soc.ram));
+    if (s_snap_ram_crc_valid && crc == s_snap_ram_crc) {
+        s_snap_last_us = esp_timer_get_time();
+        return;
+    }
+
+    if (gueststate_store(s_cpu.m_core, sizeof(*s_cpu.m_core), s_soc.ram, sizeof(s_soc.ram))) {
+        s_snap_ram_crc = crc;
+        s_snap_ram_crc_valid = true;
+        s_snap_count++;
+    }
+    s_snap_last_us = esp_timer_get_time();
+}
+
+// Once per host frame: take a snapshot when the minute is up.
+static void maybe_snapshot_machine_state(void)
+{
+    if (!gueststate_ready())
+        return;
+    const int64_t now = esp_timer_get_time();
+    if (s_snap_last_us == 0) {
+        s_snap_last_us = now;
+        return;
+    }
+    if (now - s_snap_last_us < 60000000)     // 60 s
+        return;
+    snapshot_machine_state();
+}
+
+// The guest's own power save.  The retail ROM writes 0x3036 (System_Sleep)
+// 16 s after the last key press; on the handset the backlight goes out at that
+// moment and any button brings it back.  Nothing else changes: the guest keeps
+// its PC and RAM, the panel keeps its GRAM, so waking just restores the light.
+// Screen-off, driven by the emulator rather than by the guest.
+//
+// The retail ROM does ask the SoC to sleep (0x3036, 16 s after the last key),
+// but it does so from a tight loop that rewrites the register thousands of
+// times a second and never leaves on its own -- so the write is a level, not an
+// edge, and following it would blank the panel forever.  The handset's actual
+// behaviour is a plain idle timeout, so that is what gets reproduced here: 16 s
+// without a key blanks the backlight, any key brings it back.  s_auto_off_sec is
+// what a future setting menu will write (0 = never blank).
+static void update_sleep_backlight(void)
+{
+    const int64_t now = esp_timer_get_time();
+    if (s_last_input_us == 0) {
+        s_last_input_us = now;
+        return;
+    }
+    const int64_t idle = now - s_last_input_us;
+
+    // The menu owns both numbers; mirror them so a change takes effect on the
+    // next frame without the frame loop having to poll the menu module.
+    const int auto_off = menu_auto_off_sec();
+    s_brightness_pct = menu_bright_pct();
+
+    // temporary probe: prove the timer is running and see what resets it
+    {
+        static uint32_t s_dbg = 0;
+        if ((++s_dbg % 300u) == 0u)
+            ESP_LOGI(TAG, "idle dbg last=%lld now=%lld idle=%lld ms lit=%d auto=%d",
+                     (long long)s_last_input_us, (long long)now,
+                     (long long)(idle / 1000), s_lit ? 1 : 0, auto_off);
+    }
+
+    // When the emulator is set to stay lit past the handset's own 16 s, mark
+    // the moment the real machine would have gone dark.  The notice is a line
+    // of text in the panel's top margin: that strip is outside the guest
+    // window, so it covers no game pixels, it survives whatever the guest
+    // pushes next, and fb[] -- and therefore the frame CRC -- is untouched.
+    if (auto_off > kMachineIdleSec && !s_off_notice_done &&
+        idle >= int64_t(kMachineIdleSec) * 1000000) {
+        s_off_notice_done = true;
+        s_notice_until_us = now + 3000000;
+        s_banner_text = "MACHINE DARK";
+        ESP_LOGI(TAG, "machine would be dark now; banner at %lld ms idle",
+                 (long long)(idle / 1000));
+    } else if (s_notice_until_us != 0 && now >= s_notice_until_us) {
+        s_notice_until_us = 0;
+        s_banner_text = "";
+    }
+
+    const bool dark = auto_off > 0 && idle >= int64_t(auto_off) * 1000000;
+    if (dark == !s_lit)
+        return;
+    s_lit = !dark;
+    display_backlight_set(s_lit ? s_brightness_pct : 0);
+    ESP_LOGI(TAG, "panel %s after %lld ms idle (auto-off %d s)",
+             s_lit ? "lit" : "dark", (long long)(idle / 1000), auto_off);
+}
+
+static void restore_machine_state(void)
+{
+    if (!gueststate_init())
+        return;
+    if (!gueststate_load(s_cpu.m_core, sizeof(*s_cpu.m_core), s_soc.ram, sizeof(s_soc.ram))) {
+        ESP_LOGI(TAG, "no machine snapshot; starting from reset");
+        return;
+    }
+    // The panel still shows the previous power-on frame and the ST7735 window
+    // state knows nothing about the restored RAM, so ask for a full repaint.
+    s_force_full = true;
+    s_snap_ram_crc_valid = false;
+    ESP_LOGI(TAG, "resumed at pc=%06x sr=%04x sp=%04x",
+             unsigned(((s_cpu.m_core->m_r[6] & 0x3fu) << 16) | (s_cpu.m_core->m_r[7] & 0xffffu)),
+             unsigned(s_cpu.m_core->m_r[6]),
+             unsigned(s_cpu.m_core->m_r[unsp_device::REG_SP] & 0xffffu));
 }
 
 // One guest frame = exactly FRAME_CYCLES of guest time, sliced at the SoC's
@@ -1313,7 +1576,7 @@ extern "C" void app_main(void)
         // otherwise the first ~1 s of boot shows coloured noise.
         panel_fill_black();
         blit_frame();
-        display_backlight_set(80);
+        display_backlight_set(s_brightness_pct);
     } else {
         ESP_LOGE(TAG, "display init failed; running headless");
     }
@@ -1385,7 +1648,22 @@ extern "C" void app_main(void)
         }
 #endif
         update_buttons();
-        run_guest_frame();
+        // While the settings menu is up the guest is parked.  The menu goes
+        // straight to the panel rather than into fb[]: the guest only repaints
+        // the pixels it animates, so writing the menu into fb[] leaves the text
+        // behind after the menu closes, and there is no DRAM for a copy of the
+        // window to restore from.  s_menu_was_open makes the close push the
+        // untouched fb[] once so the game comes back in full.
+        if (menu_is_open()) {
+            menu_present(s_strip, kLeft, kTop, kWinW, kWinH, kScale);
+            s_menu_was_open = true;
+        } else {
+            if (s_menu_was_open) {
+                s_menu_was_open = false;
+                s_blit_repaint_all = true;
+            }
+            run_guest_frame();
+        }
         const uint32_t frame_us = uint32_t(esp_timer_get_time() - t_guest0);
         s_guest_us += frame_us;
         if (frame_us > s_guest_max_us) s_guest_max_us = frame_us;
@@ -1399,6 +1677,14 @@ extern "C" void app_main(void)
             s_host_frames++;
         }
         persist_save_image();
+        maybe_snapshot_machine_state();
+        update_sleep_backlight();
+        // The top margin belongs to us, not to the guest: pushing the banner
+        // once is enough because nothing else ever draws there.
+        if (s_banner_text != s_banner_shown) {
+            menu_banner_present(s_strip, kDstW, s_banner_text);
+            s_banner_shown = s_banner_text;
+        }
 
         // Pace to the handset's frame rate.  The model can run a 60 Hz frame faster
         // than 60 times a second, and letting it run flat out would make the
