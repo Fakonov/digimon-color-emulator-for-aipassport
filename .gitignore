@@ -48,6 +48,10 @@ ref/*.png
 docs/build_*.log
 firmware/*/build.log
 
+# ---- Python 字节码 ----
+__pycache__/
+*.pyc
+
 # ---- 整片备份 ----
 docs/backup/
 

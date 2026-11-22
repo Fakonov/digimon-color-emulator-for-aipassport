@@ -46,6 +46,28 @@ def write(path, text):
         fp.write(text)
 
 
+# The device tree carries hand-written code the PC tree does not have: the AOT
+# blit/push HLE hooks and their pixel counters in unsp_glue.cpp, the C3_AOTACC
+# access counters and the page-switch counter in aot.h.  Copying the PC file
+# over them silently deleted 265 lines once and only surfaced as an undefined
+# reference at link time, so every file this script overwrites is checked first.
+DEVICE_ONLY = {
+    "unsp_glue.cpp": ("g_blit_px_win", "g_hle_push_px_win"),
+    "aot.h": ("C3_AOTACC", "g_aot_pg_switch"),
+}
+
+
+def refuse_clobber(name, src_text):
+    dst = os.path.join(DST, name)
+    if not os.path.exists(dst):
+        return
+    existing = read(dst)
+    for marker in DEVICE_ONLY.get(name, ()):
+        if marker in existing and marker not in src_text:
+            sys.exit("%s: the device copy has %r but the source does not -- "
+                     "merge the change by hand instead of overwriting" % (name, marker))
+
+
 def sync_unsp_h():
     text = read(os.path.join(SRC, "compat", "unsp.h"))
     anchor = "\tUnspBus *m_bus;"
@@ -57,6 +79,7 @@ def sync_unsp_h():
 
 def sync_glue():
     text = read(os.path.join(SRC, "unsp_glue.cpp"))
+    refuse_clobber("unsp_glue.cpp", text)
     text = text.replace(
         '#include "hotblock.h"',
         '//\n// C3 port: execute_run() also bumps the guest instruction counter, which is\n'
@@ -120,6 +143,7 @@ def sync_aot():
     """Copy aot.h and regenerate the device block tables (flash-resident)."""
     import subprocess
 
+    refuse_clobber("aot.h", read(os.path.join(SRC, "aot.h")))
     shutil.copyfile(os.path.join(SRC, "aot.h"), os.path.join(DST, "aot.h"))
     env = dict(os.environ)
     env["AOT_CONST_TABLES"] = "1"
