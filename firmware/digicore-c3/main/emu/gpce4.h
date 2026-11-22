@@ -34,6 +34,13 @@ struct St7735 {
     void data_w(uint8_t d);
     uint8_t read_data();          // for 0x3094 style LCD reads if the game needs them
 
+    // Constant-colour run through RAMWR.  The guest's fill loop writes the same
+    // 16-bit value many times in a row; feeding data_w() twice per pixel pays
+    // the whole SPI2 register model (address decode, FIFO bookkeeping, TX
+    // status) for every byte.  This walks the same window maths as data_w() and
+    // lands the same pixels in fb[] - only the register plumbing is skipped.
+    void fill_run(uint16_t pixel, uint32_t count);
+
     // --- internal state, mirrors st7735_lcdc_device ---
     // MAME renders out of a 256x256 word GRAM (index = y*0x200 + x) and clips to
     // the 128x128 screen.  The C3 port drops the 128 KiB GRAM and keeps only the
@@ -115,6 +122,18 @@ struct Gpce4SpiFlash {
     bool m_multibyte_status_write = true;
     bool trace = false;
 
+    //  Command census.  The save path is a black box from the host side: the
+    //  guest only touches the two save sectors once every 60 s of game time,
+    //  so "no flash write in 10 minutes" can mean either "the game never got
+    //  there" or "we dropped the command".  Counting the opcodes separates the
+    //  two cases without a logic analyser.
+    uint32_t m_n_se = 0;        // 0x20 sector erase
+    uint32_t m_n_pp = 0;        // 0x02 page program
+    uint32_t m_n_wren = 0;      // 0x06 write enable
+    uint32_t m_n_rdid = 0;      // 0x9f
+    uint32_t m_n_bytes_pp = 0;  // bytes actually programmed
+    uint32_t m_n_unknown = 0;
+
     uint8_t rom_byte(uint32_t addr) const;   // rom[addr & (size-1)]
 };
 
@@ -142,6 +161,18 @@ struct Gpce4 : public UnspBus {
     St7735 lcd;
     uint16_t ram[4096];
 
+    // Called by the HLE fill loop: paint `count` pixels of one colour straight
+    // into the panel when the LCD is inside a RAMWR window.  Returns false when
+    // it is not, so the caller writes the SPI2 data register instead and the
+    // command/parameter state machine still sees every byte.
+    bool lcd_fill_pixels(uint16_t value, uint32_t count)
+    {
+        if (lcd.m_command != 0x2c)
+            return false;
+        lcd.fill_run(value, count);
+        return true;
+    }
+
     // ---- integration knobs ------------------------------------------------
     // The 300 kHz machine "timer" (ref/generalplus_gpce4.cpp:322-325) that
     // raises SPI2 interrupt 24; on by default, off makes the SoC purely passive.
@@ -150,13 +181,22 @@ struct Gpce4 : public UnspBus {
 	// default: it costs 15 events per 4.8 kcycle slice for no state change.
 	bool timer_300k_enable = false;
 
-	// A timer source whose interrupt is masked cannot change guest state: it
-	// only sets a pending bit in INT_Status.  timer_a (bit 15 of INT_Ctrl) is
-	// enabled by nothing in this game, so its 20 kHz events are pure overhead.
+	// timer_a (bit 15 of INT_Ctrl) is the 20 kHz source and the only one this
+	// gate touches.  Nothing in this game enables it: INT_Ctrl stays 0x0000 for
+	// the whole run, so every event it raises lands in a masked status bit and
+	// changes no guest-visible state - it is pure overhead, and masking it keeps
+	// guest_pct at ~30 instead of ~61.
+	//
+	// This used to be unmasked on the theory that a masked source could starve
+	// the boot-time poll at ~18 s.  The PC ring buffer disproved that: the guest
+	// leaves the flash main loop because it is *waiting for a key press*, and
+	// returns as soon as PORT A shows one (measured: `rflash` recovers to 80 k/s
+	// the second after a press).  Unmasking changed nothing except the cost.
+	bool mask_irq0_timer = true;
 	bool source_enabled(int i) const
 	{
 		if (i == 1)
-			return (m_interrupt_ctrl & 0x8000) != 0;   // timer_a -> IRQ0
+			return !mask_irq0_timer || (m_interrupt_ctrl & 0x8000) != 0;
 		return true;
 	}
     // MAME's update_interrupts() clears IRQ7 twice in a row, so a pending 2 Hz
@@ -170,8 +210,17 @@ struct Gpce4 : public UnspBus {
     // against that model, the MAME-exact reads are the default; the real
     // 12-byte FIFO fill level / TXFLEV / SPITXIF are still tracked internally
     // and become visible when this is set.
-    bool spi2_status_regs = false;
+    bool spi2_status_regs = true;    // trial: the guest polls 0x3095 ten times; MAME returns a constant
     bool trace_io = false;
+
+    // Output-register probe.  The mask ROM writes the factory test vector into
+    // the DAC at boot and then never touches it again, and MAME flags this
+    // machine MACHINE_NO_SOUND.  Counting the writes is how we prove that on
+    // hardware instead of trusting the disassembly: if dac stays at a handful
+    // of boot-time writes and pwm never moves, this ROM has no runtime audio.
+    uint32_t m_pwm_writes = 0;
+    uint32_t audio_writes() const { return m_dac_writes; }
+    uint32_t pwm_writes() const { return m_pwm_writes; }
 
     // ---- images / cpu ----------------------------------------------------
     const uint8_t *m_irom = nullptr;
@@ -197,6 +246,13 @@ struct Gpce4 : public UnspBus {
     uint16_t m_cache_ctrl = 0;
     uint16_t m_wait_ctrl = 0;                // 0x3035, recorded but not acted on
     uint16_t m_dac_cha1 = 0;                 // 0x3041, last sample (no audio sink)
+    uint16_t m_dac_cha2 = 0;                 // 0x3042
+    // How often the guest writes the DAC.  There is no sample clock in the
+    // chip: the DAC holds whatever was last written, so the *guest* sets the
+    // rate by how often it writes.  Counting the writes is the only honest way
+    // to learn what sample rate the game expects - if it is a few hundred a
+    // second the channel is a beeper, if it is tens of thousands it is PCM.
+    uint32_t m_dac_writes = 0;
     uint16_t m_spi_auto_ctrl = 0;
     uint16_t m_spi_bank = 0;
     uint16_t m_spi_ctrl = 0;

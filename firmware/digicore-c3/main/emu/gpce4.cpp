@@ -91,21 +91,21 @@ void Gpce4SpiFlash::write(uint8_t data)
     case READY_FOR_COMMAND:
         switch (data) {
         case 0x01: m_state = COMMAND_01_WRSR;        m_state_step = 0; break;
-        case 0x02: m_state = COMMAND_02_PP;          m_state_step = 0; break;
+        case 0x02: m_state = COMMAND_02_PP;          m_state_step = 0; m_n_pp++; break;
         case 0x03: m_state = COMMAND_03_READ;        m_state_step = 0; break;
         case 0x04: m_statusreg = uint8_t(m_statusreg & ~0x02); break;   // WRDI
         case 0x05: m_state = COMMAND_05_RDSR;        m_state_step = 0; break;
-        case 0x06: m_statusreg = uint8_t(m_statusreg | 0x02); break;    // WREN
+        case 0x06: m_statusreg = uint8_t(m_statusreg | 0x02); m_n_wren++; break;  // WREN
         case 0x0b: m_state = COMMAND_0B_FAST_READ;   m_state_step = 0; break;
         case 0x11: m_state = COMMAND_11_UNKNOWN;     m_state_step = 0; break;
         case 0x15: m_state = COMMAND_15_RDCR;        m_state_step = 0; break;
-        case 0x20: m_state = COMMAND_20_SE;          m_state_step = 0; break;
+        case 0x20: m_state = COMMAND_20_SE;          m_state_step = 0; m_n_se++; break;
         case 0x31: m_state = COMMAND_31_UNKNOWN;     m_state_step = 0; break;
         case 0x35: m_state = COMMAND_35_RDSR2;       m_state_step = 0; break;
         case 0x66: break;                                            // enable reset
         case 0x90: m_state = COMMAND_90_REMS;        m_state_step = 0; break;
         case 0x99: break;                                            // reset
-        case 0x9f: m_state = COMMAND_9F_RDID;        m_state_step = 0; break;
+        case 0x9f: m_state = COMMAND_9F_RDID;        m_state_step = 0; m_n_rdid++; break;
         case 0xab: break;                                            // release DP
         case 0xb9: break;                                            // deep power down
         case 0xeb: m_state = COMMAND_EB_4READ;       m_state_step = 0; break;
@@ -113,6 +113,7 @@ void Gpce4SpiFlash::write(uint8_t data)
         case 0xff: break;                                            // CRMR
         default:
             // MAME: fatalerror("SPI set to unknown/unhandled command %02x")
+            m_n_unknown++;
             std::printf("[spi_flash] unhandled command %02x (ignored)\n", unsigned(data));
             break;
         }
@@ -147,6 +148,7 @@ void Gpce4SpiFlash::write(uint8_t data)
             if (writable && m_rom && m_addr < m_rom->size()) {
                 // A NOR page program can only clear bits.
                 m_rom->program_byte(m_addr, data);
+                m_n_bytes_pp++;
             } else if (!writable) {
                 std::printf("[spi_flash] page program %06x = %02x ignored (read-only image)\n",
                             m_addr, unsigned(data));
@@ -710,10 +712,10 @@ uint16_t Gpce4::pwm0_ctrl_r() { return 0; }                                     
 uint16_t Gpce4::pwm1_ctrl_r() { return 0; }                                     // :511
 uint16_t Gpce4::pwm2_ctrl_r() { return 0; }                                     // :517
 uint16_t Gpce4::pwm3_ctrl_r() { return 0; }                                     // :523
-void Gpce4::pwm0_ctrl_w(uint16_t) { }                                           // :529
-void Gpce4::pwm1_ctrl_w(uint16_t) { }                                           // :534
-void Gpce4::pwm2_ctrl_w(uint16_t) { }                                           // :539
-void Gpce4::pwm3_ctrl_w(uint16_t) { }                                           // :544
+void Gpce4::pwm0_ctrl_w(uint16_t) { m_pwm_writes++; }                         // :529
+void Gpce4::pwm1_ctrl_w(uint16_t) { m_pwm_writes++; }                         // :534
+void Gpce4::pwm2_ctrl_w(uint16_t) { m_pwm_writes++; }                         // :539
+void Gpce4::pwm3_ctrl_w(uint16_t) { m_pwm_writes++; }                         // :544
 
 
 // ===========================================================================
@@ -751,16 +753,21 @@ void Gpce4::dac_ctrl_w(uint16_t data)                                  // :608
     if (trace_io) std::printf("[gpce4] DAC_Ctrl = %04x\n", unsigned(data));
 }
 
-// MAME forwards this to the DAC device (m_dac->data_w(data)); this port has no
-// audio sink, so the sample is only remembered.
+// MAME forwards this to the DAC device (m_dac->data_w(data)).  There is no
+// sample clock on this chip: the DAC simply holds the last value written, so
+// the write rate *is* the sample rate and the guest is the only thing driving
+// it.  Remember the value and count the writes (see m_dac_writes).
 void Gpce4::dac_cha1_data_w(uint16_t data)                             // :613
 {
     m_dac_cha1 = data;
+    m_dac_writes++;
 }
 
 void Gpce4::dac_cha2_data_w(uint16_t data)                             // :620
 {
     if (trace_io) std::printf("[gpce4] DAC_CH2_Data = %04x\n", unsigned(data));
+    m_dac_cha2 = data;
+    m_dac_writes++;
 }
 
 void Gpce4::ppam_ctrl_w(uint16_t data)                                 // :625
@@ -1119,50 +1126,63 @@ void Gpce4::tick(uint32_t cycles)
         return;
 
     const uint64_t target = m_now + cycles;
-    uint32_t processed = 0;
 
-    for (;;) {
-        int which = -1;
-        uint64_t best = ~uint64_t(0);
-
-        for (int i = 0; i < SRC_COUNT; i++) {
-            if (i == 5 && !timer_300k_enable)      // machine driver "timer"
+    // Fast path: collapse every periodic timer straight to its last occurrence
+    // at or before `target` instead of stepping through each one.
+    //
+    // The old loop walked the timer wheel event by event, which is what MAME
+    // does because MAME has no choice: its scheduler is shared by every device.
+    // Here it costs the frame real time and buys nothing.  A 300 kHz source
+    // fires 5000 times in a single 16.7 ms guest frame; after the idle loop
+    // collapse (the guest spins for millions of cycles waiting for a tick) one
+    // tick() call can span 100 M cycles and step the wheel 300000 times.  The
+    // worst single tick() measured on the device was 30 ms - a third of a
+    // stalled frame - and all of it was spent re-arming timers whose only
+    // observable effect is one bit in m_interrupt_status.
+    //
+    // Collapsing is exact for that bit: an interrupt status bit cannot record
+    // how many times it was raised.  It is *not* exact for a guest that clears
+    // the bit between two edges and expects to see every edge, so the slow path
+    // is kept below for the sources that can matter: SPI TX carries an ordered
+    // byte stream and still has to be stepped one byte at a time, and anything
+    // that arrives with a period shorter than the coalescing window is left on
+    // the old path.
+    constexpr uint64_t kCoalesceMin = 4;
+    bool any = false;
+    for (int i = 0; i < SRC_COUNT; i++) {
+        if (i == 5 && !timer_300k_enable)          // machine driver "timer"
+            continue;
+        if (!source_enabled(i))
+            continue;
+        TimerSource &t = m_timers[i];
+        if (t.next > target)
+            continue;
+        if (t.period == 0 || t.period >= kCoalesceMin * 2) {
+            const uint64_t n = (target - t.next) / t.period + 1;
+            if (n >= kCoalesceMin) {
+                t.next += n * t.period;
+                m_interrupt_status |= (1u << t.irq);
+                any = true;
                 continue;
-            if (!source_enabled(i))
-                continue;
-            if (m_timers[i].next < best) {
-                best = m_timers[i].next;
-                which = i;
             }
         }
-        if (m_spi_tx_armed && m_spi_tx_next < best) {
-            best = m_spi_tx_next;
-            which = SRC_SPI_TX;
+        // Few edges (or a very short period): step them in order.
+        while (t.next <= target) {
+            m_now = t.next;
+            t.next += t.period;
+            request_interrupt(t.irq);
         }
+        any = true;
+    }
 
-        if (which < 0 || best > target)
-            break;
-
-        m_now = best;
-
-        if (which == SRC_SPI_TX) {
+    if (m_spi_tx_armed) {
+        while (m_spi_tx_armed && m_spi_tx_next <= target) {
+            m_now = m_spi_tx_next;
             timer_spi_tx();
-        } else {
-            m_timers[which].next = best + m_timers[which].period;
-            request_interrupt(m_timers[which].irq);
-        }
-
-        // Guard against a pathological slice (e.g. tick(96'000'000) from a
-        // harness that never steps the CPU): drop the events that piled up.
-        if (++processed > 4000000u) {
-            std::printf("[gpce4] tick(): event budget hit, timers resynchronised\n");
-            for (int i = 0; i < SRC_COUNT; i++)
-                if (m_timers[i].next <= target)
-                    m_timers[i].next = target + m_timers[i].period;
-            break;
         }
     }
 
     m_now = target;
-    update_interrupts();
+    if (any)
+        update_interrupts();
 }

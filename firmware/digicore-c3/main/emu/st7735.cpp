@@ -258,3 +258,48 @@ uint8_t St7735::read_data()
 {
     return 0;
 }
+
+// ---------------------------------------------------------------------------
+//  fill_run - the same pixels as `data_w()` called twice per pixel, without the
+//  register plumbing in between.
+//
+//  The guest's constant-colour loop (0x005B1E) never changes the value it
+//  pushes, so a whole span is one pixel repeated.  Going through data_w() means
+//  two register writes per pixel, each one decoding 0x3092, bumping the SPI2
+//  FIFO counter, setting TXIF and calling back here - about 90 host cycles of
+//  bookkeeping for 6 cycles of actual work.  This does the work directly.
+//
+//  Correctness rests on copying store_pixel()'s index maths verbatim (including
+//  the 129-posx rotation when MADCTL.MV is clear) and on advancing posx/posy
+//  with exactly the wrap rule data_w() uses.  m_pixellatch ends up holding the
+//  last pixel, and m_commandstep advances by two per pixel, so a follow-up
+//  data_w() sees the same state a real byte stream would have left.
+// ---------------------------------------------------------------------------
+void St7735::fill_run(uint16_t pixel, uint32_t count)
+{
+    if (m_command != 0x2c || count == 0u)
+        return;
+
+    const bool mv = (m_madctl & 0x0020) != 0;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        const int idx = (mv ? (m_posx + m_posy * GRAM_W)
+                            : (m_posy + (129 - m_posx) * GRAM_W)) & 0xffff;
+        const unsigned ry = unsigned(idx) >> 9;
+        const unsigned rx = unsigned(idx) & 0x1ffu;
+        if (rx < unsigned(PANEL) && ry < unsigned(PANEL))
+            fb[ry * PANEL + rx] = pixel;
+
+        m_posx++;
+        if (m_posx > m_posmaxx)
+        {
+            m_posx = m_posminx;
+            m_posy++;
+            if (m_posy > m_posmaxy)
+                m_posy = m_posminy;
+        }
+    }
+
+    m_pixellatch = pixel;
+    m_commandstep += int(count * 2u);
+}

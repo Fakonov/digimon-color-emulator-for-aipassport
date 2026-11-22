@@ -290,15 +290,17 @@ int main(int argc, char **argv)
 	if (block_hist_path) { block_hist.assign(0x400000u, 0u); cpu.m_block_hist = block_hist.data(); }
 	std::unordered_map<uint32_t, uint64_t> pc_hist;
 	if (pc_hist_path) hook.hist = &pc_hist;
+	// Always publish the live device and its register file: the breakpoint
+	// printer below needs them, and tying that to GPCE4_REGDUMP made --bp crash.
+	hook.dev = &cpu;
+	hook.regs = cpu.m_core->m_r;
+	hook.sbv = &cpu.m_core->m_sb;
 	{
 		const char *rdp = std::getenv("GPCE4_REGDUMP");
 		if (rdp)
 		{
 			hook.regd = std::fopen(rdp, "wb");
 			hook.regd_left = 40000;
-			hook.dev = &cpu;
-			hook.regs = cpu.m_core->m_r;
-			hook.sbv = &cpu.m_core->m_sb;
 		}
 	}
 	if (hook.trace || hook.hist || hook.bp != 0xffffffffu || hook.ram_at >= 0 || hook.regd)
@@ -312,6 +314,22 @@ int main(int argc, char **argv)
 				if (fp) { std::fwrite(c->ram, 2, 4096, fp); std::fclose(fp); }
 				c->bp_done = true;
 				std::printf("[bp] pc=%06X ram dumped to %s\n", pc, c->bp_path);
+				// Registers are not part of the flat RAM image, so print them and the
+				// stack window here -- otherwise there is no way to see what a helper
+				// was called with.
+				const AotCtx *bpa = c->dev ? (const AotCtx *)c->dev->m_aot_cur : nullptr;
+				const uint32_t *br = bpa ? bpa->r : c->regs;
+				if (br && c->ram)
+				{
+					std::printf("[bp] r0/SP=%04X r5/BP=%04X r6/SR=%04X\n",
+						br[0] & 0xffffu, br[5] & 0xffffu, br[6] & 0xffffu);
+					const uint32_t sp = br[0] & 0xffffu;
+					for (int k = 0; k < 10; ++k)
+					{
+						const uint32_t a = (sp + (uint32_t)k) & 0xfffu;
+						std::printf("[bp]   [SP+%d] @%04X = %04X\n", k, a, c->ram[a]);
+					}
+				}
 			}
 			if (c->regd && c->regd_left > 0)
 			{

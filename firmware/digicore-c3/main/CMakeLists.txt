@@ -8,7 +8,9 @@
 idf_component_register(
     SRCS "app_main.cpp"
          "rom_esp.cpp"
+         "saveimg.cpp"
          "buttons.c"
+         "audio.c"
          "display.c"
          "emu/gpce4.cpp"
          "emu/romstore.cpp"
@@ -28,7 +30,7 @@ idf_component_register(
 # size, terrible for the interpreter: every opcode switch becomes a compare
 # chain).  The ISA decoder is one giant nested switch, so re-enable both for
 # this component; the two flags must come after the IDF defaults to win.
-target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error=format -O3 -DC3_PROF=1 -DC3_SKIP_BLIT=0
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error=format -O3 -DC3_PROF=1 -DC3_SPLIT=0 -DC3_SKIP_BLIT=0
                        -fjump-tables -ftree-switch-conversion
                        -DAOT_CONST_TABLES -DAOT_NO_HOOKS -DC3_MISS_CENSUS=0 -DC3_BLOCK_CENSUS=0 -DC3_NO_AOT=0
                        -DC3_BLIT_CYC=139 -DC3_AOTACC=1)
@@ -50,3 +52,11 @@ set_source_files_properties(emu/aot_blocks.c PROPERTIES COMPILE_OPTIONS "-O3")
 # (.rodata.embedded) and costs no RAM.
 target_add_binary_data(${COMPONENT_LIB} "assets/internal_rom_221017a.bin" BINARY
                        RENAME_TO internal_rom)
+
+# version.txt is the single source of truth for the firmware version: the top
+# level CMakeLists feeds it to PROJECT_VER (so it lands in the app descriptor
+# and idf.py / esptool report it), and here it becomes a string macro the code
+# can print without pulling in esp_app_format just to read its own descriptor.
+file(READ "${CMAKE_CURRENT_LIST_DIR}/../version.txt" DIGICORE_VER_RAW)
+string(STRIP "${DIGICORE_VER_RAW}" DIGICORE_VER)
+target_compile_definitions(${COMPONENT_LIB} PRIVATE "DIGICORE_VERSION=\"${DIGICORE_VER}\"")

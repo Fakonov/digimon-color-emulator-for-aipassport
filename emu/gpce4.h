@@ -155,10 +155,20 @@ struct Gpce4 : public UnspBus {
 	// A timer source whose interrupt is masked cannot change guest state: it
 	// only sets a pending bit in INT_Status.  timer_a (bit 15 of INT_Ctrl) is
 	// enabled by nothing in this game, so its 20 kHz events are pure overhead.
+	// The 20 kHz timer_a only ever raises IRQ0, and this game keeps INT_Ctrl at
+	// 0x0000 for its whole run.  "The CPU cannot take the interrupt" is not the
+	// same as "the event does not matter": the guest also *polls* INT_Status,
+	// and the boot-time check at ~18 s waits for a status bit that only moves
+	// when the source is actually serviced.  Masking it parks the game inside
+	// the internal-ROM timeout loop (0x005251 / 0x005376) forever, which is why
+	// the save never fires.  Keep it live by default; tick() coalesces the
+	// events anyway, so the cost is a fraction of what it was before the wheel
+	// rewrite.
+	bool mask_irq0_timer = true;   // measured: unmasked costs guest_pct 30->61 and does NOT fix the 18 s stall
 	bool source_enabled(int i) const
 	{
 		if (i == 1)
-			return (m_interrupt_ctrl & 0x8000) != 0;   // timer_a -> IRQ0
+			return !mask_irq0_timer || (m_interrupt_ctrl & 0x8000) != 0;
 		return true;
 	}
     // MAME's update_interrupts() clears IRQ7 twice in a row, so a pending 2 Hz
@@ -172,7 +182,7 @@ struct Gpce4 : public UnspBus {
     // against that model, the MAME-exact reads are the default; the real
     // 12-byte FIFO fill level / TXFLEV / SPITXIF are still tracked internally
     // and become visible when this is set.
-    bool spi2_status_regs = false;
+    bool spi2_status_regs = true;    // trial: the guest polls 0x3095 ten times; MAME returns a constant
     bool trace_io = false;
 
     // =====================================================================

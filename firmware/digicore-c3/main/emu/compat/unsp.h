@@ -121,6 +121,14 @@ public:
 
 	UnspBus *m_bus;
 
+	// Optional shortcut for HLE blocks that push a constant colour to the panel:
+	// returns true when the SoC filled the whole run itself, false when the
+	// caller has to fall back to writing 0x3092 byte by byte (the LCD is not in
+	// a RAMWR window, so the register model must see the traffic).  Set by the
+	// harness during guest_init().
+	bool (*m_lcd_fill)(void *opaque, uint16_t value, uint32_t count) = nullptr;
+	void *m_lcd_fill_opaque = nullptr;
+
 	uint16_t m_vectorbase;
 
 	// coverage / debugging hooks (set by the harness, may be null)

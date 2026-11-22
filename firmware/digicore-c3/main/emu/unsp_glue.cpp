@@ -697,12 +697,16 @@ UNSP_HOT bool unsp_device::wait_loop_collapse(uint32_t lpc)
 // plain run loop would have been, so the observable instruction stream is
 // identical whether a given PC came from a block or from the interpreter.
 
-static uint16_t aot_bus_rd(void *dev, uint32_t address)
+// Non-static on purpose: aot.h declares these and calls them directly from
+// aot_rd/aot_wr, so the LTO pass can inline the trampoline into every block
+// body.  Routed through the old function-pointer fields it stayed an indirect
+// call, and the whole out-of-window path cost three levels of indirection.
+uint16_t aot_io_rd(void *dev, uint32_t address)
 {
 	return ((unsp_device *)dev)->m_bus->read16(address);
 }
 
-static void aot_bus_wr(void *dev, uint32_t address, uint16_t value)
+void aot_io_wr(void *dev, uint32_t address, uint16_t value)
 {
 	((unsp_device *)dev)->m_bus->write16(address, value);
 }
@@ -798,9 +802,13 @@ static void aot_note_block(uint32_t lpc)
 
 void aot_dump_blocks(void)
 {
-	const unsigned n = g_blk_used < 1024u ? g_blk_used : 1024u;
-	std::printf("BLKHEAD %u\n", n);
-	for (unsigned k = 0; k < n && k < 200u; k++)
+	// The table is a hash: a live counter can sit in any of the 1024 slots, so
+	// the scan has to cover 1024 and not g_blk_used.  Bounding it by the number
+	// of occupied slots silently skipped every entry whose hash landed past
+	// that count, which is why a dump could print a full BLKHEAD and no rows.
+	const unsigned n = 1024u;
+	std::printf("BLKHEAD %u\n", g_blk_used);
+	for (unsigned k = 0; k < 200u; k++)
 	{
 		unsigned best = 0;
 		for (unsigned i = 1; i < n; i++)
@@ -906,6 +914,7 @@ static void aot_fallback_one(void *dev, AotCtx *c, uint32_t lpc)
 uint32_t g_ins_irom = 0;      // 0x000000-0x00FFFF (internal mask ROM)
 uint32_t g_ins_flash = 0;     // 0x200000-0x3FFFFF (SPI flash window)
 uint32_t g_ins_push = 0;      // subset of irom: the LCD byte-push routine 0x005A00-0x005B60
+uint32_t g_ins_band = 0;      // narrowest slice: the render_band record body
 uint32_t g_ins_draw = 0;      // subset of flash: the drawing code 0x207A00-0x207D00
 uint32_t g_ins_ram = 0;       // 0x000000-0x000FFF
 
@@ -919,8 +928,8 @@ UNSP_HOT bool unsp_device::aot_step(const uint32_t lpc)
 		ac.ram = m_ram;
 		ac.ram_limit = m_ram_limit;
 		ac.dev = this;
-		ac.bus_rd = aot_bus_rd;
-		ac.bus_wr = aot_bus_wr;
+		ac.bus_rd = aot_io_rd;
+		ac.bus_wr = aot_io_wr;
 		ac.fallback = aot_fallback_one;
 		ac.sirq = &m_core->m_sirq;
 		ac.r = m_core->m_r;
@@ -992,6 +1001,10 @@ UNSP_HOT bool unsp_device::aot_step(const uint32_t lpc)
 	else                            g_ins_flash += cnt;
 	if (lpc >= 0x005A00u && lpc < 0x005B60u) g_ins_push += cnt;
 	if (lpc >= 0x207A00u && lpc < 0x207D00u) g_ins_draw += cnt;
+	// Narrower slice: the per-record body the render_band HLE is meant to
+	// replace.  If rband stays high while the HLE reports records consumed, the
+	// guest is still walking that range by another route.
+	if (lpc >= 0x207A3Eu && lpc < 0x207D10u) g_ins_band += cnt;
 #endif
 	return true;
 }
@@ -1074,7 +1087,14 @@ bool unsp_device::hle_blit_key()
 		if (val != AOT_HLE_BLIT_KEY)
 		{
 			const uint32_t dst = (uint32_t)i + (uint32_t)bias + AOT_HLE_BLIT_BIAS;
-			write16(dst, val);
+			// The destination is the guest's 96 pixel row buffer, i.e. always
+			// plain RAM.  Going through write16() costs a virtual call per
+			// pixel (measured: the draw region runs at 260 host cycles per
+			// guest instruction); the flat window is a direct array store.
+			if (dst <= m_ram_limit)
+				m_ram[dst] = val;
+			else
+				write16(dst, val);
 		}
 		src = (src + 1u) & 0xFFFFFFu;
 		i++;
@@ -1216,6 +1236,363 @@ static bool hle_push_pixels(unsp_device *const d)
 	d->set_pc_lpc(AOT_HLE_PUSH_EXIT);
 	return true;
 }
+
+// ---------------------------------------------------------------------------
+// LCD constant fill: 0x005B1D..0x005B2E
+//
+// The block census for a redraw frame shows 0x005B1E executing 9,215 times and
+// 0x005B29 9,216 -- once per pixel of the 96x96 window.  That is not the keyed
+// blit the other hook covers: this loop never touches memory.  It is
+//
+//   0x005B1D  r4 = r2                  (count)
+//   0x005B1E  r2 = r1 ror4             (4-bit shift register: result r1 >> 4)
+//   0x005B1F  r2 = r2 ror4             (result r1 >> 8)
+//   0x005B20  [3092] = r2              (high byte first: spi2_txdata_w uses data & 0xff)
+//   0x005B22  [3092] = r1              (low byte)
+//   0x005B24  nop
+//   0x005B25  r2 = [3095]              (SPI status; bit 0x10 is never set here)
+//   0x005B27  test r2 & 0x0010
+//   0x005B28  jne 0x005B25             (falls through on the first test)
+//   0x005B29  r2 = [3094]              (RX data, always 0: no side effect)
+//   0x005B2B  r2 = [3094]
+//   0x005B2D  r4 -= 1
+//   0x005B2E  jne 0x005B1E
+//
+// r1 is never written inside the loop and the ror4 pair lands on r1 >> 8 for
+// any incoming sb, so every iteration pushes the *same* two bytes: this is a
+// constant colour fill (render_band's solid-fill path).  54 guest cycles per
+// pixel of pure interpreter overhead disappears; the two write16 calls, which
+// are the actual work, stay.
+// ---------------------------------------------------------------------------
+#define AOT_HLE_FILL_ENTRY  0x005B1Eu
+#define AOT_HLE_FILL_REST   0x005B1Eu
+#define AOT_HLE_FILL_EXIT   0x005B2Fu
+#define AOT_HLE_FILL_CYCLES 54u
+
+bool g_hle_fill_px = true;
+
+// Stall post-mortem: the game leaves the flash main loop at ~18 s and never
+// comes back (see docs/DELIVERY_2026-11-22.md §3.5).  Keeping the last few
+// distinct internal-ROM block entries is enough to see which call walked into
+// the waiter.  Only internal-ROM entries are recorded, so the hot flash loop
+// pays a single compare-and-branch per block.
+uint32_t g_pc_ring[48];
+uint32_t g_pc_ring_ri = 0;
+uint32_t g_pc_ring_prev = 0xffffffffu;
+
+void aot_dump_pc_ring(void)
+{
+	std::printf("PCRINGHEAD\n");
+	const uint32_t n = g_pc_ring_ri < 48u ? g_pc_ring_ri : 48u;
+	for (uint32_t i = 0; i < n; i++)
+	{
+		const uint32_t idx = (g_pc_ring_ri + 48u - n + i) % 48u;
+		std::printf("PC %06X\n", unsigned(g_pc_ring[idx]));
+	}
+	std::printf("PCRINGEND\n");
+}
+
+uint32_t g_hle_fill_px_win = 0;
+uint32_t g_hle_fill_px_total = 0;
+// Pixels that took the straight-to-panel path instead of two SPI2 register
+// writes each.  If this stays at zero the LCD was never inside a RAMWR window
+// when the fill loop ran, and the fast path is dead code for this game.
+uint32_t g_hle_fill_fast = 0;
+
+static bool hle_fill_span(unsp_device *const d)
+{
+	unsp_device::internal_unsp_state *const core = d->m_core;
+
+	// Entered at the loop body, so r4 is the copies left.  The first pass of a
+	// span runs inside the 0x005B1D block (which sets r4 = r2 and falls through);
+	// every later pass re-enters here from the jne at 0x005B2E.
+	const uint32_t count = (uint16_t)core->m_r[unsp_device::REG_R4];
+	if (count == 0u || count > 0x10000u)
+		return false;
+
+	const int32_t budget = core->m_icount > 0 ? core->m_icount : 0;
+	if (budget < (int32_t)AOT_HLE_FILL_CYCLES)
+		return false;
+
+	const uint16_t value = (uint16_t)core->m_r[unsp_device::REG_R1];
+	const uint16_t high = (uint16_t)(value >> 8);
+	const uint16_t low = value;
+
+	uint32_t remaining = count;
+	uint32_t cycles = 0;
+
+	// Straight-to-panel fast path: one call paints the whole span.  Only taken
+	// when the SoC says the LCD is inside a RAMWR window (the hook checks), and
+	// only up to the cycle budget, because the guest is charged per pixel either
+	// way and the frame remainder must stay correct.
+	if (d->m_lcd_fill != nullptr)
+	{
+		const uint32_t affordable = (uint32_t)budget / AOT_HLE_FILL_CYCLES;
+		const uint32_t n = remaining < affordable ? remaining : affordable;
+		if (n != 0u && d->m_lcd_fill(d->m_lcd_fill_opaque, value, n))
+		{
+			remaining -= n;
+			cycles += n * AOT_HLE_FILL_CYCLES;
+			g_hle_fill_fast += n;
+		}
+	}
+
+	while (remaining != 0u && cycles + AOT_HLE_FILL_CYCLES <= (uint32_t)budget)
+	{
+		d->write16(0x3092u, high);
+		d->write16(0x3092u, low);
+		remaining--;
+		cycles += AOT_HLE_FILL_CYCLES;
+	}
+
+	core->m_r[unsp_device::REG_R4] = (uint16_t)remaining;
+	core->m_icount -= (int32_t)cycles;
+	g_hle_fill_px_win += (count - remaining);
+	g_hle_fill_px_total += (count - remaining);
+
+	if (remaining != 0u)
+	{
+		// Out of budget: re-enter at the loop body with r4 = copies left.
+		d->set_pc_lpc(AOT_HLE_FILL_REST);
+		return true;
+	}
+
+	// Final state of the interpreted pass: r2 held the last [3094] read (the
+	// RX register returns 0), the 4-bit shift register sits at the value the
+	// second ror4 left behind, and the final "r4 -= 1" wrapped through 0x10000.
+	core->m_r[unsp_device::REG_R2] = 0u;
+	core->m_sb = ((uint32_t)value >> 4) & 0xfu;
+	d->update_nzsc(0x10000u, (uint16_t)1u, (uint16_t)~1u);
+	d->set_pc_lpc(AOT_HLE_FILL_EXIT);
+	return true;
+}
+
+// 0x005F8B / 0x005F8E: the mask-ROM 32x32->32 multiply helper.  Every "idx*12"
+// and "w*row" in the renderer goes through it; a full-screen redraw calls it
+// about 2,157 times, which is 45% of that frame's guest instructions by count.
+// The body is a handful of 16-bit multiplies over four stack words, so it has no
+// I/O and no side effects outside r1/r2 - exactly the shape worth lifting out of
+// the generic ALU dispatch.
+//
+// The stack layout was measured rather than guessed (emu/digicore.exe --bp 207A4C,
+// which showed [0FB0]=0x000C, [0FB1]=0, [0FB2]=idx, [0FB3]=0 for a request of
+// idx*12): entry SP=S, "push r5" stores BP at [S] and leaves SP=S-1, so the
+// helper's r5 (= SP+1) is S and the arguments sit at [S+3]..[S+6].
+// Only the arithmetic is replaced; the push above and the pops at 0x005F9B/9C
+// still run as guest code, so the stack is left exactly as it was.
+#define AOT_HLE_MUL_ENTRY  0x005F8Bu
+#define AOT_HLE_MUL_RESUME 0x005F9Bu
+#define AOT_HLE_MUL_CYCLES 94u
+
+bool g_hle_mul32 = true;
+uint32_t g_hle_mul_win = 0;
+uint32_t g_hle_mul_total = 0;
+
+static bool hle_mul32(unsp_device *const d)
+{
+	unsp_device::internal_unsp_state *const core = d->m_core;
+
+	const int32_t budget = core->m_icount > 0 ? core->m_icount : 0;
+	if (budget < (int32_t)AOT_HLE_MUL_CYCLES)
+		return false;
+
+	const uint16_t sp = (uint16_t)core->m_r[unsp_device::REG_SP];
+	const uint16_t bp = (uint16_t)core->m_r[unsp_device::REG_BP];
+
+	// "push r5 / r5 = r0 + 1", both from the 0x005F8B block.
+	d->write16(sp, bp);
+	core->m_r[unsp_device::REG_SP] = (uint16_t)(sp - 1u);
+
+	const uint16_t a_lo = d->read16((uint16_t)(sp + 3u));
+	const uint16_t a_hi = d->read16((uint16_t)(sp + 4u));
+	const uint16_t b_lo = d->read16((uint16_t)(sp + 5u));
+	const uint16_t b_hi = d->read16((uint16_t)(sp + 6u));
+
+	// a_lo*b_lo is unsigned; the two cross terms are signed 16x16 and only their
+	// low halves reach the high word, because the guest accumulates them with
+	// plain 16-bit adds that drop the carry (see aot_b005F96 / aot_b005F9A).
+	const uint32_t p = (uint32_t)a_lo * (uint32_t)b_lo;
+	uint16_t hi = (uint16_t)(p >> 16);
+	hi = (uint16_t)(hi + (uint16_t)((int32_t)(int16_t)a_lo * (int32_t)(int16_t)b_hi));
+	hi = (uint16_t)(hi + (uint16_t)((int32_t)(int16_t)a_hi * (int32_t)(int16_t)b_lo));
+
+	core->m_r[unsp_device::REG_R1] = (uint16_t)p;
+	core->m_r[unsp_device::REG_R2] = hi;
+	core->m_icount -= (int32_t)AOT_HLE_MUL_CYCLES;
+	g_hle_mul_win++;
+	g_hle_mul_total++;
+
+	// Resume at the "pop r5" so BP comes back from the word pushed above.
+	d->set_pc_lpc(AOT_HLE_MUL_RESUME);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// render_band, the sprite record loop
+// ---------------------------------------------------------------------------
+// 0x2079FC..0x207D29 is `render_band(y0, h)`.  It walks the scan lines and, per
+// line, walks the sprite record table at 0x0608 (12 words each, count in
+// ds:[0x07B8]).  The per-record body 0x207A3E..0x207D0F culls, clips, then does
+// either a solid fill or a keyed blit into the 96 word line buffer at 0x07BA.
+// 0x207D15 pushes that buffer to the panel.
+//
+// Hooking 0x207A35 (the record-loop condition) is the cheap seam: consume every
+// remaining record for this line here, leave [bp+1] equal to the record count,
+// and let the original code take its own "done" branch into 0x207D15.  The
+// ST7735 window command and the 0x005B41 bulk write stay untouched, and all the
+// work below is pure RAM arithmetic.
+#define AOT_HLE_BAND_LOOP 0x207A35u
+#define AOT_HLE_BAND_REC  0x0608u   // sprite record table
+#define AOT_HLE_BAND_NREC 0x07B8u   // record count
+#define AOT_HLE_BAND_LINE 0x07BAu   // 96 word line buffer
+#define AOT_HLE_BAND_KEY  0x07E0u   // transparent colour
+#define AOT_HLE_BAND_CYC  520u      // guest cycles charged per record consumed
+
+bool g_hle_render_band = true;
+uint32_t g_hle_band_recs = 0;
+uint32_t g_hle_band_calls = 0;      // entered the hook
+uint32_t g_hle_band_bail = 0;       // ...and returned false
+uint32_t g_hle_band_flip = 0;       // lines handed back because a record is flipped
+
+static inline int16_t hle_s16(uint16_t v)
+{
+	return (int16_t)v;
+}
+
+static bool hle_render_band(unsp_device *const d)
+{
+	unsp_device::internal_unsp_state *const core = d->m_core;
+	uint32_t *const r = core->m_r;
+	const uint32_t budget = core->m_icount > 0 ? (uint32_t)core->m_icount : 0u;
+
+	const uint16_t bp = (uint16_t)r[unsp_device::REG_BP];
+	const uint16_t y = d->read16((uint32_t)bp);
+	const uint16_t count = d->read16(AOT_HLE_BAND_NREC);
+	uint16_t idx = d->read16((uint32_t)bp + 1u);
+	g_hle_band_calls++;
+	if (idx >= count)
+	{
+		g_hle_band_bail++;
+		return false;                   // nothing left, let the guest finish
+	}
+
+	// The horizontally flipped blit has never executed in any trace we have of
+	// this cartridge, and forcing the flag from the console is not a usable test
+	// (the game rewrites the record table every frame, so two redraws never share
+	// a state).  Rather than ship an unverified branch, hand any line that uses
+	// it back to the guest: correct, just not accelerated.
+	for (uint16_t i = idx; i < count; i++)
+	{
+		if (d->read16(AOT_HLE_BAND_REC + (uint32_t)i * 12u + 0x0Bu) != 0u)
+		{
+			g_hle_band_flip++;
+			return false;
+		}
+	}
+
+	uint32_t spent = 0;
+	unsigned done = 0;
+
+	for (; idx < count; idx++)
+	{
+		if (spent + AOT_HLE_BAND_CYC > budget)
+			break;
+
+		const uint32_t rec = AOT_HLE_BAND_REC + (uint32_t)idx * 12u;
+		const uint16_t gfx = d->read16(rec + 0u);
+		const uint16_t ry0 = d->read16(rec + 3u);
+		const uint16_t w = d->read16(rec + 4u);
+		const uint16_t x0 = d->read16(rec + 2u);
+		const uint16_t x1 = d->read16(rec + 9u);
+		const uint16_t ry1 = d->read16(rec + 0x0Au);
+
+		if (d->read16(rec + 8u) != 1u) continue;   // disabled
+		if (ry0 > y) continue;                     // starts below this line
+		if (ry1 < y) continue;                     // ended above this line
+		if (hle_s16(x1) < 0) continue;             // fully off the left edge
+		if (hle_s16(x0) > 0x5f) continue;          // fully off the right edge
+
+		// Clip, exactly as 0x207AE1..0x207BE9 computes it.
+		uint16_t cnt, srcskip, bias;
+		if (hle_s16(x0) < 0)
+		{
+			const uint16_t over = (uint16_t)(-(int32_t)hle_s16(x0));
+			cnt = (uint16_t)(w - over);
+			srcskip = over;
+			bias = 0;
+		}
+		else if (hle_s16(x1) > 0x5f)
+		{
+			cnt = (uint16_t)(96u - x0);
+			srcskip = 0;
+			bias = x0;
+		}
+		else
+		{
+			cnt = w;
+			srcskip = 0;
+			bias = x0;
+		}
+		if (cnt > 0x5fu) cnt = 0x60u;
+
+		if (cnt != 0)
+		{
+			const uint16_t row = (uint16_t)(y - ry0);
+			const uint32_t dst = AOT_HLE_BAND_LINE + bias;
+
+			if (gfx == 0xFFFEu)
+			{
+				const uint16_t v = d->read16(rec + 1u);
+				for (uint16_t i = 0; i < cnt; i++)
+					d->write16(dst + i, v);
+			}
+			else
+			{
+				// src = rec[7]:rec[6] + w*row, then skip the clipped left part.
+				uint32_t src = ((uint32_t)d->read16(rec + 7u) << 16) | d->read16(rec + 6u);
+				src += (uint32_t)w * (uint32_t)row;
+				if (d->read16(rec + 0x0Bu) != 0)   // horizontally flipped
+				{
+					src += (uint32_t)w - 1u;
+					src -= srcskip;
+					for (uint16_t i = 0; i < cnt; i++, src--)
+					{
+						const uint16_t px = d->read16(src);
+						if (px != AOT_HLE_BAND_KEY)
+							d->write16(dst + i, px);
+					}
+				}
+				else
+				{
+					src += srcskip;
+					for (uint16_t i = 0; i < cnt; i++, src++)
+					{
+						const uint16_t px = d->read16(src);
+						if (px != AOT_HLE_BAND_KEY)
+							d->write16(dst + i, px);
+					}
+				}
+			}
+		}
+
+		spent += AOT_HLE_BAND_CYC;
+		done++;
+	}
+
+	if (done == 0)
+	{
+		g_hle_band_bail++;
+		return false;
+	}
+
+	d->write16((uint32_t)bp + 1u, idx);
+	core->m_icount -= (int32_t)spent;
+	g_hle_band_recs += done;
+
+	// Re-enter the loop condition so the guest itself decides to push the line.
+	d->set_pc_lpc(AOT_HLE_BAND_LOOP);
+	return true;
+}
 #endif
 
 UNSP_HOT void unsp_device::execute_run()
@@ -1229,6 +1606,12 @@ UNSP_HOT void unsp_device::execute_run()
 		while (core->m_icount >= 0)
 		{
 			const uint32_t lpc = UNSP_LPC;
+			if (lpc >= 0x004000u && lpc < 0x006000u && lpc != g_pc_ring_prev)
+			{
+				g_pc_ring_prev = lpc;
+				g_pc_ring[g_pc_ring_ri % 48u] = lpc;
+				g_pc_ring_ri++;
+			}
 			if (m_block_hist) m_block_hist[lpc & 0x3ffffu]++;
 			// The PRNG block runs from flash (0x2002F4) and, in the scenes that
 			// relocate it, from its RAM copy (0x0002F4).  Same code, same data
@@ -1283,6 +1666,20 @@ UNSP_HOT void unsp_device::execute_run()
 			// LCD pixel push: 65 virtual cycles per pixel in C instead of
 			// fourteen guest instructions (see hle_push_pixels).
 			if (g_hle_push_px && lpc == AOT_HLE_PUSH_ENTRY && hle_push_pixels(this))
+				continue;
+			// Constant-colour fill: 0x005B1D runs once per pixel of a redraw and
+			// never reads memory, so the whole span collapses to two writes per
+			// pixel (see hle_fill_span).
+			if (g_hle_fill_px && lpc == AOT_HLE_FILL_ENTRY && hle_fill_span(this))
+				continue;
+			// 32x32->32 multiply: 0x005F8B is called for every sprite offset and
+			// every fill pixel.  Replaces the arithmetic only; the push and both
+			// pops stay in the guest, so the stack stays balanced.
+			if (g_hle_mul32 && lpc == AOT_HLE_MUL_ENTRY && hle_mul32(this))
+				continue;
+			// Sprite record loop: consume every remaining record for this scan
+			// line in C, then let the guest re-test and push the line buffer.
+			if (g_hle_render_band && lpc == AOT_HLE_BAND_LOOP && hle_render_band(this))
 				continue;
 #endif
 			{

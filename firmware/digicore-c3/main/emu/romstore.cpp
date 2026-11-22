@@ -162,3 +162,40 @@ void SparseRom::erase_sector(uint32_t off)
 	}
 	m_writes++;
 }
+
+int SparseRom::overlay_export(uint32_t *pages, uint8_t *dst, int max_pages) const
+{
+	int n = 0;
+	for (int i = 0; i < DIRTY_SLOTS && n < max_pages; i++) {
+		if (m_overlay_tag[i] == INDEX_NONE)
+			continue;
+		pages[n] = m_overlay_tag[i];
+		std::memcpy(dst + size_t(n) * PAGE_SIZE, m_overlay + i * PAGE_WORDS, PAGE_SIZE);
+		n++;
+	}
+	return n;
+}
+
+bool SparseRom::overlay_import(uint32_t page, const uint8_t *src)
+{
+	if (!src || page >= (m_size >> PAGE_BITS))
+		return false;
+
+	uint16_t *ov = overlay_page(page, true);
+	if (!ov)
+		return false;
+
+	std::memcpy(ov, src, PAGE_SIZE);
+
+	// Count it like a guest program would, so persist_save_image() notices the
+	// change and starts its settle timer.  Without this an injected image sits
+	// in the overlay and never reaches the partition.
+	m_writes++;
+
+	// Keep a resident cache line coherent, exactly like program_byte() does.
+	const int s = slot_holding(page);
+	if (s >= 0)
+		std::memcpy(m_cache + s * PAGE_WORDS, ov, PAGE_SIZE);
+
+	return true;
+}

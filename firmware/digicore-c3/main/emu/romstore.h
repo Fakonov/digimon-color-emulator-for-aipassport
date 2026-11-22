@@ -108,6 +108,14 @@ public:
 	// 4 KiB sector erase inside the overlay (the SoC's 0x20 command).
 	void erase_sector(uint32_t off);
 
+	// ---- persistence (saveimg.cpp) ---------------------------------------
+	// Copy every overlay page out: `pages[i]` gets the page number and
+	// `dst + i * PAGE_SIZE` its 4 KiB of bytes.  Returns the page count.
+	int overlay_export(uint32_t *pages, uint8_t *dst, int max_pages) const;
+	// Install a page that came back from flash.  Replaces whatever the overlay
+	// held for that page, so a restore always wins over a stale write.
+	bool overlay_import(uint32_t page, const uint8_t *src);
+
 	// ---- statistics (logged once per second) ------------------------------
 	uint32_t page_loads() const { return m_loads; }
 	uint32_t overlay_hits() const { return m_overlay_hits; }

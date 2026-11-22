@@ -59,3 +59,10 @@ docs/backup/
 tmp/
 tmp_asset_probe/
 tmp_penc_test/
+
+# ---- 调研中间产物：体积大、可再生，不进库 ----
+.research/
+_research/
+
+# ---- sdkconfig 手工备份 ----
+firmware/*/sdkconfig.bak-*
