@@ -1288,11 +1288,18 @@ static void maybe_snapshot_machine_state(void)
     if (!gueststate_ready())
         return;
     const int64_t now = esp_timer_get_time();
+    const int period = menu_autosave_sec();
     if (s_snap_last_us == 0) {
         s_snap_last_us = now;
         return;
     }
-    if (now - s_snap_last_us < 60000000)     // 60 s
+    if (period <= 0) {
+        // Auto-save is off, but keep the clock parked on "now" so turning it
+        // back on does not fire a snapshot the instant the menu closes.
+        s_snap_last_us = now;
+        return;
+    }
+    if (now - s_snap_last_us < int64_t(period) * 1000000)
         return;
     snapshot_machine_state();
 }
@@ -1319,18 +1326,20 @@ static void update_sleep_backlight(void)
     }
     const int64_t idle = now - s_last_input_us;
 
-    // The menu owns both numbers; mirror them so a change takes effect on the
+    // The menu owns these numbers; mirror them so a change takes effect on the
     // next frame without the frame loop having to poll the menu module.
     const int auto_off = menu_auto_off_sec();
     s_brightness_pct = menu_bright_pct();
 
-    // temporary probe: prove the timer is running and see what resets it
+    // Volume only has to reach the codec when it changes: audio_set_volume()
+    // does an I2C write, and this runs once per frame.
     {
-        static uint32_t s_dbg = 0;
-        if ((++s_dbg % 300u) == 0u)
-            ESP_LOGI(TAG, "idle dbg last=%lld now=%lld idle=%lld ms lit=%d auto=%d",
-                     (long long)s_last_input_us, (long long)now,
-                     (long long)(idle / 1000), s_lit ? 1 : 0, auto_off);
+        static int s_vol_applied = -1;
+        const int vol = menu_volume_pct();
+        if (vol != s_vol_applied) {
+            s_vol_applied = vol;
+            audio_set_volume(vol);
+        }
     }
 
     // When the emulator is set to stay lit past the handset's own 16 s, mark
@@ -1655,7 +1664,7 @@ extern "C" void app_main(void)
         // window to restore from.  s_menu_was_open makes the close push the
         // untouched fb[] once so the game comes back in full.
         if (menu_is_open()) {
-            menu_present(s_strip, kLeft, kTop, kWinW, kWinH, kScale);
+            menu_present(s_strip, kDstW, kDstH);
             s_menu_was_open = true;
         } else {
             if (s_menu_was_open) {

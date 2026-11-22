@@ -1,10 +1,24 @@
-// Settings menu: values, persistence and a 5x7 text renderer.
+// Settings menu: values, persistence and a 2x-scaled 5x7 text renderer.
 //
-// Two settings for now, both of which the emulator itself acts on:
-//   AUTO OFF  - how long the panel stays lit after the last key press.  16 s
-//               matches the retail machine (its ROM writes System_Sleep about
-//               17 s after the last input); 0 means never sleep.
-//   BRIGHT    - backlight duty once the panel is lit.
+// The visual target is the digimon-passport settings panel: a 300x200 ivory
+// card centred on the panel, a 2 px dark olive border with 8 px rounded
+// corners, a bright yellow bar behind the selected row, labels flush left and
+// values flush right.  That project builds its menu out of LVGL widgets; this
+// one has nowhere near the RAM for LVGL, so the same look is drawn by hand and
+// pushed straight to the panel.
+//
+// Settings, all of which the emulator itself acts on:
+//   AUTO OFF   - how long the panel stays lit after the last key press.  16 s
+//                matches the retail machine (its ROM writes System_Sleep about
+//                17 s after the last input); 0 means never sleep.
+//   BRIGHT     - backlight duty once the panel is lit.
+//   VOLUME     - software amplitude for the emulator's own beeps.  The codec
+//                register stays pinned at 0 dB (see audio.c), so this only
+//                scales the square wave.
+//   AUTO SAVE  - how often the guest state is snapshotted to flash.  Off by
+//                default is not an option: the whole point of the feature is
+//                that a power cut does not cost progress.
+//   ABOUT      - read only, shows the firmware version.
 //
 // Everything is written to NVS namespace "digicore" as one-byte keys, and only
 // when a value actually changes, so flash wear is a non-issue.
@@ -20,6 +34,10 @@
 #include "display.h"
 #include "font5x7.inc"
 
+#ifndef DIGICORE_VERSION
+#define DIGICORE_VERSION "?"
+#endif
+
 static const char *TAG = "menu";
 
 // AUTO OFF choices, seconds.  16 is the retail idle timeout; the rest exist so
@@ -32,8 +50,17 @@ static const int kAutoOffCount = (int)(sizeof(kAutoOffChoices) / sizeof(kAutoOff
 static const int kBrightChoices[] = {20, 40, 60, 80, 100};
 static const int kBrightCount = (int)(sizeof(kBrightChoices) / sizeof(kBrightChoices[0]));
 
+static const int kVolumeChoices[] = {0, 20, 40, 60, 80, 100};
+static const int kVolumeCount = (int)(sizeof(kVolumeChoices) / sizeof(kVolumeChoices[0]));
+
+static const int kAutoSaveChoices[] = {60, 120, 300, 0};
+static const char *const kAutoSaveNames[] = {"60S", "2M", "5M", "OFF"};
+static const int kAutoSaveCount = (int)(sizeof(kAutoSaveChoices) / sizeof(kAutoSaveChoices[0]));
+
 static int s_auto_idx = 0;
 static int s_bright_idx = 3;      // 80%, the value the firmware shipped with
+static int s_volume_idx = 3;      // 60%, the value audio.c defaults to
+static int s_save_idx = 0;        // 60 s, the period the feature was asked for
 static int s_sel = MENU_IDX_AUTO_OFF;
 static bool s_open = false;
 // The menu owns the panel through menu_present(), so it only has to be pushed
@@ -74,9 +101,14 @@ void menu_load()
         s_auto_idx = v;
     if (nvs_get_u8(s_nvs, "bright", &v) == ESP_OK && v < kBrightCount)
         s_bright_idx = v;
+    if (nvs_get_u8(s_nvs, "vol", &v) == ESP_OK && v < kVolumeCount)
+        s_volume_idx = v;
+    if (nvs_get_u8(s_nvs, "save", &v) == ESP_OK && v < kAutoSaveCount)
+        s_save_idx = v;
 
-    ESP_LOGI(TAG, "auto-off %s, bright %d%%",
-             kAutoOffNames[s_auto_idx], kBrightChoices[s_bright_idx]);
+    ESP_LOGI(TAG, "auto-off %s, bright %d%%, volume %d%%, auto-save %s",
+             kAutoOffNames[s_auto_idx], kBrightChoices[s_bright_idx],
+             kVolumeChoices[s_volume_idx], kAutoSaveNames[s_save_idx]);
 }
 
 void menu_open()
@@ -103,16 +135,32 @@ void menu_press_a()
 
 void menu_press_b()
 {
-    if (s_sel == MENU_IDX_AUTO_OFF) {
+    s_dirty = true;
+    switch (s_sel) {
+    case MENU_IDX_AUTO_OFF:
         s_auto_idx = (s_auto_idx + 1) % kAutoOffCount;
-        s_dirty = true;
         persist_u8("auto", (uint8_t)s_auto_idx);
         ESP_LOGI(TAG, "auto-off -> %s", kAutoOffNames[s_auto_idx]);
-    } else {
+        break;
+    case MENU_IDX_BRIGHT:
         s_bright_idx = (s_bright_idx + 1) % kBrightCount;
-        s_dirty = true;
         persist_u8("bright", (uint8_t)s_bright_idx);
         ESP_LOGI(TAG, "bright -> %d%%", kBrightChoices[s_bright_idx]);
+        break;
+    case MENU_IDX_VOLUME:
+        s_volume_idx = (s_volume_idx + 1) % kVolumeCount;
+        persist_u8("vol", (uint8_t)s_volume_idx);
+        ESP_LOGI(TAG, "volume -> %d%%", kVolumeChoices[s_volume_idx]);
+        break;
+    case MENU_IDX_AUTOSAVE:
+        s_save_idx = (s_save_idx + 1) % kAutoSaveCount;
+        persist_u8("save", (uint8_t)s_save_idx);
+        ESP_LOGI(TAG, "auto-save -> %s", kAutoSaveNames[s_save_idx]);
+        break;
+    default:
+        // ABOUT has nothing to change; pressing B just re-pushes the row so the
+        // bar blinks, which is the same feedback the other rows give.
+        break;
     }
 }
 
@@ -123,154 +171,212 @@ void menu_press_c()
 
 int menu_auto_off_sec() { return kAutoOffChoices[s_auto_idx]; }
 int menu_bright_pct()   { return kBrightChoices[s_bright_idx]; }
+int menu_volume_pct()   { return kVolumeChoices[s_volume_idx]; }
+int menu_autosave_sec() { return kAutoSaveChoices[s_save_idx]; }
 
 // ---------------------------------------------------------------- rendering
 
-static void fill_rect(uint16_t *fb, int panel, int x, int y, int w, int h,
-                      int x0, int y0, int cw, int ch, uint16_t color)
-{
-    for (int row = 0; row < h; ++row) {
-        const int py = y + row;
-        if (py < y0 || py >= y0 + ch)
-            continue;
-        for (int col = 0; col < w; ++col) {
-            const int px = x + col;
-            if (px < x0 || px >= x0 + cw)
-                continue;
-            fb[py * panel + px] = color;
-        }
-    }
-}
+// Everything below draws at 1:1 into a 320-wide scanline buffer.  Text is the
+// 5x7 set blown up 2x, which comes out 10x14 with a 12 px advance -- close
+// enough to the reference panel's Montserrat 14 that the two read the same.
+static constexpr int kTextScale = 2;
+static constexpr int kTextW = 5 * kTextScale;      // 10
+static constexpr int kTextH = 7 * kTextScale;      // 14
+static constexpr int kAdvance = 6 * kTextScale;    // 12
 
-static void draw_char(uint16_t *fb, int panel, int x, int y, char c,
-                      int x0, int y0, int cw, int ch, uint16_t color)
-{
-    const int code = (unsigned char)c;
-    if (code < 32 || code > 90)
-        return;
-    const uint8_t *g = &kFont5x7[(code - 32) * 5];
-    for (int col = 0; col < 5; ++col) {
-        const uint8_t bits = g[col];
-        if (bits == 0)
-            continue;
-        const int px = x + col;
-        if (px < x0 || px >= x0 + cw)
-            continue;
-        for (int row = 0; row < 7; ++row) {
-            if ((bits & (1u << row)) == 0)
-                continue;
-            const int py = y + row;
-            if (py < y0 || py >= y0 + ch)
-                continue;
-            fb[py * panel + px] = color;
-        }
-    }
-}
+// Card geometry, copied from the reference menu: 300x200 centred, 2 px border,
+// 8 px corners.  LVGL places children inside the parent's border+padding box,
+// so the row origin works out to 10+2+3 laterally and 20+2+3 vertically; the
+// rows themselves are 278x24 at a 30 px pitch (36..180 inside the card).
+static constexpr int kCardX = 10;
+static constexpr int kCardY = 20;
+static constexpr int kCardW = 300;
+static constexpr int kCardH = 200;
+static constexpr int kCardR = 8;
+static constexpr int kEdge = 2;
+static constexpr int kPad = 3;
+static constexpr int kRowX = kCardX + kEdge + kPad + 8;    // 23
+static constexpr int kRowW = 278;
+static constexpr int kRowH = 24;
+static constexpr int kRowY0 = kCardY + kEdge + kPad + 36;  // 61
+static constexpr int kRowPitch = 30;
+static constexpr int kTitleY = kCardY + kEdge + kPad - 1;  // 24, TOP_MID offset -1
+static constexpr int kVerY = kCardY + kEdge + kPad + 1;    // 26, TOP_RIGHT offset +1
+static constexpr int kVerRight = kCardX + kCardW - kEdge - kPad - 6;  // 299
+static constexpr int kLabelPad = 2;   // LV_ALIGN_LEFT_MID, 2
+static constexpr int kValuePad = 2;   // LV_ALIGN_RIGHT_MID, -2
 
-static void draw_text(uint16_t *fb, int panel, int x, int y, const char *s,
-                      int x0, int y0, int cw, int ch, uint16_t color)
-{
-    for (; *s != '\0'; ++s, x += 6)
-        draw_char(fb, panel, x, y, *s, x0, y0, cw, ch, color);
-}
+// Colour literals from the reference theme.  The reference hands 24-bit values
+// to lv_color_hex(), which does the RGB565 conversion internally; here that
+// conversion is done once, by hand, with the source value kept in the comment.
+static constexpr uint16_t kPanelBg   = 0xFFDD;   // #FBF9F0 ivory card
+static constexpr uint16_t kPanelEdge = 0x29A4;   // #2C3324 dark olive border
+static constexpr uint16_t kInk       = 0x2164;   // #252C1F body text
+static constexpr uint16_t kSelBar    = 0xFEC5;   // #FFD928 yellow selection bar
+static constexpr uint16_t kSelInk    = 0x1905;   // #17202A text on the bar
+static constexpr uint16_t kMuted     = 0x5B0A;   // #5A6350 version tag, help text
+static constexpr uint16_t kPage      = 0x0000;   // everything outside the card
 
-void menu_paint(uint16_t *fb, int panel, int x0, int y0, int w, int h)
-{
-    const uint16_t bg = 0x0000;      // black
-    const uint16_t fg = 0xFFFF;      // white
-    const uint16_t dim = 0x8410;     // grey, for the help line
+// How far the left edge of a rounded row pulls in, per row from the corner.
+// Integer approximations of r - sqrt(r^2 - (r-dy)^2); four rows are enough at
+// this size because the arc is only a few pixels tall.
+static const uint8_t kCardRound[8] = {8, 5, 3, 2, 2, 1, 1, 1};
+static const uint8_t kRowRound[5] = {5, 2, 1, 1, 1};
 
-    fill_rect(fb, panel, x0, y0, w, h, x0, y0, w, h, bg);
-
-    char line[32];
-    int y = y0 + 8;
-
-    draw_text(fb, panel, x0 + 34, y, "SETTINGS", x0, y0, w, h, fg);
-    y += 16;
-
-    // Item 0
-    snprintf(line, sizeof(line), "%c AUTO OFF", s_sel == MENU_IDX_AUTO_OFF ? '>' : ' ');
-    draw_text(fb, panel, x0 + 4, y, line, x0, y0, w, h, fg);
-    snprintf(line, sizeof(line), "    %s", kAutoOffNames[s_auto_idx]);
-    draw_text(fb, panel, x0 + 4, y + 8, line, x0, y0, w, h, fg);
-    y += 26;
-
-    // Item 1
-    snprintf(line, sizeof(line), "%c BRIGHT", s_sel == MENU_IDX_BRIGHT ? '>' : ' ');
-    draw_text(fb, panel, x0 + 4, y, line, x0, y0, w, h, fg);
-    snprintf(line, sizeof(line), "    %d%%", kBrightChoices[s_bright_idx]);
-    draw_text(fb, panel, x0 + 4, y + 8, line, x0, y0, w, h, fg);
-
-    draw_text(fb, panel, x0 + 4, y0 + 82, "A NEXT  B CHANGE", x0, y0, w, h, dim);
-    draw_text(fb, panel, x0 + 4, y0 + 94, "C EXIT", x0, y0, w, h, dim);
-}
-
-// --- direct-to-panel path -------------------------------------------------
-// Same layout as menu_paint(), one text row at a time.  See menu.h for why the
-// menu cannot live in fb[].
-static uint16_t s_row[128];
-// One panel-wide line for the banner that sits in the top margin, outside
-// the guest window.  Not scaled: the margin is a 1:1 strip of the panel.
+static uint16_t s_row[320];
 static uint16_t s_wide[320];
 
-static void row_text(uint16_t *dst, int cw, int x, const char *s, int r, uint16_t color)
+// Writes one scanline of a 2x-scaled string.  `out_row` is 0..kTextH-1 within
+// the glyph cell, so callers can render a string one line at a time without
+// materialising the whole block.
+static void text_scanline(uint16_t *dst, int width, int x, const char *s,
+                          int out_row, uint16_t color)
 {
-    for (; *s != '\0'; ++s, x += 6) {
+    if (out_row < 0 || out_row >= kTextH)
+        return;
+    const int src_row = out_row / kTextScale;
+
+    for (; *s != '\0'; ++s, x += kAdvance) {
         const int code = (unsigned char)*s;
         if (code < 32 || code > 90)
             continue;
         const uint8_t *g = &kFont5x7[(code - 32) * 5];
         for (int col = 0; col < 5; ++col) {
-            if ((g[col] & (1u << r)) == 0)
+            if ((g[col] & (1u << src_row)) == 0)
                 continue;
-            const int px = x + col;
-            if (px >= 0 && px < cw)
-                dst[px] = color;
+            for (int sx = 0; sx < kTextScale; ++sx) {
+                const int px = x + col * kTextScale + sx;
+                if (px >= 0 && px < width)
+                    dst[px] = color;
+            }
         }
     }
 }
 
-static void render_row(int y, int cw)
+static int text_width(const char *s)
 {
-    const uint16_t fg = 0xFFFF;      // white
-    const uint16_t dim = 0x8410;     // grey, for the help lines
-    char line[32];
+    int n = 0;
+    for (; *s != '\0'; ++s)
+        ++n;
+    return n * kAdvance;
+}
 
-    for (int x = 0; x < cw; ++x)
-        s_row[x] = 0x0000;
+// Row span of the inset rounded rectangle that starts at `dy` rows from its
+// top, given the corner table and the total height.  Returns false when the row
+// is outside the shape.
+static bool round_span(int dy, int h, const uint8_t *tab, int tabn, int *xoff)
+{
+    if (dy < 0 || dy >= h)
+        return false;
+    int d = dy;
+    if (d > h - 1 - dy)
+        d = h - 1 - dy;
+    *xoff = (d < tabn) ? tab[d] : 0;
+    return true;
+}
 
-    int t = y - 8;
-    if (t >= 0 && t < 7)
-        row_text(s_row, cw, 34, "SETTINGS", t, fg);
+// Fills the card, its border and the selected row's bar for one screen line.
+static void card_line(int y)
+{
+    for (int x = 0; x < 320; ++x)
+        s_row[x] = kPage;
 
-    t = y - 24;
-    if (t >= 0 && t < 7) {
-        snprintf(line, sizeof(line), "%c AUTO OFF", s_sel == MENU_IDX_AUTO_OFF ? '>' : ' ');
-        row_text(s_row, cw, 4, line, t, fg);
+    int inset = 0;
+    if (!round_span(y - kCardY, kCardH, kCardRound, 8, &inset))
+        return;
+
+    const int x0 = kCardX + inset;
+    const int x1 = kCardX + kCardW - 1 - inset;
+    for (int x = x0; x <= x1; ++x)
+        s_row[x] = kPanelBg;
+
+    // Border: the top and bottom two lines are solid, the sides are vertical
+    // strips, and the rounded rows are painted solid because at this size the
+    // arc is narrower than the 2 px stroke.
+    const bool horizontal = (y - kCardY) < kEdge || (kCardY + kCardH - 1 - y) < kEdge;
+    if (horizontal) {
+        for (int x = x0; x <= x1; ++x)
+            s_row[x] = kPanelEdge;
+    } else {
+        for (int i = 0; i < kEdge; ++i) {
+            s_row[x0 + i] = kPanelEdge;
+            s_row[x1 - i] = kPanelEdge;
+        }
     }
-    t = y - 32;
-    if (t >= 0 && t < 7) {
-        snprintf(line, sizeof(line), "    %s", kAutoOffNames[s_auto_idx]);
-        row_text(s_row, cw, 4, line, t, fg);
+
+    // Selection bar.
+    const int bar_y = kRowY0 + s_sel * kRowPitch;
+    int row_inset = 0;
+    if (round_span(y - bar_y, kRowH, kRowRound, 5, &row_inset) && !horizontal) {
+        const int bx0 = kRowX + row_inset;
+        const int bx1 = kRowX + kRowW - 1 - row_inset;
+        for (int x = bx0; x <= bx1; ++x)
+            s_row[x] = kSelBar;
+    }
+}
+
+static void label_for(char *buf, size_t n, int item)
+{
+    switch (item) {
+    case MENU_IDX_AUTO_OFF: snprintf(buf, n, "%s", kAutoOffNames[s_auto_idx]); break;
+    case MENU_IDX_BRIGHT:   snprintf(buf, n, "%d%%", kBrightChoices[s_bright_idx]); break;
+    case MENU_IDX_VOLUME:   snprintf(buf, n, "%d%%", kVolumeChoices[s_volume_idx]); break;
+    case MENU_IDX_AUTOSAVE: snprintf(buf, n, "%s", kAutoSaveNames[s_save_idx]); break;
+    default:                snprintf(buf, n, "v%s", DIGICORE_VERSION); break;
+    }
+}
+
+static const char *name_for(int item)
+{
+    switch (item) {
+    case MENU_IDX_AUTO_OFF: return "AUTO OFF";
+    case MENU_IDX_BRIGHT:   return "BRIGHT";
+    case MENU_IDX_VOLUME:   return "VOLUME";
+    case MENU_IDX_AUTOSAVE: return "AUTO SAVE";
+    default:                return "VERSION";
+    }
+}
+
+// Renders one screen line into s_row.
+static void render_line(int y)
+{
+    card_line(y);
+
+    // Title, centred on the card and 1 px above the content box top, matching
+    // the reference panel's TOP_MID label.
+    {
+        const char *t = "SETTINGS";
+        const int tx = kCardX + (kCardW - text_width(t)) / 2;
+        text_scanline(s_row, 320, tx, t, y - kTitleY, kInk);
     }
 
-    t = y - 50;
-    if (t >= 0 && t < 7) {
-        snprintf(line, sizeof(line), "%c BRIGHT", s_sel == MENU_IDX_BRIGHT ? '>' : ' ');
-        row_text(s_row, cw, 4, line, t, fg);
-    }
-    t = y - 58;
-    if (t >= 0 && t < 7) {
-        snprintf(line, sizeof(line), "    %d%%", kBrightChoices[s_bright_idx]);
-        row_text(s_row, cw, 4, line, t, fg);
+    // Version tag, top right in the muted tone.
+    {
+        char tag[16];
+        snprintf(tag, sizeof(tag), "v%s", DIGICORE_VERSION);
+        text_scanline(s_row, 320, kVerRight - text_width(tag), tag, y - kVerY, kMuted);
     }
 
-    t = y - 82;
-    if (t >= 0 && t < 7)
-        row_text(s_row, cw, 4, "A NEXT  B CHANGE", t, dim);
-    t = y - 94;
-    if (t >= 0 && t < 7)
-        row_text(s_row, cw, 4, "C EXIT", t, dim);
+    for (int i = 0; i < MENU_ITEMS; ++i) {
+        const int row_y = kRowY0 + i * kRowPitch;
+        const int ty = row_y + (kRowH - kTextH) / 2;
+        const uint16_t ink = (i == s_sel) ? kSelInk : kInk;
+
+        text_scanline(s_row, 320, kRowX + kLabelPad, name_for(i), y - ty, ink);
+
+        char val[16];
+        label_for(val, sizeof(val), i);
+        text_scanline(s_row, 320, kRowX + kRowW - kValuePad - text_width(val), val,
+                      y - ty, ink);
+    }
+
+    // Help line lives on the black margin below the card, which keeps the card
+    // itself as clean as the reference panel's.
+    {
+        const char *h = "A NEXT   B CHANGE   C EXIT";
+        const int hx = (320 - text_width(h)) / 2;
+        text_scanline(s_row, 320, hx, h, y - (kCardY + kCardH + 3), kMuted);
+    }
 }
 
 // One line of text in the panel's top margin, above the guest window.  Used to
@@ -279,19 +385,29 @@ static void render_row(int y, int cw)
 void menu_banner_present(uint8_t *strip, int width, const char *text)
 {
     const int h = 8;
-    int len = 0;
-    for (const char *q = text; *q != '\0'; ++q)
-        ++len;
-    const int x0 = (width - len * 6 + 1) / 2;
+    const int x0 = (width - text_width(text)) / 2;
     if (x0 < 0)
         return;
 
+    // The banner keeps the small 1:1 glyphs: it is a status line, not a menu.
     uint8_t *p = strip;
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < width; ++x)
             s_wide[x] = 0x0000;
-        if (y < 7)
-            row_text(s_wide, width, x0, text, y, 0xFFFF);
+        if (y < 7) {
+            int cx = x0;
+            for (const char *s = text; *s != '\0'; ++s, cx += 6) {
+                const int code = (unsigned char)*s;
+                if (code < 32 || code > 90)
+                    continue;
+                const uint8_t *g = &kFont5x7[(code - 32) * 5];
+                for (int col = 0; col < 5; ++col) {
+                    const int px = cx + col;
+                    if (px >= 0 && px < width && (g[col] & (1u << y)) != 0)
+                        s_wide[px] = 0xFFFF;
+                }
+            }
+        }
         for (int x = 0; x < width; ++x) {
             *p++ = (uint8_t)(s_wide[x] >> 8);
             *p++ = (uint8_t)(s_wide[x] & 0xFF);
@@ -302,15 +418,14 @@ void menu_banner_present(uint8_t *strip, int width, const char *text)
         ESP_LOGE(TAG, "banner push failed: %d", int(err));
 }
 
-void menu_present(uint8_t *strip, int left, int top, int w, int h, int scale)
+void menu_present(uint8_t *strip, int w, int h)
 {
     if (!s_dirty)
         return;
     s_dirty = false;
 
-    // 16 source rows become 32 output rows, which is exactly what the caller's
-    // tile strip holds (w * scale * 2 bytes per output row).
-    const int band_rows = 16;
+    // w * 2 bytes per line; the caller's strip holds 24 of them.
+    const int band_rows = 24;
     int bands = 0;
 
     for (int y0 = 0; y0 < h; y0 += band_rows) {
@@ -318,25 +433,19 @@ void menu_present(uint8_t *strip, int left, int top, int w, int h, int scale)
         uint8_t *p = strip;
 
         for (int r = 0; r < rows; ++r) {
-            render_row(y0 + r, w);
-            for (int sy = 0; sy < scale; ++sy) {
-                for (int x = 0; x < w; ++x) {
-                    const uint16_t v = s_row[x];
-                    for (int sx = 0; sx < scale; ++sx) {
-                        *p++ = (uint8_t)(v >> 8);
-                        *p++ = (uint8_t)(v & 0xFF);
-                    }
-                }
+            render_line(y0 + r);
+            for (int x = 0; x < w; ++x) {
+                *p++ = (uint8_t)(s_row[x] >> 8);
+                *p++ = (uint8_t)(s_row[x] & 0xFF);
             }
         }
 
-        const esp_err_t err =
-            display_draw_bitmap(left, top + y0 * scale, w * scale, rows * scale, strip);
+        const esp_err_t err = display_draw_bitmap(0, y0, w, rows, strip);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "panel push failed: %d", int(err));
             return;
         }
         ++bands;
     }
-    ESP_LOGI(TAG, "pushed %d band(s), %dx%d", bands, w * scale, h * scale);
+    ESP_LOGI(TAG, "pushed %d band(s), %dx%d", bands, w, h);
 }
