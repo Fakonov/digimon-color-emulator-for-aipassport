@@ -1,0 +1,122 @@
+004EF0: D6E4      ds:[r4] = r3
+004EF1: 9643      r3 = 03
+004EF2: FE00      ds = 00
+004EF3: 990C 0CA7 r4 = 0ca7
+004EF5: D6E4      ds:[r4] = r3
+004EF6: 6641      r3 =- 01
+004EF7: FE00      ds = 00
+004EF8: 990C 0CA8 r4 = 0ca8
+004EFA: D6E4      ds:[r4] = r3
+004EFB: 9640      r3 = 00
+004EFC: FE00      ds = 00
+004EFD: 990C 0CA9 r4 = 0ca9
+004EFF: D6E4      ds:[r4] = r3
+004F00: 9898      pop bp, pc from [sp]
+004F01: DA88      push bp, bp to [sp]
+004F02: 2043      sp -= 03
+004F03: 0B08 0001 bp = sp + 0001
+004F05: 9840      r4 = 00
+004F06: D800      [bp+00] = r4
+004F07: F040 4FC0 call 004fc0
+004F09: FE00      ds = 00
+004F0A: 990C 0C9A r4 = 0c9a
+004F0C: 98E4      r4 = ds:[r4]
+004F0D: 4840      cmp r4, 00
+004F0E: 5E0B      je 4f1a
+004F0F: FE00      ds = 00
+004F10: 990C 0C9A r4 = 0c9a
+004F12: 98E4      r4 = ds:[r4]
+004F13: 2841      r4 -= 01
+004F14: FE00      ds = 00
+004F15: 970B 0C9A r3 = 0c9a
+004F17: D8E3      ds:[r3] = r4
+004F18: FE80 4FBE goto 004fbe
+004F1A: 9840      r4 = 00
+004F1B: D801      [bp+01] = r4
+004F1C: 9801      r4 = [bp+01]
+004F1D: 4843      cmp r4, 03
+004F1E: 9E0A      ja 4f29
+004F1F: F040 584C call 00584c
+004F21: B909 0FFF r4 = r1 & 0fff
+004F23: 0800      r4 += [bp+00]
+004F24: D800      [bp+00] = r4
+004F25: 9801      r4 = [bp+01]
+004F26: 0841      r4 += 01
+004F27: D801      [bp+01] = r4
+004F28: EE4D      jmp 4f1c
+004F29: 9800      r4 = [bp+00]
+004F2A: 996C      r4 = r4 lsr 2
+004F2B: D800      [bp+00] = r4
+004F2C: 9800      r4 = [bp+00]
+004F2D: D888      push r4, r4 to [sp]
+004F2E: F040 5F0D call 005f0d
+004F30: 0041      sp += 01
+004F31: FE00      ds = 00
+004F32: 970B 0CA3 r3 = 0ca3
+004F34: 98F3      r4 = ds:[r3++]
+004F35: 96E3      r3 = ds:[r3]
+004F36: D688      push r3, r3 to [sp]
+004F37: D888      push r4, r4 to [sp]
+004F38: D490      push r1, r2 to [sp]
+004F39: F040 5965 call 005965
+004F3B: 0044      sp += 04
+004F3C: FE00      ds = 00
+004F3D: 990C 0C9D r4 = 0c9d
+004F3F: D2F4      ds:[r4++] = r1
+004F40: D4E4      ds:[r4] = r2
+004F41: FE00      ds = 00
+004F42: 990C 0CA7 r4 = 0ca7
+004F44: 98E4      r4 = ds:[r4]
+004F45: 4840      cmp r4, 00
+004F46: 4E2B      jne 4f72
+004F47: 9600      r3 = [bp+00]
+004F48: FE00      ds = 00
+004F49: 990C 0C9F r4 = 0c9f
+004F4B: 98E4      r4 = ds:[r4]
+004F4C: 4704      cmp r3, r4
+004F4D: 1E03      jae 4f51
+004F4E: 9840      r4 = 00
+004F4F: D802      [bp+02] = r4
+004F50: EE20      jmp 4f71
+004F51: 9600      r3 = [bp+00]
+004F52: FE00      ds = 00
+004F53: 990C 0CA0 r4 = 0ca0
+004F55: 98E4      r4 = ds:[r4]
+004F56: 4704      cmp r3, r4
+004F57: 1E03      jae 4f5b
+004F58: 9841      r4 = 01
+004F59: D802      [bp+02] = r4
+004F5A: EE16      jmp 4f71
+004F5B: 9600      r3 = [bp+00]
+004F5C: FE00      ds = 00
+004F5D: 990C 0CA1 r4 = 0ca1
+004F5F: 98E4      r4 = ds:[r4]
+004F60: 4704      cmp r3, r4
+004F61: 1E03      jae 4f65
+004F62: 9842      r4 = 02
+004F63: D802      [bp+02] = r4
+004F64: EE0C      jmp 4f71
+004F65: 9600      r3 = [bp+00]
+004F66: FE00      ds = 00
+004F67: 990C 0CA2 r4 = 0ca2
+004F69: 98E4      r4 = ds:[r4]
+004F6A: 4704      cmp r3, r4
+004F6B: 1E03      jae 4f6f
+004F6C: 9843      r4 = 03
+004F6D: D802      [bp+02] = r4
+004F6E: EE02      jmp 4f71
+004F6F: 9844      r4 = 04
+004F70: D802      [bp+02] = r4
+004F71: EE11      jmp 4f83
+004F72: FE00      ds = 00
+004F73: 990C 0CA7 r4 = 0ca7
+004F75: 98E4      r4 = ds:[r4]
+004F76: 4841      cmp r4, 01
+004F77: 4E03      jne 4f7b
+004F78: 9845      r4 = 05
+004F79: D802      [bp+02] = r4
+004F7A: EE08      jmp 4f83
+004F7B: FE00      ds = 00
+004F7C: 990C 0CA7 r4 = 0ca7
+004F7E: 98E4      r4 = ds:[r4]
+004F7F: 4842      cmp r4, 02

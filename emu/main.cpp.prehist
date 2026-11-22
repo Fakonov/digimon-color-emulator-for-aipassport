@@ -1,0 +1,563 @@
+// PC-side reference emulator for "Digimon Color Passport" (Generalplus GPCE4).
+//   unSP 2.0 CPU  : MAME core compiled against emu/compat (bit exact)
+//   SoC / LCD     : emu/gpce4.cpp, emu/st7735.cpp
+// Everything is cycle driven: the CPU runs in 1 ms slices, the SoC advances by
+// the same number of CPU cycles.
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cstdint>
+#include <string>
+#include <vector>
+#include <chrono>
+#include <ctime>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
+
+#include "unsp.h"
+#include "aot.h"
+#include "gpce4.h"
+#include "audio_dump.h"
+
+static const uint32_t CPU_CLOCK = 96000000;
+static const int      FPS = 60;
+// Timers must be advanced *while* the CPU runs: a whole millisecond of timer
+// events batched before the CPU executes coalesces the 2 kHz interrupt into one
+// per millisecond (half the real rate) and stalls the SPI shifter.  2000 cycles
+// keeps every timer source (2 kHz = 48000 cycles) at least 24 quanta apart.
+static const int      SLICE_CYCLES = [] {
+    const char *e = std::getenv("GPCE4_SLICE");
+    return e ? std::atoi(e) : 2000;
+}();
+static const int      FRAME_CYCLES = CPU_CLOCK / FPS;
+
+static std::vector<uint8_t> load_file(const char *path, const char *what)
+{
+	FILE *fp = std::fopen(path, "rb");
+	if (!fp) { std::fprintf(stderr, "cannot open %s: %s\n", what, path); std::exit(2); }
+	std::fseek(fp, 0, SEEK_END);
+	long len = std::ftell(fp);
+	std::fseek(fp, 0, SEEK_SET);
+	std::vector<uint8_t> buf((size_t)len);
+	if (std::fread(buf.data(), 1, buf.size(), fp) != buf.size()) { std::fprintf(stderr, "short read %s\n", path); std::exit(2); }
+	std::fclose(fp);
+	return buf;
+}
+
+struct TraceSink
+{
+	FILE *fp = nullptr;
+	uint64_t count = 0;
+	char buf[1 << 16];
+	size_t used = 0;
+	~TraceSink() { flush(); if (fp) std::fclose(fp); }
+	void open(const char *path) { fp = std::fopen(path, "wb"); if (!fp) { std::perror(path); std::exit(2); } }
+	void emit(uint32_t lpc)
+	{
+		if (used + 8 > sizeof(buf)) flush();
+		static const char hex[] = "0123456789ABCDEF";
+		for (int shift = 20; shift >= 0; shift -= 4)
+			buf[used++] = hex[(lpc >> shift) & 0xf];
+		buf[used++] = '\n';
+		count++;
+	}
+	void raw(const char *s, size_t n)
+	{
+		if (used + n > sizeof(buf)) flush();
+		std::memcpy(buf + used, s, n);
+		used += n;
+		count++;
+	}
+	void flush()
+	{
+		if (fp && used) { std::fwrite(buf, 1, used, fp); used = 0; }
+	}
+};
+
+static void write_bmp(const char *path, const uint16_t *fb, int w, int h)
+{
+	FILE *fp = std::fopen(path, "wb");
+	if (!fp) { std::perror(path); return; }
+	const int row = (w * 3 + 3) & ~3;
+	const int image = row * h;
+	uint8_t hdr[54] = {};
+	hdr[0] = 'B'; hdr[1] = 'M';
+	uint32_t fsize = 54 + image;
+	std::memcpy(hdr + 2, &fsize, 4);
+	uint32_t off = 54;
+	std::memcpy(hdr + 10, &off, 4);
+	uint32_t ihs = 40;
+	std::memcpy(hdr + 14, &ihs, 4);
+	int32_t bw = w, bh = h;
+	std::memcpy(hdr + 18, &bw, 4);
+	std::memcpy(hdr + 22, &bh, 4);
+	uint16_t planes = 1, bpp = 24;
+	std::memcpy(hdr + 26, &planes, 2);
+	std::memcpy(hdr + 28, &bpp, 2);
+	std::fwrite(hdr, 1, 54, fp);
+	std::vector<uint8_t> line((size_t)row, 0);
+	for (int y = h - 1; y >= 0; y--)
+	{
+		for (int x = 0; x < w; x++)
+		{
+			uint16_t c = fb[y * w + x];
+			uint8_t r = (uint8_t)((c >> 11) & 0x1f), g = (uint8_t)((c >> 5) & 0x3f), b = (uint8_t)(c & 0x1f);
+			line[x * 3 + 0] = (uint8_t)((b << 3) | (b >> 2));
+			line[x * 3 + 1] = (uint8_t)((g << 2) | (g >> 4));
+			line[x * 3 + 2] = (uint8_t)((r << 3) | (r >> 2));
+		}
+		std::fwrite(line.data(), 1, line.size(), fp);
+	}
+	std::fclose(fp);
+}
+
+int main(int argc, char **argv)
+{
+	double seconds = 5.0;
+	int frames = -1;
+	const char *trace_path = nullptr;
+	const char *cycle_trace_opt = nullptr;
+	const char *irq_log_path = nullptr;
+	double trace_seconds = 1e9;
+	double trace_start = 0.0;
+	double ram_at_seconds = -1.0;
+	const char *ram_at_path = nullptr;
+	// --press "HEX:START_FRAME:END_FRAME[,...]" -- PORTA bits are active low
+	struct PressSpec { uint16_t mask; int64_t start; int64_t end; };
+	std::vector<PressSpec> press_specs;
+	const char *shot_path = nullptr;
+	const char *raw_shot_path = nullptr;
+	const char *load_flash_path = nullptr;
+	const char *save_flash_path = nullptr;
+	const char *shot_dir = nullptr;
+	const char *bp_pc = nullptr;
+	const char *bp_dump = nullptr;
+	const char *pc_hist_path = nullptr;
+	const char *block_hist_path = nullptr;
+	int shot_every = 0;
+	bool autoplay = false;
+	bool clock_sync = false;
+	bool clock_fast = false;
+	const char *wav_path = nullptr;
+	uint32_t key_script[64] = {}; // frame | (button << 24)
+
+	for (int i = 1; i < argc; i++)
+	{
+		std::string a = argv[i];
+		auto next = [&](const char *) { return (i + 1 < argc) ? argv[++i] : (const char *)nullptr; };
+		if (a == "--seconds") seconds = std::atof(next("seconds"));
+		else if (a == "--frames") frames = std::atoi(next("frames"));
+		else if (a == "--trace") trace_path = next("trace");
+		else if (a == "--trace-cycles") cycle_trace_opt = next("trace-cycles");
+		else if (a == "--irq-log") irq_log_path = next("irq-log");
+		else if (a == "--trace-seconds") trace_seconds = std::atof(next("trace-seconds"));
+		else if (a == "--trace-start") trace_start = std::atof(next("trace-start"));
+		else if (a == "--ram-at") ram_at_seconds = std::atof(next("ram-at"));
+		else if (a == "--ram-dump") ram_at_path = next("ram-dump");
+		else if (a == "--block-hist") block_hist_path = next("--block-hist");
+		else if (a == "--pc-hist") pc_hist_path = next("--pc-hist");
+		else if (a == "--clock-sync") clock_sync = true;
+		else if (a == "--clock-fast") { clock_sync = true; clock_fast = true; }
+		else if (a == "--wav") wav_path = next("wav");
+		else if (a == "--press")
+		{
+			std::string spec = next("press");
+			size_t pos = 0;
+			while (pos <= spec.size())
+			{
+				size_t comma = spec.find(',', pos);
+				std::string item = spec.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+				if (!item.empty())
+				{
+					size_t c1 = item.find(':');
+					size_t c2 = (c1 == std::string::npos) ? std::string::npos : item.find(':', c1 + 1);
+					PressSpec ps{};
+					ps.mask = (uint16_t)std::strtoul(item.substr(0, c1).c_str(), nullptr, 16);
+					ps.start = (c1 == std::string::npos) ? 0 : std::atoi(item.substr(c1 + 1, c2 == std::string::npos ? std::string::npos : c2 - c1 - 1).c_str());
+					ps.end = (c2 == std::string::npos) ? ps.start + 6 : std::atoi(item.substr(c2 + 1).c_str());
+					press_specs.push_back(ps);
+				}
+				if (comma == std::string::npos) break;
+				pos = comma + 1;
+			}
+		}
+		else if (a == "--shot") shot_path = next("shot");
+		else if (a == "--shot-raw") raw_shot_path = next("shot-raw");
+		else if (a == "--load-flash") load_flash_path = next("load-flash");
+		else if (a == "--save-flash") save_flash_path = next("save-flash");
+		else if (a == "--shot-dir") shot_dir = next("shot-dir");
+		else if (a == "--shot-every") shot_every = std::atoi(next("shot-every"));
+		else if (a == "--bp") bp_pc = next("bp");
+		else if (a == "--bp-dump") bp_dump = next("bp-dump");
+		else if (a == "--autoplay") autoplay = true;
+		else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
+	}
+
+	std::vector<uint8_t> irom = load_file("roms/internal_rom_221017a.bin", "internal rom");
+	std::vector<uint8_t> flash = load_file("roms/dmc_v1_base.bin", "spi flash");
+
+	//  --save-flash FILE / --load-flash FILE: the game writes its save block to
+	//  flash 0x7fe000, so the working image has to be writable and persistable.
+	if (load_flash_path)
+	{
+		std::vector<uint8_t> saved = load_file(load_flash_path, "flash save");
+		if (saved.size() != flash.size())
+			std::fprintf(stderr, "[flash] %s is %zu bytes, expected %zu - ignored\n",
+			             load_flash_path, saved.size(), flash.size());
+		else
+			std::memcpy(flash.data(), saved.data(), flash.size());
+	}
+
+	Gpce4 soc;
+	soc.set_images(irom.data(), irom.size(), flash.data(), flash.size());
+	soc.reset();
+
+	// Diagnostic: bias the first expiry of the 2 kHz source (timer IRQ6) so the
+	// timer wheel can be swept against MAME without a rebuild.
+	if (const char *ph = std::getenv("GPCE4_PHASE_2KHZ"))
+	{
+		const unsigned long long v = std::strtoull(ph, nullptr, 0);
+		soc.m_timers[4].next = v ? v : soc.m_timers[4].period;
+	}
+
+	unsp_20_device cpu;
+	cpu.m_bus = &soc;
+	soc.set_cpu(&cpu);
+
+	// GPCE4_HOT=0 disables the statically recompiled hot block, which is how
+	// the reference run for regression diffs is produced.
+	if (std::getenv("GPCE4_HOT") && std::getenv("GPCE4_HOT")[0] == '0')
+		cpu.m_fasthot = false;
+	if (std::getenv("GPCE4_FASTSPIN") && std::getenv("GPCE4_FASTSPIN")[0] == '0')
+		cpu.m_fastspin = false;
+	if (std::getenv("GPCE4_FASTVERIFY"))
+	{
+		extern int g_verify;
+		g_verify = 1;
+	}
+	if (std::getenv("GPCE4_FASTWAIT") && std::getenv("GPCE4_FASTWAIT")[0] == '0')
+		cpu.m_fastwait = false;
+	if (std::getenv("GPCE4_FASTOPS") && std::getenv("GPCE4_FASTOPS")[0] == '0')
+		cpu.m_fastops = false;
+	// GPCE4_AOT=0 drops every generated block and runs the pure interpreter,
+	// which is the reference the AOT regression is diffed against.
+	if (std::getenv("GPCE4_AOT") && std::getenv("GPCE4_AOT")[0] == '0')
+		cpu.m_aot = false;
+
+	// unsp_device::device_reset(), ref/unsp/unsp.cpp (m_numregs == 16 for unsp_2.0)
+	cpu.reset_state();
+	cpu.m_vectorbase = 0x4010;
+	cpu.m_core->m_r[0] = 0;
+	for (int r = 1; r < 16; r++) cpu.m_core->m_r[r] = 0;
+	cpu.m_core->m_r[unsp_device::REG_PC] = soc.read16(0x4010 + 0x7);
+	cpu.m_core->m_enable_irq = 0;
+	cpu.m_core->m_enable_fiq = 0;
+	cpu.m_core->m_fir_move = 1;
+	cpu.m_core->m_pri = 8;
+	cpu.m_core->m_divq_bit = 0xffffffffu;
+
+	TraceSink trace;
+	TraceSink cycle_trace;
+	const char *cycle_trace_path = cycle_trace_opt;
+	struct HookCtx
+	{
+		TraceSink *trace = nullptr;
+		uint32_t bp = 0xffffffffu;
+		const char *bp_path = nullptr;
+		uint16_t *ram = nullptr;
+		bool bp_done = false;
+		bool tracing = false;
+		int64_t ram_at = -1;
+		const char *ram_path = nullptr;
+		bool ram_done = false;
+		std::unordered_map<uint32_t, uint64_t> *hist = nullptr;
+		unsp_device *dev = nullptr;
+		const uint32_t *regs = nullptr;
+		const uint32_t *sbv = nullptr;
+		FILE *regd = nullptr;
+		long regd_left = 0;
+	};
+	HookCtx hook;
+	hook.trace = trace_path ? &trace : nullptr;
+	hook.bp_path = bp_dump;
+	hook.ram = soc.ram;
+	hook.ram_path = ram_at_path;
+	hook.ram_at = ram_at_seconds >= 0.0 ? (int64_t)(ram_at_seconds * CPU_CLOCK) : -1;
+	if (bp_pc) hook.bp = (uint32_t)std::strtoul(bp_pc, nullptr, 16);
+	if (trace_path) trace.open(trace_path);
+	std::vector<uint32_t> block_hist;
+	if (block_hist_path) { block_hist.assign(0x40000u, 0u); cpu.m_block_hist = block_hist.data(); }
+	std::unordered_map<uint32_t, uint64_t> pc_hist;
+	if (pc_hist_path) hook.hist = &pc_hist;
+	{
+		const char *rdp = std::getenv("GPCE4_REGDUMP");
+		if (rdp)
+		{
+			hook.regd = std::fopen(rdp, "wb");
+			hook.regd_left = 40000;
+			hook.dev = &cpu;
+			hook.regs = cpu.m_core->m_r;
+			hook.sbv = &cpu.m_core->m_sb;
+		}
+	}
+	if (hook.trace || hook.hist || hook.bp != 0xffffffffu || hook.ram_at >= 0 || hook.regd)
+	{
+		cpu.m_insn_hook = [](void *o, uint32_t lpc) {
+			HookCtx *c = (HookCtx *)o;
+			uint32_t pc = lpc & 0xffffff;
+			if (c->bp != 0xffffffffu && !c->bp_done && pc == c->bp && c->bp_path)
+			{
+				FILE *fp = std::fopen(c->bp_path, "wb");
+				if (fp) { std::fwrite(c->ram, 2, 4096, fp); std::fclose(fp); }
+				c->bp_done = true;
+				std::printf("[bp] pc=%06X ram dumped to %s\n", pc, c->bp_path);
+			}
+			if (c->regd && c->regd_left > 0)
+			{
+				--c->regd_left;
+				const AotCtx *ac = (const AotCtx *)c->dev->m_aot_cur;
+				const uint32_t *r = ac ? ac->r : c->regs;
+				const uint32_t sbv = ac ? ac->sb : *c->sbv;
+				std::fprintf(c->regd, "%06X %04X %04X %04X %04X %04X %04X %04X %X\n", pc,
+					r[0] & 0xffffu, r[1] & 0xffffu, r[2] & 0xffffu, r[3] & 0xffffu,
+					r[4] & 0xffffu, r[5] & 0xffffu, r[6] & 0xffffu, sbv & 0xfu);
+			}
+			if (c->trace && c->tracing) c->trace->emit(lpc);
+			if (c->hist) (*c->hist)[pc]++;
+		};
+		cpu.m_insn_hook_opaque = &hook;
+	}
+
+	struct CycCtx
+	{
+		TraceSink *sink = nullptr;
+		FILE *irq = nullptr;              // absolute cycle log for IRQ6 entries
+		uint64_t acc = 0;                 // cycles retired since power on
+	};
+	CycCtx cyc_ctx;
+	if (cycle_trace_path || irq_log_path)
+	{
+		if (cycle_trace_path)
+		{
+			cycle_trace.open(cycle_trace_path);
+			cyc_ctx.sink = &cycle_trace;
+		}
+		if (irq_log_path)
+		{
+			cyc_ctx.irq = std::fopen(irq_log_path, "w");
+			if (!cyc_ctx.irq) { std::perror(irq_log_path); std::exit(2); }
+		}
+		cpu.m_cycle_hook = [](void *o, uint32_t lpc, int cyc) {
+			CycCtx *c = (CycCtx *)o;
+			const uint32_t pc = lpc & 0xffffff;
+			c->acc += (uint64_t)cyc;
+			if (c->irq && pc == 0x485D)
+				std::fprintf(c->irq, "%llu\n", (unsigned long long)c->acc);
+			if (c->sink)
+			{
+				// GPCE4_PC_FILTER=5F35,5251 keeps the trace small enough to read
+				// when all we want is the cycle cost of one loop.
+				static const char *filter = std::getenv("GPCE4_PC_FILTER");
+				if (filter && *filter)
+				{
+					bool want = false;
+					for (const char *q = filter; *q && !want;)
+					{
+						while (*q == ',' || *q == ' ') q++;
+						if (!*q) break;
+						char *end = nullptr;
+						const unsigned long v = std::strtoul(q, &end, 16);
+						if ((uint32_t)v == pc) want = true;
+						q = end;
+					}
+					if (!want) return;
+				}
+				char buf[16];
+				std::snprintf(buf, sizeof(buf), "%06X %d\n", (unsigned)pc, cyc);
+				c->sink->raw(buf, std::strlen(buf));
+			}
+		};
+		cpu.m_cycle_hook_opaque = &cyc_ctx;
+	}
+
+	const int64_t total_frames = (frames >= 0) ? frames : (int64_t)(seconds * FPS + 0.5);
+	const int64_t trace_cycles = (int64_t)(trace_seconds * CPU_CLOCK);
+	const int64_t trace_begin = (int64_t)(trace_start * CPU_CLOCK);
+
+	if (autoplay) { /* handled below, frame based */ }
+
+	if (wav_path) audio_wav_open(wav_path, Gpce4::AUDIO_RATE);
+
+	int64_t cycle = 0;
+	auto t0 = std::chrono::steady_clock::now();
+	char namebuf[512];
+	int shot_index = 0;
+	int64_t presses = 0;
+
+	// --clock-sync / --clock-fast: the handset has no RTC chip. The boot path
+	// zeroes the software clock and clears its enable flag (0x0CB0), so the
+	// in-game clock freezes at 0:00:00 (docs/RE_RTC.md §3). Seed it from the
+	// host clock once the firmware is past boot and let the game's own 2 Hz
+	// handler advance it; --clock-fast also sets the 60x time-lapse flag
+	// (0x0D03), which the same handler adds as +0x3C seconds per tick.
+	auto seed_host_clock = [&]() {
+		time_t now = time(nullptr);
+		struct tm lt;
+		localtime_s(&lt, &now);
+		soc.ram[0x0CB0] = 1;
+		soc.ram[0x0CAF] = (uint16_t)lt.tm_hour;
+		soc.ram[0x0CAE] = (uint16_t)lt.tm_min;
+		soc.ram[0x0CAD] = (uint16_t)lt.tm_sec;
+		soc.ram[0x0CB1] = 0;
+		soc.ram[0x0CB2] = 1;
+		if (clock_fast) soc.ram[0x0D03] = 1;
+		std::printf("[clock] seeded %02d:%02d:%02d from host%s\n", lt.tm_hour, lt.tm_min, lt.tm_sec,
+			clock_fast ? " (60x fast)" : "");
+	};
+
+	auto press = [&](uint16_t bit, bool down) {
+		uint16_t bits = 0xffff;
+		if (down) bits = (uint16_t)(0xffff & ~bit);
+		soc.set_port(0, bits);
+		presses++;
+	};
+
+	for (int64_t f = 0; f < total_frames; f++)
+	{
+		if (autoplay)
+		{
+			// same schedule as tools/trace_keys.lua: B1 every 360 frames from 120, B2/B3 sprinkled in
+			if (f >= 120 && (f - 120) % 360 == 0) press(0x0008, true);
+			else if (f >= 120 && (f - 120) % 360 == 6) press(0x0008, false);
+			if (f == 300 || f == 1740 || f == 3180) press(0x0010, true);
+			if (f == 320 || f == 1760 || f == 3200) press(0x0010, false);
+			if (f == 660 || f == 2100) press(0x0020, true);
+			if (f == 680 || f == 2120) press(0x0020, false);
+		}
+		if (!press_specs.empty())
+		{
+			uint16_t pv = 0xffff;
+			for (const PressSpec &ps : press_specs)
+				if (f >= ps.start && f < ps.end) pv &= (uint16_t)~ps.mask;
+			soc.set_port(0, pv);
+			presses++;
+		}
+
+		if (clock_sync && f == 120) seed_host_clock();
+
+		int64_t frame_end = cycle + FRAME_CYCLES;
+		while (cycle < frame_end)
+		{
+			if (hook.trace)
+			{
+				const int64_t rel = cycle - trace_begin;
+				const bool want = (rel >= 0 && rel < trace_cycles);
+				if (want != hook.tracing) { if (!want) trace.flush(); hook.tracing = want; }
+			}
+			int64_t remain = frame_end - cycle;
+			uint32_t slice = soc.cycles_to_next_event((uint32_t)std::min<int64_t>(remain, SLICE_CYCLES));
+			if (slice == 0) slice = 1;
+			cpu.m_core->m_icount = (int32_t)slice - 1;
+			cpu.execute_run();
+			// Instruction execution overshoots the budget by up to one
+			// instruction: charge the timers for the cycles actually consumed
+			// and let the next slice recompute from absolute time.
+			const int64_t consumed = (int64_t)((int32_t)slice - 1) - (int64_t)(int32_t)cpu.m_core->m_icount;
+			soc.tick((uint32_t)(consumed > 0 ? consumed : slice));
+			if (wav_path)
+			{
+				int16_t abuf[1024];
+				size_t an;
+				while ((an = soc.audio_read(abuf, 1024)) > 0) audio_wav_write(abuf, an);
+			}
+			cycle += consumed > 0 ? consumed : slice;
+			if (!hook.ram_done && hook.ram_at >= 0 && cycle >= hook.ram_at && hook.ram_path)
+			{
+				FILE *fp = std::fopen(hook.ram_path, "wb");
+				if (fp) { std::fwrite(hook.ram, 2, 4096, fp); std::fclose(fp); }
+				hook.ram_done = true;
+				std::printf("[ram] t=%.3fs ram dumped to %s\n", (double)cycle / CPU_CLOCK, hook.ram_path);
+			}
+		}
+
+		if (shot_every > 0 && (f % shot_every) == 0)
+		{
+			std::string dir = shot_dir ? shot_dir : ".";
+			std::snprintf(namebuf, sizeof(namebuf), "%s/frame_%05d.bmp", dir.c_str(), (int)(f / shot_every));
+			write_bmp(namebuf, soc.lcd.fb, 128, 128);
+			shot_index++;
+		}
+	}
+
+	double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+	if (trace_path) { trace.flush(); std::fclose(trace.fp); trace.fp = nullptr; }
+	if (shot_path) write_bmp(shot_path, soc.lcd.fb, 128, 128);
+	if (save_flash_path)
+	{
+		FILE *fp = std::fopen(save_flash_path, "wb");
+		if (fp) { std::fwrite(flash.data(), 1, flash.size(), fp); std::fclose(fp); }
+		else std::perror(save_flash_path);
+		std::printf("[flash] saved %zu bytes to %s\n", flash.size(), save_flash_path);
+	}
+	if (raw_shot_path)
+	{
+		FILE *fp = std::fopen(raw_shot_path, "wb");
+		if (fp) { std::fwrite(soc.lcd.fb, 2, 128 * 128, fp); std::fclose(fp); }
+	}
+
+	extern unsigned long long g_fast_calls, g_fast_hits;
+	std::printf("fast: calls=%llu hits=%llu\n", g_fast_calls, g_fast_hits);
+	std::printf("frames=%lld cycles=%lld emulated=%.3fs wall=%.2fs speed=%.1fx traced_pc=%llu soc_now=%llu\n",
+		(long long)total_frames, (long long)cycle, (double)cycle / CPU_CLOCK, wall,
+		(double)cycle / CPU_CLOCK / (wall > 0 ? wall : 1), (unsigned long long)trace.count,
+		(unsigned long long)soc.now());
+	std::printf("PC=%06X SR=%04X SP=%04X display_on=%d buttons_events=%lld\n",
+		(unsigned)(((cpu.m_core->m_r[unsp_device::REG_SR] & 0x3f) << 16) | cpu.m_core->m_r[unsp_device::REG_PC]),
+		(unsigned)(cpu.m_core->m_r[unsp_device::REG_SR] & 0xffff),
+		(unsigned)(cpu.m_core->m_r[0] & 0xffff), soc.lcd.display_on ? 1 : 0, (long long)presses);
+	if (const char *stat = std::getenv("GPCE4_AOTSTAT")) aot_dump_pc_hist(stat);
+	std::printf("AOT blocks=%llu insns=%llu fallback=%llu miss=%llu\n",
+		(unsigned long long)cpu.m_aot_blocks, (unsigned long long)cpu.m_aot_insns,
+		(unsigned long long)cpu.m_aot_fallback, (unsigned long long)cpu.m_aot_miss);
+	std::printf("IRQ status=%08X ctrl=%04X ctrl2=%04X sirq=%08X irq=%d in_ine=%d enable_irq=%d fiq=%d\n",
+		(unsigned)soc.m_interrupt_status, (unsigned)soc.m_interrupt_ctrl,
+		(unsigned)soc.m_interrupt2_ctrl, (unsigned)cpu.m_core->m_sirq,
+		(int)cpu.m_core->m_irq, (int)cpu.m_core->m_ine,
+		(int)cpu.m_core->m_enable_irq, (int)cpu.m_core->m_fiq);
+
+	if (block_hist_path)
+	{
+		struct Row { uint32_t pc; uint32_t n; };
+		std::vector<Row> rows;
+		for (uint32_t a = 0; a < block_hist.size(); ++a) if (block_hist[a]) rows.push_back({a, block_hist[a]});
+		std::sort(rows.begin(), rows.end(), [](const Row &x, const Row &y) { return x.n > y.n; });
+		uint64_t total = 0; for (const Row &r : rows) total += r.n;
+		FILE *fp = std::fopen(block_hist_path, "w");
+		if (fp)
+		{
+			std::fprintf(fp, "# total %llu instructions, %zu distinct PCs\n", (unsigned long long)total, rows.size());
+			for (const Row &r : rows) std::fprintf(fp, "%06X %u %.3f\n", r.pc, r.n, 100.0 * r.n / (double)total);
+			std::fclose(fp);
+		}
+		std::printf("[block-hist] %zu distinct PCs -> %s\n", rows.size(), block_hist_path);
+	}
+	if (pc_hist_path && !pc_hist.empty())
+	{
+		std::vector<std::pair<uint32_t, uint64_t>> rows(pc_hist.begin(), pc_hist.end());
+		std::sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) { return a.second > b.second; });
+		FILE *fp = std::fopen(pc_hist_path, "w");
+		if (fp)
+		{
+			uint64_t total = 0;
+			for (const auto &r : rows) total += r.second;
+			std::fprintf(fp, "# total %llu instructions, %zu distinct PCs\n", (unsigned long long)total, rows.size());
+			for (const auto &r : rows)
+				std::fprintf(fp, "%06X %llu %.4f%%\n", (unsigned)r.first, (unsigned long long)r.second,
+					100.0 * (double)r.second / (double)(total ? total : 1));
+			std::fclose(fp);
+			std::printf("[pc-hist] %zu distinct PCs -> %s\n", rows.size(), pc_hist_path);
+		}
+	}
+	return 0;
+}

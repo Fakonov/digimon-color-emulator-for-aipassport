@@ -1,0 +1,65 @@
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0x15 (USB_UART_CHIP_RESET),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40381dbc
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 01:33:53
+I (25) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (33) boot.esp32c3: SPI Mode       : DIO
+I (37) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (45) boot: Partition Table:
+I (48) boot: ## Label            Usage          Type ST Offset   Length
+I (54) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (67) boot:  2 factory          factory app      00 00 00010000 00100000
+I (73) boot: End of partition table
+I (77) esp_image: segment 0: paddr=00010020 vaddr=3c020020 size=14064h ( 82020) map
+I (97) esp_image: segment 1: paddr=0002408c vaddr=3fc8b000 size=01650h (  5712) load
+I (98) esp_image: segment 2: paddr=000256e4 vaddr=40380000 size=0a934h ( 43316) load
+I (108) esp_image: segment 3: paddr=00030020 vaddr=42000020 size=12668h ( 75368) map
+I (121) esp_image: segment 4: paddr=00042690 vaddr=4038a934 size=00654h (  1620) load
+I (121) esp_image: segment 5: paddr=00042cec vaddr=50000000 size=00020h (    32) load
+I (128) boot: Loaded app from partition at offset 0x10000
+I (130) boot: Disabling RNG early entropy source...
+I (146) cpu_start: Unicore app
+I (154) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (154) cpu_start: Pro cpu start user code
+I (154) cpu_start: cpu freq: 160000000 Hz
+I (156) app_init: Application information:
+I (160) app_init: Project name:     recomp-bench
+I (164) app_init: App version:      1
+I (168) app_init: Compile time:     Nov 20 2026 01:32:55
+I (173) app_init: ELF file SHA256:  2e99f30e4...
+I (177) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (182) efuse_init: Min chip rev:     v0.3
+I (186) efuse_init: Max chip rev:     v1.99 
+I (190) efuse_init: Chip rev:         v1.1
+I (194) heap_init: Initializing. RAM available for dynamic allocation:
+I (200) heap_init: At 3FC93560 len 0002CAA0 (178 KiB): RAM
+I (205) heap_init: At 3FCC0000 len 0001C710 (113 KiB): Retention RAM
+I (211) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (217) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (223) spi_flash: detected chip: generic
+I (226) spi_flash: flash io: dio
+I (229) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (235) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (242) main_task: Started on CPU0
+I (245) main_task: Calling app_main()
+
+RECOMP_BENCH v0 start
+HOT_PROFILE0 PASS
+HOT_PROFILE1 PASS
+DELAY PASS
+HOT_BENCH n=200000 cycles=26970555 cycles_per_call=134 cycles_per_guest=1.98
+DELAY_BENCH n=2000 cycles=98745696 cycles_per_call=49372 cycles_per_guest=6.16
+SIM_RESULT PASS failures=0
+I (1043) main_task: Returned from app_main()

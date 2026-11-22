@@ -1,0 +1,23 @@
+I (110) esp_image: segment 1: paddr=0002f050 vaddr=3fc8e800 size Retention RAM
+I (246) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (252) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (258) spi_flash: detected chip: generic
+I (261) spi_flash: flash io: dio
+I (264) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (270) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (277) main_task: Started on CPU0
+I (280) main_task: Calling app_main()
+I (283) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (290) DIGICORE: build Nov 20 2026 22:35:56, reset cause 11, heap 133968 B (largest block 114688 B)
+I (299) display: init ST7789P3 320x240
+I (433) display: ready, landscape 320x240, backlight off
+I (436) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (438) ROMSTORE: sparse store mapped at 0x3c050000 (6080 KiB), direct read path on
+I (442) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (448) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (456) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (462) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+I (12838) DIGICORE: frames=2 guest_fps=0.16 mi_s=0.00 host_fps=0.16 pc=005f36 sr=0040 sp=0fed insns=67 K cyc=3200 K mv=2944 btn=0 guest_pct=0 blit_pct=0 hot=0 tick_pct=0 slices=0 prof_hot=0 prof_spin=19 prof_exec=18176 interp=0 hotins=0 collapse=0 collcalls=0 stage=20/19340/62
+I (12902) DIGICORE: bench hotblock: 100000 calls in 50299 us -> 502 us/call, 80 cycles/call
+I (13166) DIGICORE: bench split: fetch 50 cycles, dispatch 159 cycles (sink 0)

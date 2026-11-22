@@ -1,0 +1,21 @@
+I (110) esp_image: segment 1: paddr=0002d928 vaddr=3fc8e600 sizeI (3793) DIGICORE: frames=4 guest_fps=1.21 mi_s=0.72 host_fps=1.21 pc=005f36 sr=0040 sp=0fed insns=2358 K cyc=6400 K mv=2944 btn=0
+I (5444) DIGICORE: frames=6 guest_fps=1.21 mi_s=0.72 host_fps=1.21 pc=00485e sr=0000 sp=0fe6 insns=3555 K cyc=9600 K mv=2944 btn=0
+I (7096) DIGICORE: frames=8 guest_fps=1.21 mi_s=0.72 host_fps=1.21 pc=005f35 sr=0040 sp=0fed insns=4753 K cyc=12800 K mv=2944 btn=0
+I (8749) DIGICORE: frames=10 guest_fps=1.21 mi_s=0.72 host_fps=1.21 pc=005f36 sr=0040 sp=0fed insns=5950 K cyc=16000 K mv=2944 btn=0
+I (10401) DIGICORE: frames=12 guest_fps=1.21 mi_s=0.72 host_fps=1.21 pc=004862 sr=0000 sp=0fe6 insns=7147 K cyc=19200 K mv=2944 btn=0
+I (12053) DIGICORE: frames=14 guest_fps=1.21 mi_s=0.72 host_fps=1.21 pc=005f36 sr=0040 sp=0fed insns=8345 K cyc=22400 K mv=2944 btn=0
+I (13658) DIGICORE: frames=16 guest_fps=1.24 mi_s=0.69 host_fps=1.24 pc=005f36 sr=0040 sp=0fed insns=9466 K cyc=25600 K mv=2944 btn=0
+I (15312) DIGICORE: frames=18 guest_fps=1.20 mi_s=0.72 host_fps=1.20 pc=004862 sr=0000 sp=0fe6 insns=10663 K cyc=28800 K mv=2944 btn=0
+I (16941) DIGICORE: BOOT_OK first non-blank guest frame at 20 frames, pc=007ca6, display_on=1 sleep=0 madctl=00a8
+I (16941) DIGICORE: frames=20 guest_fps=1.22 mi_s=0.69 host_fps=1.22 pc=007ca6 sr=02a0 sp=0fb3 insns=11803 K cyc=32000 K mv=2944 btn=0
+I (18603) DIGICORE: frames=22 guest_fps=1.20 mi_s=0.45 host_fps=1.20 pc=000315 sr=0220 sp=0ff2 insns=12554 K cyc=35200 K mv=2944 btn=0
+I (20438) DIGICORE: frames=24 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=004864 sr=0000 sp=0feb insns=13348 K cyc=38400 K mv=2944 btn=0
+I (22273) DIGICORE: frames=26 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=000311 sr=0020 sp=0ff2 insns=14143 K cyc=41600 K mv=2944 btn=0
+I (24110) DIGICORE: frames=28 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=000319 sr=0020 sp=0ff2 insns=14937 K cyc=44800 K mv=2944 btn=0
+I (25947) DIGICORE: frames=30 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=0053db sr=0100 sp=0fe9 insns=15732 K cyc=48000 K mv=2944 btn=0
+I (27783) DIGICORE: frames=32 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=000327 sr=0163 sp=0ff8 insns=16526 K cyc=51200 K mv=2944 btn=0
+I (29618) DIGICORE: frames=34 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=0002f5 sr=0160 sp=0ff5 insns=17321 K cyc=54400 K mv=2944 btn=0
+I (31453) DIGICORE: frames=36 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=0053dc sr=0100 sp=0fe8 insns=18115 K cyc=57600 K mv=2944 btn=0
+I (33290) DIGICORE: frames=38 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=000325 sr=0020 sp=0ff2 insns=18910 K cyc=60800 K mv=2944 btn=0
+I (35127) DIGICORE: frames=40 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=00032b sr=0020 sp=0ff2 insns=19704 K cyc=64000 K mv=2944 btn=0
+I (36963) DIGICORE: frames=42 guest_fps=1.08 mi_s=0.43 host_fps=1.08 pc=0053e4 sr=0040 sp=0fec insns=20499 K cyc=67200 K mv=2944 btn=0

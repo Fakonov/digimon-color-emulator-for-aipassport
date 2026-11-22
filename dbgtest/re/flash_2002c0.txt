@@ -1,0 +1,48 @@
+2002C0: 0041      sp += 01
+2002C1: 9898      pop bp, pc from [sp]
+2002C2: 9652      r3 = 12
+2002C3: FE00      ds = 00
+2002C4: 990C 0C88 r4 = 0c88
+2002C6: D6E4      ds:[r4] = r3
+2002C7: 0041      sp += 01
+2002C8: 9898      pop bp, pc from [sp]
+2002C9: EE00      jmp 2002ca
+2002CA: 0041      sp += 01
+2002CB: 9898      pop bp, pc from [sp]
+2002CC: DA88      push bp, bp to [sp]
+2002CD: 0B08 0001 bp = sp + 0001
+2002CF: 950A 1333 r2 = 1333
+2002D1: 970B 0549 r3 = 0549
+2002D3: FE00      ds = 00
+2002D4: 990C 0600 r4 = 0600
+2002D6: D4F4      ds:[r4++] = r2
+2002D7: D6E4      ds:[r4] = r3
+2002D8: 650A 32EB r2 = -32eb
+2002DA: 970B 075B r3 = 075b
+2002DC: FE00      ds = 00
+2002DD: 990C 0602 r4 = 0602
+2002DF: D4F4      ds:[r4++] = r2
+2002E0: D6E4      ds:[r4] = r3
+2002E1: 950A 55E5 r2 = 55e5
+2002E3: 970B 159A r3 = 159a
+2002E5: FE00      ds = 00
+2002E6: 990C 0604 r4 = 0604
+2002E8: D4F4      ds:[r4++] = r2
+2002E9: D6E4      ds:[r4] = r3
+2002EA: 950A 3BB5 r2 = 3bb5
+2002EC: 970B 1F12 r3 = 1f12
+2002EE: FE00      ds = 00
+2002EF: 990C 0606 r4 = 0606
+2002F1: D4F4      ds:[r4++] = r2
+2002F2: D6E4      ds:[r4] = r3
+2002F3: 9898      pop bp, pc from [sp]
+2002F4: DA88      push bp, bp to [sp]
+2002F5: 2043      sp -= 03
+2002F6: 0B08 0001 bp = sp + 0001
+2002F8: FE00      ds = 00
+2002F9: 990C 0602 r4 = 0602
+2002FB: 96F4      r3 = ds:[r4++]
+2002FC: 98E4      r4 = ds:[r4]
+2002FD: 944B      r2 = 0b
+2002FE: E92A      r4 = r4 lsl r2
+2002FF: E73A      r3 = r3 lslor r2

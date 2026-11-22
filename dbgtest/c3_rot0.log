@@ -1,0 +1,13 @@
+I (110) esp_image: segment 1: paddr=0002d8f8 vaddr=3fc8e600 sizeI (3742) DIGICORE: frames=4 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=005f36 sr=0040 sp=0fed insns=2358 K cyc=6400 K
+I (5379) DIGICORE: frames=6 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=00485e sr=0000 sp=0fe6 insns=3555 K cyc=9600 K
+I (7016) DIGICORE: frames=8 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=005f35 sr=0040 sp=0fed insns=4753 K cyc=12800 K
+I (8653) DIGICORE: frames=10 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=005f36 sr=0040 sp=0fed insns=5950 K cyc=16000 K
+I (10290) DIGICORE: frames=12 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=004862 sr=0000 sp=0fe6 insns=7147 K cyc=19200 K
+I (11927) DIGICORE: frames=14 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=005f36 sr=0040 sp=0fed insns=8345 K cyc=22400 K
+I (13518) DIGICORE: frames=16 guest_fps=1.25 mi_s=0.70 host_fps=1.25 pc=005f36 sr=0040 sp=0fed insns=9466 K cyc=25600 K
+I (15155) DIGICORE: frames=18 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=004862 sr=0000 sp=0fe6 insns=10663 K cyc=28800 K
+I (16770) DIGICORE: BOOT_OK first non-blank guest frame at 20 frames, pc=007ca6, display_on=1 sleep=0 madctl=00a8
+I (16770) DIGICORE: frames=20 guest_fps=1.23 mi_s=0.70 host_fps=1.23 pc=007ca6 sr=02a0 sp=0fb3 insns=11803 K cyc=32000 K
+I (18412) DIGICORE: frames=22 guest_fps=1.21 mi_s=0.45 host_fps=1.21 pc=000315 sr=0220 sp=0ff2 insns=12554 K cyc=35200 K
+I (20231) DIGICORE: frames=24 guest_fps=1.09 mi_s=0.43 host_fps=1.09 pc=004864 sr=0000 sp=0feb insns=13348 K cyc=38400 K
+I (22050) DIGICORE: frames=26 guest_fps=1.09 mi_s=0.43 host_fps=1.09 pc=000311 sr=0020 sp=0ff2 insns=14143 K cyc=41600 K

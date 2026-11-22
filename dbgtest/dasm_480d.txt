@@ -1,0 +1,41 @@
+00480D: 9108 0FFF sp = 0fff
+00480F: 9309 4800 r1 = 4800
+004811: 94D1      r2 = [r1++]
+004812: EE11      jmp 4824
+004813: D488      push r2, r2 to [sp]
+004814: 96D1      r3 = [r1++]
+004815: 98D1      r4 = [r1++]
+004816: 995C      r4 = r4 lsl 4
+004817: 995C      r4 = r4 lsl 4
+004818: 994C      r4 = r4 lsl 2
+004819: 9D04      sr = r4
+00481A: 98D1      r4 = [r1++]
+00481B: 9AD1      bp = [r1++]
+00481C: EE03      jmp 4820
+00481D: 94F4      r2 = ds:[r4++]
+00481E: D4D3      [r3++] = r2
+00481F: 2A41      bp -= 01
+004820: 4A40      cmp bp, 00
+004821: 4E45      jne 481d
+004822: 9288      pop r2, r2 from [sp]
+004823: 2441      r2 -= 01
+004824: 4440      cmp r2, 00
+004825: 4E53      jne 4813
+004826: F040 513E call 00513e
+004828: EE41      jmp 4828
+004829: 9A98      reti
+00482A: DAA8      push r1, bp to [sp]
+00482B: 0B08 0001 bp = sp + 0001
+00482D: 90A8      pop r1, bp from [sp]
+00482E: 9A98      reti
+00482F: DAA8      push r1, bp to [sp]
+004830: 0B08 0001 bp = sp + 0001
+004832: 90A8      pop r1, bp from [sp]
+004833: 9A98      reti
+004834: DAA8      push r1, bp to [sp]
+004835: 0B08 0001 bp = sp + 0001
+004837: 90A8      pop r1, bp from [sp]
+004838: 9A98      reti
+004839: DAA8      push r1, bp to [sp]
+00483A: 0B08 0001 bp = sp + 0001
+00483C: 90A8      pop r1, bp from [sp]

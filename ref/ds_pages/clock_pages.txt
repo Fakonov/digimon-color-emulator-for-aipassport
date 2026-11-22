@@ -1,0 +1,454 @@
+===== PAGE 27 len 774 =====
+ 
+  
+ 
+GPCE4XXXX 
+   
+ 
+© Generalplus Technology Inc. 
+Proprietary & Confidential 
+27 Jun. 26, 2017 
+Version: 1.1 
+ 
+6.3.6 LQFP48 Package Pin Assignment         
+1VPP
+2VDD_REG
+3V33_REG
+4VSS_REG
+5EPM
+6VCOIN6M
+7RESETB
+8X32KO
+9X32KI
+10TEST
+11IOB[0]
+12IOB[1]
+13IOB[2]
+14IOB[3]
+15IOB[4]
+16IOB[5]
+17IOB[6]
+18IOB[8]
+19IOB[9]
+20IOB[10]
+21VDD_IOB
+22IOB[12]
+23IOB[13]
+24IOB[14]
+25 IOB[15]
+26 MICP
+27 MICN
+28 VADREF
+29 VMIC
+30 V33_ADC
+31 V27_REG
+32 VFSOURCE
+33 IOA[0]
+34 IOA[1]
+35 IOA[8]
+36 VDD_IOA
+37 VSS_IOA
+38 IOA[10]
+39 IOA[11]
+40 IOA[12]
+41 IOA[13]
+42 IOA[14]
+43 IOA[15]
+44 VSS_PDAC
+45 AUDP
+46 VDD_DAC
+47 VDD_PDAC
+48 AUDN
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+373839404142434445464748
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+13 14 15 16 17 18 19 20 21 22 23 24
+ 
+ 
+ 
+GPCE4096A/GPCE4064A 
+LQFP48 
+===== PAGE 28 len 3379 =====
+ 
+  
+ 
+GPCE4XXXX 
+   
+ 
+© Generalplus Technology Inc. 
+Proprietary & Confidential 
+28 Jun. 26, 2017 
+Version: 1.1 
+ 
+7 FUNCTION DESCRIPTIONS 
+7.1 CPU 
+The GPCE4xxxx is equipped with a 16-bit ’nS2.0P™ 
+(pronounced as micro-n-SP).  Sixteen registers are featured in 
+’nSP™ 2.0: R1 - R4 and R8 ~ R15 (General- purpose registers), 
+PC (Program Counter), SP (Stack Pointer), Base Pointer (BP) , 
+SR (Segment Register) and eight extended registers.  The 
+interrupts include 23 FIQs (Fast Interrupt Request) and IRQs 
+(Interrupt Request), plus one software-interrupt, BREAK. 
+ 
+7.2 Memory 
+7.2.1 SRAM 
+There are 4K-word working SRAM and 2K-word Cache RAM 
+(also can be working RAM), ranged from $0000 through $17FF. 
+ 
+7.2.2 OTP 
+GPCE4xxxx features a high-speed memory with access speed of 
+three CPU clock cycles.  
+ 
+7.3 PLL, Clock, Power Mode 
+7.3.1 PLL (Phase Lock Loop) 
+The purpose of PLL is to provide a base frequency (32768Hz) 
+and to pump the frequency from 6MHz to 48MHz for system 
+clock (FOSC).  The default PLL frequency is 12MHz. 
+ 
+7.3.1.1 System clock 
+Basically, the system clock is provided by PLL and programmed 
+by the Port_SystemClock (R/W) to determine the clock frequency 
+for system.   
+ 
+7.3.1.2 32768Hz RTC 
+The Real Time Clock (RTC) is normally used in watch, clock or 
+other time related products.  A 2Hz-RTC (0.5 seconds) function 
+is loaded in GPCE4xxxx.  The RTC counts the time as well as to 
+wake CPU up whenever RTC occurs.  Since the RTC is 
+generated each 0.5 seconds, time can be tracked by the total 
+number of RTC occurrences.  In addition, GPCE4xxxx supports 
+32768Hz crystal oscillator in normal mode and auto-power-saving 
+mode.  In normal mode, 32768Hz OSC always runs at the 
+highest power consumption.  In auto-power-saving mode, 
+however, it runs at normal mode for the first 7.5 seconds and 
+switches back to power-saving mode automatically to save 
+powers.  
+7.4 Standby Mode 
+The GPCE4xxxx features a power savings mode (or called 
+standby mode) for low power applications.  In such mode, 
+SRAM and I/Os remain in the previous states until CPU being 
+awakened.  After GPCE4xxxx wakes up, CPU will continue to 
+execute the program from where it slept.   
+ 
+7.5 Low Voltage Detection and Low Voltage Reset 
+7.5.1 Low voltage detection (LVD) 
+The Low Voltage Detection (LVD) reports the circumstance of 
+present voltage.  There are seven LVD levels to be selected: 
+2.4V, 2.6V, 2.8V, 3.0V, 3.2V, 3.4V, and 3.6V.  
+ 
+7.5.2 Low voltage reset 
+In addition to the LVD, GPCE4xxxx has another important 
+function, Low Voltage Reset (LVR).  With LVR function, a reset 
+signal is generated to reset system when the operating voltage 
+drops below LVR level. 
+ 
+7.6 Interrupt 
+The GPCE4xxxx has 25 interrupt sources, grouped into two 
+types, FIQ (Fast Interrupt Request) and IRQ (Interrupt request).  
+The priority of FIQ is higher than IRQ.  User can refer 
+programming guide for details. 
+ 
+7.7 I/O 
+The GPCE4xxxx has 48 bit-programmable I/Os. with 
+programmable wakeup capability.  The following diagram is an 
+I/O schematic. 
+Data 
+Register
+ &
+Control
+Logic
+I/O Pad
+P_IOA/B/C_Buffer(R)
+P_IOA/B/C_Buffer(W)
+P_IOA/B/C_Dir(R/W)
+P_IOA/B/C_Attrib(R/W)
+P_IOA/B/C_Data(R)
+ 
+In addition to a general purpose I/O port function, IOA/B/C also 
+shares/carries some special functions.  A summary of IOA/B/C 
+special functions is listed as follows: 
+ 
+ 
+ 
+ 
+===== PAGE 29 len 2628 =====
+ 
+  
+ 
+GPCE4XXXX 
+   
+ 
+© Generalplus Technology Inc. 
+Proprietary & Confidential 
+29 Jun. 26, 2017 
+Version: 1.1 
+ 
+7.8 Special Function in Port 
+Port Special Function Function Description Note 
+IOA0 IO_PWM/ High driving I/O IO_PWM Output Refer to Timer section 
+IOA1 IO_PWM/ High driving I/O IO_PWM Output Refer to Timer section 
+IOA2 IO_PWM/ High driving I/O IO_PWM Output Refer to Timer section 
+IOA3 IO_PWM/ High driving I/O IO_PWM Output Refer to Timer section 
+IOA4 IROUT IR Output - 
+IOA5 - - - 
+IOA6 
+Feedback Input2 - - 
+EXT2 External interrupt source 2 (negative edge triggered) Set IOA6 as floating input mode 
+IOA7 Feedback Output2 
+Work with IOA6 by adding a RC circuit between them 
+to get an OSC to EXT2 interrupts 
+Set IOA7 as inverted output 
+IOA8 
+Feedback Input1 - - 
+EXT1 External interrupt source 1 (negative edge triggered) Set IOA8 as floating input mode 
+IOA9 Feedback Output1 
+Work with IOA8 by adding a RC circuit between them 
+to get an OSC to EXT1 interrupt 
+Set IOA9 as inverted output 
+IOA10 SPI IO3/ Fast driving I/O SPI IO3 Refer to SPIFC section 
+IOA11 SPI IO2/ Fast driving I/O SPI IO2 Refer to SPIFC section 
+IOA12 SPI CS/ Fast driving I/O SPI chip select Refer to SPIFC section 
+IOA13 SPI CK/ Fast driving I/O SPI clock Refer to SPIFC section 
+IOA14 SPI RX/ Fast driving I/O SPI data input Refer to SPIFC section 
+IOA15 SPI TX/ Fast driving I/O SPI data output Refer to SPIFC section 
+IOB0 AN0 ADC Channel 0 Refer to ADC section 
+IOB1 AN1 ADC Channel 1 Refer to ADC section 
+IOB2 AN2 ADC Channel 2 Refer to ADC section 
+IOB3 AN3 ADC Channel 3 Refer to ADC section 
+IOB4 AN4 ADC Channel 4 Refer to ADC section 
+IOB5 AN5 ADC Channel 5 Refer to ADC section 
+IOB6 AN6 ADC Channel 6 Refer to ADC section 
+IOB7 AN7 ADC Channel 7 Refer to ADC section 
+IOB8 AGC ADC AGC Refer to ADC section 
+IOB9 OPI ADC OPI Refer to ADC section 
+IOB10 MICOUT ADC MICOUT Refer to ADC section 
+IOB11 OPO ADC OPO Refer to ADC section 
+IOB12 SPI2 CS SPI2 chip select Refer to SPI2 section 
+IOB13 SPI2 CK SPI2 clock Refer to SPI2 section 
+IOB14 SPI2 RX SPI2 data input Refer to SPI2 section 
+IOB15 SPI2 TX SPI2 data output Refer to SPI2 section 
+IOA[15:0], 
+IOB[15:0] 
+IOC[15:0] 
+Touch sensing input Touch sensing input Refer to CTS section 
+7.9 Timer / Counter 
+The GPCE4xxxx has five 16-bit timer/counters.  They are 
+re-loaded up-counters.  When timer overflows from $FFFF to 
+$0000, the carry (overflow) signal will make the user’s preset 
+value to be loaded into timer automatically and count up again.  
+At the same time, the carry signal will generate an interrupt signal 
+if the corresponding bit is enabled.   
+===== PAGE 30 len 3244 =====
+ 
+  
+ 
+GPCE4XXXX 
+   
+ 
+© Generalplus Technology Inc. 
+Proprietary & Confidential 
+30 Jun. 26, 2017 
+Version: 1.1 
+ 
+7.9.1 IO PWM 
+One IO PWMs which duty is selected from 1/256 to 254/256.  
+These PWM signals can be applied for controlling the speed of 
+motor or other device. 
+ 
+7.9.2 Timebase 
+Timebase, generated by 32768Hz crystal oscillator, is a 
+combination of frequency selection, generating 4KHz, 2KHz, 
+512Hz, 64Hz, 16Hz and 2Hz interrupt sources (FIQ6/IRQ6, 
+FIQ7/IRQ7) for real-time-clock. 
+ 
+7.10 Capacitance Touch Sensor(CTS) and CTS 
+Timers 
+GPCE4xxxx provides Capacitive Touch sensor.  It is able to 
+perform capacitive sensing, decision making, responsive actions 
+and other duties pertinent to the system as well. 
+ 
+7.11 Sleep Mode, Wakeup, Halt Mode, and Watchdog 
+7.11.1 Sleep and wakeup modes  
+1) Sleep, Halt: After power-on reset, IC starts running until a 
+sleep command is issued.  When a sleep 
+command is accepted, IC will turn the system 
+clock (PLL) off.  It enters sleep mode if 32KHz 
+Sleep Status bit is cleared or enters halt mode if 
+32KHz Sleep Status bit is set. 
+2) Wakeup: CPU awaking from sleep mode requires a wakeup 
+signal to turn the system clock (PLL) on.  The 
+FIQ/IRQ signal makes CPU to complete the 
+wakeup process and initialization.  The CPU 
+wakeup source is given in the following table. 
+Wakeup up source include all FIQ source and all 
+interrupt source. 
+7.11.2 Watchdog Reset 
+If the watchdog function is enabled, a reset signal is generated to 
+reset system when watchdog counter is overflow.  
+ 
+7.12 ADC (Analog to Digital Converter) / DAC 
+The GPCE4xxxx has eight channels 12-bit ADC (Analog to Digital 
+Converter) to convert analog signal to digital signal.  The eight 
+channels of ADC can be eight channels of line-in from IOB [7:0] 
+or one channel microphone (MIC) input through amplifier PGA 
+controller, and AGC controller.  The MIC amplifier circuit is 
+capable of reducing common mode noise by transmitting signals 
+through differential MIC Inputs (MICN, MICP).  Moreover, an 
+external resistor can be applied to adjust microphone gain and 
+operating time of AGC. 
+ 
+7.13 USB Device Function (by body) 
+Some of the GPCE4xxxx series provide device function which is 
+compatible with USB 2.0 full-speed standard.  An USB 
+transceiver is also built-in. 
+ 
+7.14 SPIFC  
+A Serial Peripheral Interface flash controller (SPIFC) is featured 
+to facilitate communication between GPCE4xxxx with other 
+devices and components, especially for SPI FLASH.  The 
+SPIFC supports one- I/O, two-I/O, four-I/O mode of SPI flash.  
+The SPIFC also supports auto mode which can access SPI flash 
+data directly, therefore user’s program can be placed at external 
+SPI flash.  There are six control signals on SPI - SPICS (IOA12), 
+SPICK (IOA13), SDI (IOA14), SDO (IOA15), SPIIO3 (IOA10, only 
+for 4 I/O mode), and SPIIO2 (IOA11, only for 4 I/O mode). 
+ 
+7.14.1 SPI2  
+A Serial Peripheral Interface controller (SPI2) is built in 
+GPCE4xxxx to facilitate communicating with other devices and 
+components.  There are four control signals on SPI2 - SPICS 
+(IOB12), SPICK (IOB13), SDI (IOB14), and SDO (IOB15).
+ 
+D7 D6 D4D5 D2D3 D0D1
+D7 D6 D5 D3D4 D2 D0D1
+SPICK(POL=0)
+SPICK(POL=1)
+SDO
+SDI
+SPICS
+PHASE = 0
+===== PAGE 31 len 453 =====
+ 
+  
+ 
+GPCE4XXXX 
+   
+ 
+© Generalplus Technology Inc. 
+Proprietary & Confidential 
+31 Jun. 26, 2017 
+Version: 1.1 
+ 
+ 
+D7 D6 D4D5 D2D3 D0D1
+D7 D6 D5 D3D4 D2 D0D1
+SPICK(POL=0)
+SPICK(POL=1)
+SDO
+SDI
+SPICS
+PHASE = 1
+7.15 Audio output 
+Two sets of 16-bit software channel with noise filter is supported.  
+There is one 14-bit DAC with push-pull amplifier for direct audio 
+output which can mix the analog input signal (ACIN) and the two 
+software channels.  
+===== PAGE 32 len 2058 =====
+ 
+  
+ 
+GPCE4XXXX 
+   
+ 
+© Generalplus Technology Inc. 
+Proprietary & Confidential 
+32 Jun. 26, 2017 
+Version: 1.1 
+ 
+8 ELECTRICAL SPECIFICATIONS 
+8.1 Absolute Maximum Ratings 
+Characteristics Symbol Ratings 
+DC Supply Voltage V+ < 4.0V 
+PortA/B/C Pad Supply Voltage VIO < 7.0V 
+Input Voltage Range VIN -0.5V to V+ + 0.5V 
+Operating Temperature TA 0℃ to +60℃ 
+Storage Temperature TSTO -50℃ to +150℃ 
+Note: Stresses beyond those given in the Absolute Maximum Rating table may cause permanent damage to the device.  For normal operational conditions 
+see DC Electrical Characteristics. 
+ 
+8.2 DC Characteristics (VDD_REG = 3.3V, VDDIO = 4.5V (IOA & IOB & IOC), TA = 25℃) 
+Characteristics Symbol 
+Limit 
+Unit Test Condition 
+Min. Typ. Max. 
+Operating Voltage VDD_REG 2.4 - 5.5 V - 
+Operating Current IOP - 23 29 mA 
+FOSC = 48MHz, 
+AD, DAC disable, no load 
+Standby Current ISTB - - 
+10 A Disable 32KHz crystal  
+15 A Enable 32KHz,Disable PLL(FOSC) 
+Input High Level VIH 0.7VDD_IO - VDD_IO V - 
+Input Low Level VIL 0 - 0.3VDD_IO V - 
+Output High Current 
+(IOA[9:0], IOB, IOC) 
+IOH 7 14 21 mA VOH = 0.7VDD_IO 
+Output High Current 
+(IOA[15:10]) 
+IOH 14 27 41 mA VOH = 0.7VDD_IO 
+Output Low Current 
+(IOA[9:4], IOB, IOC) 
+IOL 13 23 36 mA VOL = 0.3VDD_IO 
+Output Low Current 
+(IOA[3:0]) 
+IOL 22 44 66 mA VOL = 0.3VDD_IO 
+Output Low Current 
+(IOA[15:10]) 
+IOL 7 13 20 mA VOL = 0.3VDD_IO, high drive disable 
+Output Low Current 
+(IOA[15:10]) 
+IOL 13 25 37 mA VOL = 0.3VDD_IO, high drive enable 
+Input Pull-Low Resister  
+(IOA, IOB, IOC) 
+RPL 80 120 160 K VIN = VDD_IO 
+Input Pull-High Resister 
+(IOA, IOB, IOC) 
+RPH 80 120 160 K VIN = VSS_IO 
+Internal ROSC frequency 
+deviation 
+⊿F/F -3% 32768 +3% HZ V33_REG = 3.3V 
+Internal 6M ROSC frequency 
+deviation 
+⊿F/F -3% 6000000 +3% HZ V33_REG = 3.3V 
+ 
+8.3 DC Characteristics (VDD_REG = 3.3V, VDDIO = 3.3V (IOA & IOB & IOC), TA = 25℃) 
+Characteristics Symbol 
+Limit 
+Unit Test Condition 
+Min. Typ. Max. 
+Operating Voltage VDD_REG 2.4 - 5.5 V - 
+Operating Current IOP - 23 29 mA 
+FOSC = 48MHz, 
+AD, DAC disable, no load 

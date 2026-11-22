@@ -1,0 +1,131 @@
+I (160) esp_image: segment 1: paddr=00086174 vaddr=3fc8e400 sizeESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0x15 (USB_UART_CHIP_RESET),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x403838d4
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 08:02:44
+I (25) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (33) boot.esp32c3: SPI Mode       : DIO
+I (37) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (45) boot: Partition Table:
+I (48) boot: ## Label            Usage          Type ST Offset   Length
+I (54) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (67) boot:  2 factory          factory app      00 00 00010000 00100000
+I (73) boot: End of partition table
+I (77) esp_image: segment 0: paddr=00010020 vaddr=3c020020 size=7614ch (483660) map
+I (160) esp_image: segment 1: paddr=00086174 vaddr=3fc8e400 size=01a88h (  6792) load
+I (161) esp_image: segment 2: paddr=00087c04 vaddr=40380000 size=08414h ( 33812) load
+I (169) esp_image: segment 3: paddr=00090020 vaddr=42000020 size=1c71ch (116508) map
+I (189) esp_image: segment 4: paddr=000ac744 vaddr=40388414 size=05ecch ( 24268) load
+I (194) esp_image: segment 5: paddr=000b2618 vaddr=50000000 size=00020h (    32) load
+I (198) boot: Loaded app from partition at offset 0x10000
+I (198) boot: Disabling RNG early entropy source...
+I (214) cpu_start: Unicore app
+I (222) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (223) cpu_start: Pro cpu start user code
+I (223) cpu_start: cpu freq: 160000000 Hz
+I (225) app_init: Application information:
+I (229) app_init: Project name:     color-preview
+I (233) app_init: App version:      1
+I (236) app_init: Compile time:     Nov 20 2026 08:01:45
+I (241) app_init: ELF file SHA256:  2d341e95d...
+I (246) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (251) efuse_init: Min chip rev:     v0.3
+I (254) efuse_init: Max chip rev:     v1.99 
+I (258) efuse_init: Chip rev:         v1.1
+I (262) heap_init: Initializing. RAM available for dynamic allocation:
+I (269) heap_init: At 3FC97DE0 len 00028220 (160 KiB): RAM
+I (274) heap_init: At 3FCC0000 len 0001C710 (113 KiB): Retention RAM
+I (280) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (286) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (292) spi_flash: detected chip: generic
+I (295) spi_flash: flash io: dio
+I (298) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (304) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (311) main_task: Started on CPU0
+I (313) main_task: Calling app_main()
+I (317) color-preview: Digimon Color reference-frame preview
+I (322) color-preview: display bring-up only; frames.bin, no ROM, no unSP core
+I (329) display: init ST7789P3 320x240
+I (463) display: ready, landscape 320x240, backlight off
+I (463) color-preview: blob 433520 bytes, 96x96, 150 frames @ 10 fps
+I (464) color-preview: render 96x96 -> 320x240, centered at (64,24), loop from frame 20
+I (471) color-preview: button ADC ready: press < 1900 mV, release > 2100 mV
+I (478) main_task: Returned from app_main()
+I (510) color-preview: PREVIEW_STATIC rot=180 (red top, green bottom; arrow up at rot=0)
+I (510) color-preview: button boot mv=2944 down=0
+I (15511) color-preview: static done; video from frame 0
+I (15543) color-preview: PREVIEW_READY first_frame=0 rot=180
+I (15543) color-preview: frame 0/150
+I (18544) color-preview: frame 30/150
+I (21543) color-preview: frame 60/150
+I (24543) color-preview: frame 90/150
+I (27543) color-preview: frame 120/150
+I (30511) color-preview: loop UI from frame 20
+I (31544) color-preview: frame 30/150
+I (34543) color-preview: frame 60/150
+I (37543) color-preview: frame 90/150
+I (40543) color-preview: frame 120/150
+I (43511) color-preview: loop UI from frame 20
+I (44544) color-preview: frame 30/150
+I (47543) color-preview: frame 60/150
+I (50543) color-preview: frame 90/150
+I (53543) color-preview: frame 120/150
+I (56511) color-preview: loop UI from frame 20
+I (57544) color-preview: frame 30/150
+I (60543) color-preview: frame 60/150
+I (63543) color-preview: frame 90/150
+I (66543) color-preview: frame 120/150
+I (69511) color-preview: loop UI from frame 20
+I (70544) color-preview: frame 30/150
+I (73543) color-preview: frame 60/150
+I (76543) color-preview: frame 90/150
+I (79543) color-preview: frame 120/150
+I (82511) color-preview: loop UI from frame 20
+I (83544) color-preview: frame 30/150
+I (86543) color-preview: frame 60/150
+I (89543) color-preview: frame 90/150
+I (92543) color-preview: frame 120/150
+I (95511) color-preview: loop UI from frame 20
+I (96544) color-preview: frame 30/150
+I (99543) color-preview: frame 60/150
+I (102543) color-preview: frame 90/150
+I (105543) color-preview: frame 120/150
+I (108511) color-preview: loop UI from frame 20
+I (109544) color-preview: frame 30/150
+I (112543) color-preview: frame 60/150
+I (115543) color-preview: frame 90/150
+I (118543) color-preview: frame 120/150
+I (121511) color-preview: loop UI from frame 20
+I (122544) color-preview: frame 30/150
+I (125543) color-preview: frame 60/150
+I (128543) color-preview: frame 90/150
+I (131543) color-preview: frame 120/150
+I (134511) color-preview: loop UI from frame 20
+I (135544) color-preview: frame 30/150
+I (138543) color-preview: frame 60/150
+I (141543) color-preview: frame 90/150
+I (144543) color-preview: frame 120/150
+I (147511) color-preview: loop UI from frame 20
+I (148544) color-preview: frame 30/150
+I (151543) color-preview: frame 60/150
+I (154543) color-preview: frame 90/150
+I (157543) color-preview: frame 120/150
+I (160511) color-preview: loop UI from frame 20
+I (161544) color-preview: frame 30/150
+I (164543) color-preview: frame 60/150
+I (167543) color-preview: frame 90/150
+I (170543) color-preview: frame 120/150
+I (173511) color-preview: loop UI from frame 20
+I (174544) color-preview: frame 30/150
+I (177543) color-preview: frame 60/150

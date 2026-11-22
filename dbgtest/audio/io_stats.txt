@@ -1,0 +1,81 @@
+# GPCE4 DAC / PPAM write statistics (docs/AUDIO.md)
+emulated_cycles = 1920002693
+emulated_seconds = 20.000
+
+0x3040 DAC_Ctrl
+  writes      = 0
+  writes_per_s = 0.0
+
+0x3041 DAC_CH1_Data
+  writes      = 0
+  writes_per_s = 0.0
+
+0x3042 DAC_CH2_Data
+  writes      = 0
+  writes_per_s = 0.0
+
+0x3043 PPAMCtrl
+  writes      = 0
+  writes_per_s = 0.0
+
+0x3041 inter-write spacing (CPU cycles, 96 MHz)
+  samples     = 0 (fewer than two writes)
+
+0x3041 writes per emulated second
+  (none)
+
+IO writes by offset (0x3000+ofs), 583066 total, 39 distinct
+  ofs  register               writes    last value
+  0092 SPI2_TXData            x526093      4cab
+  0054 INT2_Status            x41236       0005
+  0005 IOB_Buffer             x10273       1c03
+  00e2 SPI_TXData             x1767        0014
+  0034 Watchdog_Clear         x1267        5555
+  0001 IOA_Buffer             x561         ffff
+  00e0 SPI_Ctrl               x449         d401
+  00e1 SPI_TXStatus           x226         8000
+  00e3 SPI_RXStatus           x226         8000
+  00e7 SPI_Auto_Ctrl          x223         03eb
+  0016 Timer_Ctrl             x145         0fff
+  0071 ADC_Data               x96          0001
+  0002 IOA_Direction          x83          be05
+  0003 IOA_Attribute          x83          fd25
+  000f IO_Ctrl                x77          0000
+  0020 PWM0_Ctrl              x76          0000
+  0012 TimerB_Data            x71          e99a
+  0013 TimerB_Counter         x71          e99a
+  0006 IOB_Direction          x8           7e23
+  0007 IOB_Attribute          x7           fe77
+  0072 ADC_LineIn             x4           0040
+  0010 TimerA_Data            x2           f9c0
+  0011 TimerA_Counter         x2           f9c0
+  0033 Timebase_Clear         x2           5555
+  0039 Cache_Ctrl             x2           0001
+  0053 INT2_Ctrl              x2           0205
+  0070 ADC_Ctrl               x2           1cb4
+  0009 IOC_Buffer             x1           0000
+  000a IOC_Direction          x1           f0ff
+  000b IOC_Attribute          x1           f0ff
+  0022 PWM2_Ctrl              x1           0153
+  0030 System_Clock           x1           80d0
+  0035 Wait_Ctrl              x1           0003
+  0050 INT_Ctrl               x1           0000
+  0051 INT_Status             x1           ffff
+  0090 SPI2_Ctrl              x1           8800
+  0091 SPI2_TXStatus          x1           8000
+  0093 SPI2_RXStatus          x1           8000
+  00e5 SPI_MISC               x1           0004
+
+interrupt state at end of run
+  INT_Ctrl    = 0000 (bit15 timer_a/20 kHz masked, bit13 timer_c masked)
+  INT2_Ctrl   = 0205
+  INT_Status  = a1000000
+  unmapped writes = 0 distinct address(es)
+
+audio model
+  frames      = 960001 (20.000 s at 48 kHz)
+  nonzero     = 0 (0.0% of frames)
+  peak        = 0 (0.00% of full scale)
+  rms         = 0.0 (0.00% of full scale)
+  overruns    = 894465, underruns = 0
+  wav_open    = yes

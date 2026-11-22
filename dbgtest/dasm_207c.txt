@@ -1,0 +1,59 @@
+207CA3: 9606      r3 = [bp+06]
+207CA4: 9802      r4 = [bp+02]
+207CA5: 4704      cmp r3, r4
+207CA6: 1E1E      jae 207cc5
+207CA7: 9607      r3 = [bp+07]
+207CA8: 9808      r4 = [bp+08]
+207CA9: F02C      ds = r4
+207CAA: 98E3      r4 = ds:[r3]
+207CAB: D809      [bp+09] = r4
+207CAC: 9809      r4 = [bp+09]
+207CAD: 490C 07E0 cmp r4, 07e0
+207CAF: 5E0B      je 207cbb
+207CB0: 9806      r4 = [bp+06]
+207CB1: 0804      r4 += [bp+04]
+207CB2: 9640      r3 = 00
+207CB3: 9309 07BA r1 = 07ba
+207CB5: 9440      r2 = 00
+207CB6: 0901      r4 += r1
+207CB7: 1702      r3 += r2, carry
+207CB8: F02B      ds = r3
+207CB9: 9609      r3 = [bp+09]
+207CBA: D6E4      ds:[r4] = r3
+207CBB: 9607      r3 = [bp+07]
+207CBC: 9808      r4 = [bp+08]
+207CBD: 0641      r3 += 01
+207CBE: 1840      r4 += 00, carry
+207CBF: D607      [bp+07] = r3
+207CC0: D808      [bp+08] = r4
+207CC1: 9806      r4 = [bp+06]
+207CC2: 0841      r4 += 01
+207CC3: D806      [bp+06] = r4
+207CC4: EE62      jmp 207ca3
+207CC5: FEA0 7D10 goto 207d10
+207CC7: 990C 0608 r4 = 0608
+207CC9: D83A      [bp+3a] = r4
+207CCA: 9840      r4 = 00
+207CCB: D83B      [bp+3b] = r4
+207CCC: 9801      r4 = [bp+01]
+207CCD: 9640      r3 = 00
+207CCE: D688      push r3, r3 to [sp]
+207CCF: D888      push r4, r4 to [sp]
+207CD0: 964C      r3 = 0c
+207CD1: 9840      r4 = 00
+207CD2: D890      push r3, r4 to [sp]
+207CD3: F040 5F8B call 005f8b
+207CD5: 0044      sp += 04
+207CD6: 963A      r3 = [bp+3a]
+207CD7: 983B      r4 = [bp+3b]
+207CD8: 0303      r1 += r3
+207CD9: 1504      r2 += r4, carry
+207CDA: 0244      r1 += 04
+207CDB: 1440      r2 += 00, carry
+207CDC: F02A      ds = r2
+207CDD: 96E1      r3 = ds:[r1]
+207CDE: 2641      r3 -= 01
+207CDF: 9840      r4 = 00
+207CE0: 0607      r3 += [bp+07]
+207CE1: 1808      r4 += [bp+08], carry
+207CE2: D607      [bp+07] = r3

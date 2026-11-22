@@ -1,0 +1,194 @@
+// MAME unSP device classes, reduced to plain C++ so the original ISA
+// implementations (ref/unsp/unsp_{other,fxxx,exxx,extended,jumps}.cpp) compile
+// verbatim. Device/DRC/disassembler machinery is replaced by a bus callback and
+// a small execution harness in emu/unsp_glue.cpp.
+#pragma once
+
+#include "emu.h"
+
+#define UNSP_LPC            (((m_core->m_r[REG_SR] & 0x3f) << 16) | m_core->m_r[REG_PC])
+#define UNSP_LREG_I(reg)    (((m_core->m_r[REG_SR] << 6) & 0x3f0000) | m_core->m_r[reg])
+
+#define UNSP_N  0x0200
+#define UNSP_Z  0x0100
+#define UNSP_S  0x0080
+#define UNSP_C  0x0040
+
+#define UNSP_N_SHIFT    9
+#define UNSP_Z_SHIFT    8
+#define UNSP_S_SHIFT    7
+#define UNSP_C_SHIFT    6
+
+enum
+{
+	UNSP_FIQ_LINE = 0,
+	UNSP_IRQ0_LINE,
+	UNSP_IRQ1_LINE,
+	UNSP_IRQ2_LINE,
+	UNSP_IRQ3_LINE,
+	UNSP_IRQ4_LINE,
+	UNSP_IRQ5_LINE,
+	UNSP_IRQ6_LINE,
+	UNSP_IRQ7_LINE,
+	UNSP_BRK_LINE,
+
+	UNSP_NUM_LINES
+};
+
+// word-addressed buses seen by the CPU core
+struct UnspBus
+{
+	virtual ~UnspBus() {}
+	virtual uint16_t read16(uint32_t address) = 0;
+	virtual void write16(uint32_t address, uint16_t data) = 0;
+};
+
+class unsp_device
+{
+public:
+	enum : uint32_t
+	{
+		REG_SP = 0,
+		REG_R1,
+		REG_R2,
+		REG_R3,
+		REG_R4,
+		REG_BP,
+		REG_SR,
+		REG_PC,
+
+		REG_SR1 = 0,
+		REG_SR2,
+		REG_SR3,
+		REG_SR4
+	};
+
+	struct internal_unsp_state
+	{
+		uint32_t m_r[16]; // 32 bits because the original core allows 32-bit regs
+		uint32_t m_secbank[4];
+		uint32_t m_enable_irq;
+		uint32_t m_enable_fiq;
+		uint32_t m_fir_move;
+		uint32_t m_fiq;
+		uint32_t m_irq;
+		uint32_t m_sirq;
+		uint32_t m_sb;
+		uint32_t m_aq;
+		uint32_t m_fra;
+		uint32_t m_bnk;
+		uint32_t m_ine;
+		uint32_t m_pri;
+
+		uint32_t m_divq_bit;
+		uint32_t m_divq_dividend;
+		uint32_t m_divq_divisor;
+		uint32_t m_divq_a;
+
+		uint32_t m_arg0;
+		uint32_t m_arg1;
+		uint32_t m_jmpdest;
+
+		int m_icount;
+	};
+
+	internal_unsp_state *m_core;
+	int m_iso;
+	internal_unsp_state m_local_core;
+
+	UnspBus *m_bus;
+
+	uint16_t m_vectorbase;
+
+	// coverage / debugging hooks (set by the harness, may be null)
+	void (*m_insn_hook)(void *opaque, uint32_t lpc) = nullptr;
+	void *m_insn_hook_opaque = nullptr;
+	// Optional per-instruction cycle report: fired after each instruction with
+	// the number of cycles the instruction charged.  Used to diff the cycle
+	// model against MAME's trace.
+	void (*m_cycle_hook)(void *opaque, uint32_t lpc, int cycles) = nullptr;
+	void *m_cycle_hook_opaque = nullptr;
+
+	unsp_device() : m_core(&m_local_core), m_iso(20), m_bus(nullptr), m_vectorbase(0) { reset_state(); }
+
+	virtual ~unsp_device() {}
+
+	void reset_state()
+	{
+		std::memset(&m_local_core, 0, sizeof(m_local_core));
+		m_local_core.m_sb = 0;
+		m_local_core.m_icount = 0;
+	}
+
+	uint16_t read16(uint32_t address) { return m_bus->read16(address); }
+	void write16(uint32_t address, uint16_t data) { m_bus->write16(address, data); }
+
+	void add_lpc(const int32_t offset)
+	{
+		const uint32_t new_lpc = UNSP_LPC + offset;
+		m_core->m_r[REG_PC] = (uint16_t)new_lpc;
+		m_core->m_r[REG_SR] &= 0xffc0;
+		m_core->m_r[REG_SR] |= (new_lpc >> 16) & 0x3f;
+	}
+
+	// ---- implemented in unsp_glue.cpp ----
+	void execute_run();
+	void execute_set_input(int inputnum, int state);
+	void set_state_unsynced(int inputnum, int state);
+	void set_ds(uint16_t ds);
+	uint16_t get_ds();
+	void set_fr(uint16_t fr);
+	uint16_t get_fr();
+	void push(uint32_t value, uint32_t *reg);
+	uint16_t pop(uint32_t *reg);
+	void update_nz(uint32_t value);
+	void update_nzsc(uint32_t value, uint16_t r0, uint16_t r1);
+	void unimplemented_opcode(uint16_t op);
+	void unimplemented_opcode(uint16_t op, uint16_t ximm);
+	void unimplemented_opcode(uint16_t op, uint16_t ximm, uint16_t ximm_2);
+	void check_irqs();
+	void trigger_fiq();
+	void trigger_irq(int line);
+
+	// ---- implemented in ref/unsp/*.cpp ----
+	void execute_one(const uint16_t op);
+	void execute_jumps(const uint16_t op);
+	void execute_remaining(const uint16_t op);
+	void execute_fxxx_000_group(uint16_t op);
+	void execute_fxxx_001_group(uint16_t op);
+	void execute_fxxx_010_group(uint16_t op);
+	void execute_fxxx_011_group(uint16_t op);
+	virtual void execute_fxxx_101_group(uint16_t op);
+	void execute_fxxx_110_group(uint16_t op);
+	void execute_fxxx_111_group(uint16_t op);
+	void execute_fxxx_group(uint16_t op);
+	void execute_fxxx_100_group(uint16_t op);
+	virtual void execute_extended_group(uint16_t op);
+	virtual void execute_exxx_group(uint16_t op);
+	void execute_muls_ss(const uint16_t rd, const uint16_t rs, const uint16_t size);
+	bool do_basic_alu_ops(const uint16_t &op0, uint32_t &lres, uint16_t &r0, uint16_t &r1, uint32_t &r2, bool update_flags);
+	virtual bool op_is_divq(const uint16_t op) { return false; }
+};
+
+class unsp_11_device : public unsp_device
+{
+public:
+	unsp_11_device() { m_iso = 11; }
+};
+
+class unsp_12_device : public unsp_11_device
+{
+public:
+	unsp_12_device() { m_iso = 12; }
+	virtual void execute_fxxx_101_group(uint16_t op) override;
+	virtual void execute_exxx_group(uint16_t op) override;
+	void execute_divq(uint16_t op);
+	bool op_is_divq(const uint16_t op) override;
+};
+
+class unsp_20_device : public unsp_12_device
+{
+public:
+	unsp_20_device() { m_iso = 20; }
+	virtual void execute_extended_group(uint16_t op) override;
+};

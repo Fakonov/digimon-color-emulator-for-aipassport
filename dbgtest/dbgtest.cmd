@@ -1,0 +1,2 @@
+help trace
+quit

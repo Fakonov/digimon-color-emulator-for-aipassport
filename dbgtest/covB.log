@@ -1,0 +1,22 @@
+press B1 @F120
+press B2 @F300
+press B1 @F480
+F0600 PC=200341
+press B3 @F660
+press B1 @F840
+press B1 @F1200
+F1200 PC=230326
+press B1 @F1560
+press B2 @F1740
+F1800 PC=200328
+press B1 @F1920
+press B3 @F2100
+press B1 @F2280
+F2400 PC=200327
+press B1 @F2640
+press B1 @F3000
+F3000 PC=20032E
+press B2 @F3180
+press B1 @F3360
+F3600 PC=20033D
+Average speed: 18.09% (55 seconds)

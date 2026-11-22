@@ -1,0 +1,56 @@
+# ---- 构建产物 ----
+build/
+firmware/*/build/
+emu/build/
+*.exe
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.elf
+*.map
+
+# ---- 录屏 / 音频 / 图像帧 ----
+*.avi
+*.mp4
+*.wav
+*.tr
+/*.png
+*_frames/
+
+# ---- 固件镜像 ----
+*.bin
+
+# ---- 由 tools/aot.py 生成的副本（真源是 emu/aot_blocks.c）----
+firmware/*/main/emu/aot_blocks.c
+
+# ---- dbgtest：只留小日志，丢掉转储与生成的 C ----
+dbgtest/cyc*.txt
+dbgtest/cov/
+dbgtest/**/*.bin
+dbgtest/**/*.tr
+dbgtest/**/*.c
+dbgtest/*.ram
+
+# ---- ROM：分析输入，不可再生，不进库（校验见 roms/SHA256SUMS.txt）----
+roms/*.bin
+nvram/
+saves/
+
+# ---- 参考资料：大体积 PDF/HTML 快照 ----
+ref/*.pdf
+ref/*.html
+ref/*.bin
+ref/*.png
+
+# ---- 构建日志噪音 ----
+docs/build_*.log
+
+# ---- 整片备份 ----
+docs/backup/
+
+# ---- 临时目录 ----
+tmp/
+tmp_asset_probe/
+tmp_penc_test/

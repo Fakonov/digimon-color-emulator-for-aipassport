@@ -1,0 +1,28 @@
+CONFIG_IDF_TARGET="esp32c3"
+# UART0 primary + USB-Serial-JTAG secondary: same log on the bench UART and COM4.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=y
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+# QIO: the XMC 8 MB part supports it, and XIP instruction fetch shares this SPI
+# controller.  DIO spends four transfers per 32-bit word where QIO needs two, so
+# every ICache line fill costs twice as long in DIO.
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_ESP_TASK_WDT_EN=n
+CONFIG_FREERTOS_HZ=1000
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+# The preview task uses the main task; leave room for zlib state and logs.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# ---- digicore-c3 ----------------------------------------------------------
+# Custom partition table: nvs / phy / factory (2 MiB) / roms (6 MiB sparse ROM).
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# The interpreter loop runs ~0.2 s at a time inside one task; the task WDT is
+# already off above.  Keep the ROM page cache statistics available at DEBUG.
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+CONFIG_COMPILER_LTO=y
+
+CONFIG_ESP_CONSOLE_UART_TX_BUF=2048

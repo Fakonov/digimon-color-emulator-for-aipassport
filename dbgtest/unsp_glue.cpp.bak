@@ -1,0 +1,642 @@
+// unSP execution harness: the parts of MAME's unsp.cpp that are not ISA
+// decoding (flags, stack, FR/DS registers, interrupt entry) plus the run loop.
+// Semantics copied 1:1 from ref/unsp/unsp.cpp (MAME 0.289).
+#include "unsp.h"
+#include "hotblock.h"
+#include <cstdio>
+#include <utility>
+
+void unsp_device::unimplemented_opcode(uint16_t op)
+{
+	std::printf("unsp: unimplemented %04X at %06X\n", op, UNSP_LPC);
+}
+
+void unsp_device::unimplemented_opcode(uint16_t op, uint16_t x)
+{
+	std::printf("unsp: unimplemented %04X %04X at %06X\n", op, x, UNSP_LPC);
+}
+
+void unsp_device::unimplemented_opcode(uint16_t op, uint16_t x, uint16_t y)
+{
+	std::printf("unsp: unimplemented %04X %04X %04X at %06X\n", op, x, y, UNSP_LPC);
+}
+
+void unsp_device::update_nzsc(uint32_t value, uint16_t r0, uint16_t r1)
+{
+	m_core->m_r[REG_SR] &= ~(UNSP_N | UNSP_Z | UNSP_S | UNSP_C);
+	if (BIT(value, 16) != BIT((r0 ^ r1), 15))
+		m_core->m_r[REG_SR] |= UNSP_S;
+	if (BIT(value, 15))
+		m_core->m_r[REG_SR] |= UNSP_N;
+	if ((uint16_t)value == 0)
+		m_core->m_r[REG_SR] |= UNSP_Z;
+	if (BIT(value, 16))
+		m_core->m_r[REG_SR] |= UNSP_C;
+}
+
+void unsp_device::update_nz(uint32_t value)
+{
+	m_core->m_r[REG_SR] &= ~(UNSP_N | UNSP_Z);
+	if (value & 0x8000)
+		m_core->m_r[REG_SR] |= UNSP_N;
+	if ((uint16_t)value == 0)
+		m_core->m_r[REG_SR] |= UNSP_Z;
+}
+
+void unsp_device::push(uint32_t value, uint32_t *reg)
+{
+	write16(*reg, (uint16_t)value);
+	*reg = (uint16_t)(*reg - 1);
+}
+
+uint16_t unsp_device::pop(uint32_t *reg)
+{
+	*reg = (uint16_t)(*reg + 1);
+	return (uint16_t)read16(*reg);
+}
+
+void unsp_device::trigger_fiq()
+{
+	if (!m_core->m_enable_fiq || m_core->m_fiq)
+		return;
+
+	m_core->m_fiq = 1;
+
+	push(m_core->m_r[REG_PC], &m_core->m_r[REG_SP]);
+	push(m_core->m_r[REG_SR], &m_core->m_r[REG_SP]);
+	m_core->m_r[REG_PC] = read16(m_vectorbase + 0x06);
+	m_core->m_r[REG_SR] = 0;
+}
+
+void unsp_device::trigger_irq(int line)
+{
+	if ((m_core->m_ine == 0 && m_core->m_irq == 1) || m_core->m_pri <= line || !m_core->m_enable_irq)
+		return;
+
+	m_core->m_irq = 1;
+
+	push(m_core->m_r[REG_PC], &m_core->m_r[REG_SP]);
+	push(m_core->m_r[REG_SR], &m_core->m_r[REG_SP]);
+	if (m_core->m_ine)
+	{
+		push(get_fr(), &m_core->m_r[REG_SP]);
+	}
+
+	if (m_core->m_ine)
+		m_core->m_pri = line;
+
+	m_core->m_r[REG_PC] = read16(m_vectorbase + 0x08 + line);
+	m_core->m_r[REG_SR] = 0;
+}
+
+void unsp_device::check_irqs()
+{
+	if (!m_core->m_sirq)
+		return;
+
+	int highest_irq = -1;
+	for (int i = 0; i <= 8; i++)
+	{
+		if (BIT(m_core->m_sirq, i))
+		{
+			highest_irq = i;
+			break;
+		}
+	}
+	if (highest_irq < 0)
+		return;
+
+	if (highest_irq == UNSP_FIQ_LINE)
+		trigger_fiq();
+	else
+		trigger_irq(highest_irq - 1);
+}
+
+void unsp_device::execute_set_input(int inputnum, int state)
+{
+	set_state_unsynced(inputnum, state);
+}
+
+void unsp_device::set_state_unsynced(int inputnum, int state)
+{
+	m_core->m_sirq &= ~(1 << inputnum);
+
+	if (!state)
+		return;
+
+	switch (inputnum)
+	{
+		case UNSP_IRQ0_LINE:
+		case UNSP_IRQ1_LINE:
+		case UNSP_IRQ2_LINE:
+		case UNSP_IRQ3_LINE:
+		case UNSP_IRQ4_LINE:
+		case UNSP_IRQ5_LINE:
+		case UNSP_IRQ6_LINE:
+		case UNSP_IRQ7_LINE:
+		case UNSP_FIQ_LINE:
+			m_core->m_sirq |= (1 << inputnum);
+			break;
+		case UNSP_BRK_LINE:
+			break;
+	}
+}
+
+uint16_t unsp_device::get_ds()
+{
+	return (m_core->m_r[REG_SR] >> 10) & 0x3f;
+}
+
+void unsp_device::set_ds(uint16_t ds)
+{
+	m_core->m_r[REG_SR] &= 0x03ff;
+	m_core->m_r[REG_SR] |= (ds & 0x3f) << 10;
+}
+
+void unsp_device::set_fr(uint16_t fr)
+{
+	m_core->m_aq = BIT(fr, 14);
+	const uint32_t old_bank = m_core->m_bnk;
+	m_core->m_bnk = BIT(fr, 13);
+	if (m_core->m_bnk != old_bank)
+	{
+		std::swap<uint32_t>(m_core->m_r[REG_R1], m_core->m_secbank[REG_SR1]);
+		std::swap<uint32_t>(m_core->m_r[REG_R2], m_core->m_secbank[REG_SR2]);
+		std::swap<uint32_t>(m_core->m_r[REG_R3], m_core->m_secbank[REG_SR3]);
+		std::swap<uint32_t>(m_core->m_r[REG_R4], m_core->m_secbank[REG_SR4]);
+	}
+	m_core->m_fra = BIT(fr, 12);
+	m_core->m_fir_move = BIT(fr, 11);
+	m_core->m_sb = (fr >> 7) & 0xf;
+	m_core->m_enable_fiq = BIT(fr, 6);
+	m_core->m_enable_irq = BIT(fr, 5);
+	m_core->m_ine = BIT(fr, 4);
+	m_core->m_pri = fr & 0xf;
+}
+
+uint16_t unsp_device::get_fr()
+{
+	uint16_t fr = m_core->m_aq << 14;
+	fr |= m_core->m_bnk << 13;
+	fr |= m_core->m_fra << 12;
+	fr |= m_core->m_fir_move << 11;
+	fr |= m_core->m_sb << 7;
+	fr |= m_core->m_enable_fiq << 6;
+	fr |= m_core->m_enable_irq << 5;
+	fr |= m_core->m_ine << 4;
+	fr |= m_core->m_pri;
+	return fr;
+}
+
+void unsp_device::execute_one(const uint16_t op)
+{
+	const uint16_t op0 = (op >> 12) & 15;
+	const uint16_t opa = (op >> 9) & 7;
+	const uint16_t op1 = (op >> 6) & 7;
+
+	if (op0 == 0xf)
+		return execute_fxxx_group(op);
+
+	if (op0 < 0xf && opa == 0x7 && op1 < 2)
+		return execute_jumps(op);
+
+	if (op0 == 0xe)
+		return execute_exxx_group(op);
+
+	execute_remaining(op);
+}
+
+bool unsp_device::spin_collapse(const uint32_t lpc)
+{
+	// The game spends most of its time in three countdown loops whose only
+	// observable effect is that time passes:
+	//
+	//   0x5F35  r1 -= 01 / cmp r1, 00 / jne 5f35                8 cycles per pass
+	//   0x5251  r4 = [bp+0] / cmp r4, 3e7 / ja 525a / nop /
+	//           r4 = [bp+0] / r4 += 01 / [bp+0] = r4 / jmp 5251  33 cycles per pass
+	//   0x5376  same shape, exit 537f                           33 cycles per pass
+	//
+	// We retire as many passes as the current slice allows, charge the exact
+	// cycle count and leave at least one pass to the interpreter, so flags and
+	// the exit path stay byte-for-byte what the slow path produces.  The slice
+	// itself ends on the next timer event, so interrupt latency is unchanged.
+	internal_unsp_state *const core = m_core;
+	int per_pass;
+	int64_t passes;
+	uint32_t *counter = nullptr;
+
+	if (lpc == 0x005F35)
+	{
+		per_pass = 8;
+		passes = core->m_r[1];                     // r1 counts down to zero
+		counter = &core->m_r[1];
+	}
+	else if (lpc == 0x005251 || lpc == 0x005376)
+	{
+		per_pass = 33;
+		const uint32_t addr = (uint16_t)(core->m_r[REG_BP] + 0);
+		const uint16_t value = read16(addr);        // [bp+0]
+		if (value > 0x03e7)
+			return false;                       // loop already finished
+		passes = 0x03e7 - value;                    // last pass stays interpreted
+		counter = nullptr;
+		if (passes > 0 && core->m_icount >= per_pass)
+		{
+			int64_t k = core->m_icount / per_pass;
+			if (k > passes) k = passes;
+			if (k > 0)
+			{
+				write16(addr, (uint16_t)(value + k));
+				core->m_icount -= (int)(k * per_pass);
+				return true;
+			}
+		}
+		return false;
+	}
+	else
+	{
+		return false;
+	}
+
+	if (passes <= 1 || core->m_icount < per_pass)
+		return false;
+
+	int64_t k = core->m_icount / per_pass;
+	if (k > passes - 1) k = passes - 1;              // keep one pass for the interpreter
+	if (k <= 0)
+		return false;
+
+	*counter = (uint16_t)(*counter - k);
+	core->m_icount -= (int)(k * per_pass);
+	return true;
+}
+
+// Single-instruction fast path.
+//
+// The interpreter's dispatch chain (execute_one -> execute_remaining ->
+// do_basic_alu_ops with reference arguments) costs far more than the work
+// itself, and the game's instruction mix is dominated by a handful of forms:
+// "rX, imm6" loads/ALU, "rX, [bp+imm6]" loads/stores and the conditional
+// jumps.  This decodes those forms directly, with the exact semantics and
+// cycle costs of ref/unsp/unsp_other.cpp / unsp_jumps.cpp (flags included),
+// and leaves everything else to execute_one().  Correctness is checked by the
+// trace comparison against MAME (tools/emu_validate.py).
+unsigned long long g_fast_calls = 0, g_fast_hits = 0;
+int g_verify = 0;
+int g_verify_fail = 0;
+
+bool unsp_device::fast_step(uint16_t op)
+{
+	++g_fast_calls;
+	internal_unsp_state *const core = m_core;
+	const uint16_t op0 = (op >> 12) & 15;
+	const uint16_t opa = (op >> 9) & 7;
+	const uint16_t op1 = (op >> 6) & 7;
+
+	// 0x0e (exxx) and 0x0f (fxxx) are separate decode groups in execute_one();
+	// their instructions reuse the op1 field, so they must never fall into the
+	// generic forms below.
+	const bool generic = (op0 != 0x0e && op0 != 0x0f);
+
+	// When opa == 7 the opcode is a jump, not an ALU form (execute_one checks
+	// the jump group first), so those must stay with execute_jumps().
+	if (generic && op1 == 0x01 && opa != 7)
+	{
+		// rX, imm6 -- always 2 cycles; opa == 7 means "no destination".
+		const uint16_t imm = op & 0x3f;
+		const uint16_t r0 = (uint16_t)core->m_r[opa];
+		const bool upd = (opa != 7);
+		uint32_t lres;
+
+		switch (op0)
+		{
+		case 0x09: // load
+			core->m_icount -= 2;
+			if (upd)
+				update_nz(imm);
+			core->m_r[opa] = imm;
+			return true;
+		case 0x00: // add
+			lres = r0 + imm;
+			if (upd)
+				update_nzsc(lres, r0, imm);
+			core->m_r[opa] = (uint16_t)lres;
+			core->m_icount -= 2;
+			return true;
+		case 0x02: // sub
+			lres = r0 + (uint16_t)~imm + 1;
+			if (upd)
+				update_nzsc(lres, r0, (uint16_t)~imm);
+			core->m_r[opa] = (uint16_t)lres;
+			core->m_icount -= 2;
+			return true;
+		case 0x04: // cmp
+			lres = r0 + (uint16_t)~imm + 1;
+			if (upd)
+				update_nzsc(lres, r0, (uint16_t)~imm);
+			core->m_icount -= 2;
+			return true;
+		case 0x0b: // and
+			lres = r0 & imm;
+			if (upd)
+				update_nz(lres);
+			core->m_r[opa] = (uint16_t)lres;
+			core->m_icount -= 2;
+			return true;
+		case 0x0a: // or
+			lres = r0 | imm;
+			if (upd)
+				update_nz(lres);
+			core->m_r[opa] = (uint16_t)lres;
+			core->m_icount -= 2;
+			return true;
+		case 0x08: // xor
+			lres = r0 ^ imm;
+			if (upd)
+				update_nz(lres);
+			core->m_r[opa] = (uint16_t)lres;
+			core->m_icount -= 2;
+			return true;
+		default:
+			break;
+		}
+		return false;
+	}
+
+	if (generic && op1 == 0x00 && opa != 7 && (op0 == 0x09 || op0 == 0x0d))
+	{
+		// rX, [bp+imm6] / [bp+imm6], rX -- 6 cycles.
+		const uint32_t addr = (uint16_t)(core->m_r[REG_BP] + (op & 0x3f));
+		core->m_icount -= 6;
+		if (op0 == 0x09)
+		{
+			const uint16_t value = read16(addr);
+			if (opa != 7)
+				update_nz(value);
+			core->m_r[opa] = value;
+		}
+		else
+		{
+			write16(addr, (uint16_t)core->m_r[opa]);
+		}
+		return true;
+	}
+
+	if (generic && opa == 7 && op1 < 2)
+	{
+		// Conditional jumps and JMP; offset is +imm6 forwards, -imm6 backwards.
+		const uint32_t opimm = op & 0x3f;
+		// add_lpc() takes a signed offset: backwards jumps must stay negative.
+		const int32_t offset = (op1 == 0) ? (int32_t)opimm : -(int32_t)opimm;
+		const uint16_t sr = (uint16_t)core->m_r[REG_SR];
+		bool taken;
+
+		switch (op0)
+		{
+		case 0: // jb
+			taken = (sr & UNSP_C) == 0;
+			break;
+		case 4: // jne
+			taken = (sr & UNSP_Z) == 0;
+			break;
+		case 5: // je
+			taken = (sr & UNSP_Z) != 0;
+			break;
+		case 9: // ja
+			taken = (sr & (UNSP_Z | UNSP_C)) == UNSP_C;
+			break;
+		case 14: // jmp
+			add_lpc(offset);
+			core->m_icount -= 4;
+			return true;
+		default:
+			return false;
+		}
+
+		if (taken)
+			add_lpc(offset);
+		core->m_icount -= taken ? 4 : 2;
+		return true;
+	}
+
+	return false;
+}
+
+// Collapse the "wait for the next 64 Hz tick" busy-wait at 0x230321.
+//
+// The loop calls the PRNG block (already native) and then re-reads the tick
+// counter at 0x0850 until it changes.  Inside a slice with no pending
+// interrupt that counter cannot change, so the whole wait can be retired here
+// at ~1/20 of the interpreter's cost, with identical final state.
+// Set PC exactly like add_lpc() does: the low 16 bits live in REG_PC, the
+// upper 6 address bits live in SR[0..5].  Writing only REG_PC leaves a stale
+// LPC high half behind and the next fetch lands in the wrong flash page.
+inline void unsp_device::set_pc_lpc(uint32_t address)
+{
+	m_core->m_r[REG_SR] = (uint16_t)((m_core->m_r[REG_SR] & 0xffc0) | ((address >> 16) & 0x3f));
+	m_core->m_r[REG_PC] = (uint16_t)address;
+}
+
+bool unsp_device::wait_loop_collapse(uint32_t lpc)
+{
+	if (!m_fastwait || lpc != 0x230321u)
+		return false;
+
+	internal_unsp_state *const core = m_core;
+	const uint32_t budget = (uint32_t)(core->m_icount > 0 ? core->m_icount : 0);
+
+	// 298 cycles per pass (measured per-instruction modal charges).
+	constexpr uint32_t CYCLES_PER_PASS = 298;
+	// Two passes minimum: retiring a single pass costs about as much as letting
+	// the interpreter finish a short slice, and a forced pass with an exhausted
+	// budget was measured to stall the tick counter (the guest never leaves the
+	// loop).  Short slices stay with the interpreter.
+	if (budget < CYCLES_PER_PASS * 2)
+		return false;
+
+	uint32_t passes = budget / CYCLES_PER_PASS;
+	if (passes > 4096) passes = 4096;          // bounded work per call
+
+	// The call and its matching return retire each other: SP is unchanged and
+	// the pushed words are dead the moment the callee returns, so the pass runs
+	// without touching the stack for them (only the callee's push bp / pop bp
+	// pair below actually moves SP, and it balances too).
+
+	HotState hs;
+	uint32_t done = 0;
+	while (done < passes)
+	{
+		for (int i = 0; i < 8; i++) hs.r[i] = core->m_r[i];
+		hs.sb = (uint16_t)core->m_sb;
+		hs.ram = m_ram;
+		hot_block_prng(&hs);
+		for (int i = 0; i < 8; i++) core->m_r[i] = hs.r[i];
+		core->m_sb = hs.sb;
+
+		// 0x200343 pop bp, pc.  The call's own push of the return address is not
+		// emulated (it retires inside this pass), so only the callee's saved BP
+		// comes back off the stack; PC is the known return address.
+		core->m_r[REG_SP] = (uint16_t)(core->m_r[REG_SP] + 1);
+		core->m_r[REG_BP] = read16(core->m_r[REG_SP]);
+		set_pc_lpc(0x230323u);
+
+		// ds = 00                    (no cycles, no flags)
+		set_ds(0);
+
+		// r4 = 0850                  (ld imm16: N/Z from the loaded value)
+		core->m_r[4] = 0x0850;
+		update_nz(0x0850);
+
+		// r4 = ds:[r4]               (ld indirect: N/Z from the loaded word)
+		{
+			const uint16_t value = read16((uint16_t)(UNSP_LREG_I(4)));
+			update_nz(value);
+			core->m_r[4] = value;
+		}
+
+		// cmp r4, 00                 (r0 - 0, all four flags)
+		{
+			const uint16_t r0 = (uint16_t)core->m_r[4];
+			const uint32_t lres = r0 + (uint16_t)~0u + 1u;
+			update_nzsc(lres, r0, (uint16_t)~0u);
+		}
+
+		++done;
+
+		if (core->m_sirq)
+			break;                          // an interrupt is due: hand back
+
+		if ((core->m_r[REG_SR] & UNSP_Z) == 0)
+		{
+			// je not taken: fall through to 0x230329 and stop collapsing.
+			set_pc_lpc(0x230329u);
+			core->m_icount -= (int)(done * CYCLES_PER_PASS - 2);
+			m_collapse_passes += done;
+			m_collapse_calls++;
+			return true;
+		}
+	}
+
+	set_pc_lpc(0x230321u);
+	core->m_icount -= (int)(done * CYCLES_PER_PASS);
+	m_collapse_passes += done;
+	m_collapse_calls++;
+	return true;
+}
+
+void unsp_device::execute_run()
+{
+	internal_unsp_state *const core = m_core;
+
+	if (m_insn_hook == nullptr && m_cycle_hook == nullptr)
+	{
+		// Hot path: no tracing, so the hooks are hoisted out of the loop and
+		// the interrupt check becomes a single flag test per instruction.
+		while (core->m_icount >= 0)
+		{
+			const uint32_t lpc = UNSP_LPC;
+			if (m_block_hist) m_block_hist[lpc & 0x3ffffu]++;
+			if (m_fasthot && lpc == 0x2002F4u)
+			{
+				// Statically recompiled PRNG step (0x2002F4..0x200342). This one
+				// block is ~87% of all executed instructions, and the generated
+				// code is the version that already matched the interpreter word
+				// for word in the on-device golden test (recomp/hot_func.c).
+				// The trailing "pop bp, pc" at 0x200343 stays with the
+				// interpreter so the return path keeps its exact semantics.
+				HotState hs;
+				for (int i = 0; i < 8; i++)
+					hs.r[i] = core->m_r[i];
+				hs.sb = (uint16_t)core->m_sb;
+				hs.ram = m_ram;
+				hot_block_prng(&hs);
+				for (int i = 0; i < 8; i++)
+					core->m_r[i] = hs.r[i];
+				core->m_sb = hs.sb;
+				core->m_r[REG_PC] = 0x200343u;
+				core->m_icount -= (int)HOT_BLOCK_CYCLES;
+				if (core->m_sirq)
+					check_irqs();
+				continue;
+			}
+			if (wait_loop_collapse(lpc))
+			{
+				if (core->m_sirq)
+					check_irqs();
+				continue;
+			}
+			if (m_fastspin && spin_collapse(lpc))
+			{
+				if (core->m_sirq)
+					check_irqs();
+				continue;
+			}
+			const uint16_t op = fetch16(lpc);
+			add_lpc(1);
+			if (g_verify)
+			{
+				internal_unsp_state save = *core;
+				const bool hit = fast_step(op);
+				if (hit)
+				{
+					uint32_t fast_regs[16];
+					for (int i = 0; i < 16; i++) fast_regs[i] = core->m_r[i];
+					const uint16_t fast_sb = (uint16_t)core->m_sb;
+					const int fast_ic = core->m_icount;
+					*core = save;
+					execute_one(op);
+					bool bad = false;
+					for (int i = 0; i < 16; i++)
+						if (fast_regs[i] != core->m_r[i]) bad = true;
+					if (fast_sb != (uint16_t)core->m_sb) bad = true;
+					if (fast_ic != core->m_icount) bad = true;
+					if (bad && g_verify_fail < 12)
+					{
+						++g_verify_fail;
+						std::printf("[verify] op=%04X lpc=%06X fast(pc=%04X sp=%04X sr=%04X ic=%d) ref(pc=%04X sp=%04X sr=%04X ic=%d)\n",
+							op, lpc, fast_regs[7], fast_regs[6], fast_regs[REG_SR], fast_ic,
+							core->m_r[7], core->m_r[6], core->m_r[REG_SR], core->m_icount);
+					}
+					continue;
+				}
+			}
+			if (m_fastops && (fast_step(op) ? (++g_fast_hits, true) : false))
+			{
+				if (core->m_sirq)
+					check_irqs();
+				continue;
+			}
+			execute_one(op);
+			if (op != 0x9a98 && core->m_sirq)
+				check_irqs();
+		}
+		return;
+	}
+
+	while (core->m_icount >= 0)
+	{
+		const uint32_t lpc = UNSP_LPC;
+		if (m_insn_hook)
+			m_insn_hook(m_insn_hook_opaque, lpc);
+		const uint32_t op = read16(lpc);
+		add_lpc(1);
+		if (m_cycle_hook)
+		{
+			// Measure the charge exactly: park the countdown far away so no
+			// instruction can observe a slice boundary, then restore it.
+			const int saved = core->m_icount;
+			constexpr int probe = 1 << 28;
+			core->m_icount = probe;
+			execute_one(op);
+			const int charged = probe - core->m_icount;
+			core->m_icount = saved - charged;
+			m_cycle_hook(m_cycle_hook_opaque, lpc, charged);
+		}
+		else
+		{
+			execute_one(op);
+		}
+		if (op != 0x9a98)
+			check_irqs();
+	}
+}

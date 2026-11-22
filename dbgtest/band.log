@@ -1,0 +1,57 @@
+I (133) esp_image: segment 1: paddr=00053028 vaddr=3fc97800 sizeI (279) esp_image: segment 4: paddr=001299ec vaddr=40389440 size=0e1f4h ( 57844) load
+I (290) esp_image: segment 5: paddr=00137be8 vaddr=50000000 size=00020h (    32) load
+I (297) boot: Loaded app from partition at offset 0x10000
+I (297) boot: Disabling RNG early entropy source...
+I (309) cpu_start: Unicore app
+I (317) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (317) cpu_start: Pro cpu start user code
+I (317) cpu_start: cpu freq: 160000000 Hz
+I (319) app_init: Application information:
+I (323) app_init: Project name:     digicore-c3
+I (327) app_init: App version:      1
+I (331) app_init: Compile time:     Nov 21 2026 21:11:21
+I (336) app_init: ELF file SHA256:  d31048d7b...
+I (340) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (345) efuse_init: Min chip rev:     v0.3
+I (349) efuse_init: Max chip rev:     v1.99 
+I (353) efuse_init: Chip rev:         v1.1
+I (357) heap_init: Initializing. RAM available for dynamic allocation:
+I (363) heap_init: At 3FCC7BF0 len 00014B20 (82 KiB): Retention RAM
+I (369) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (375) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (381) spi_flash: detected chip: generic
+I (384) spi_flash: flash io: dio
+I (387) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (393) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (400) main_task: Started on CPU0
+I (403) main_task: Calling app_main()
+I (406) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (413) DIGICORE: build Nov 21 2026 21:53:47, reset cause 11, heap 84308 B (largest block 65536 B)
+I (422) display: init ST7789P3 320x240
+I (556) display: ready, landscape 320x240, backlight off
+I (587) DIGICORE: panel cleared to black (320x240)
+I (608) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (610) ROMSTORE: sparse store mapped at 0x3c120000 (6080 KiB), direct read path on
+I (612) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (618) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (626) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (632) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+I (1199) DIGICORE: BOOT_OK first non-blank guest frame at 20 frames, pc=007ca3, display_on=1 sleep=0 madctl=00a8
+I (1648) DIGICORE: frames=34 guest_fps=33.72 mi_s=0.47 host_fps=33.72 pc=200343 sr=0020 sp=0ff5 insns=481 K cyc=54402 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=33 blit_pct=63 blitmax=3156 rows=7840 hot=0 tick_pct=0 slices=0 aotb=68633 aoti=449133 aotfb=1708 aotmiss=279 aotuniq=0 blits=245 collapse=68038 collcalls=479 stage=320/51466/1585 gmax=88103 smax=36 tmax=8787 kmax=382
+I (1724) DIGICORE: bench hotblock: 100000 calls in 53115 us -> 531 us/call, 84 cycles/call
+I (2001) DIGICORE: bench split: fetch 50 cycles, dispatch 170 cycles (sink 0)
+I (2648) DIGICORE: frames=60 guest_fps=26.00 mi_s=0.11 host_fps=26.00 pc=200343 sr=0020 sp=0ff5 insns=592 K cyc=96005 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=12 blit_pct=51 blitmax=2807 rows=5824 hot=0 tick_pct=0 slices=0 aotb=78833 aoti=496751 aotfb=2743 aotmiss=279 aotuniq=0 blits=182 collapse=138098 collcalls=962 stage=220/18338/1123 gmax=6251 smax=36 tmax=1817 kmax=383
+I (3668) DIGICORE: frames=100 guest_fps=39.21 mi_s=0.16 host_fps=39.21 pc=200343 sr=0020 sp=0ff5 insns=762 K cyc=160010 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=18 blit_pct=78 blitmax=2807 rows=8960 hot=0 tick_pct=0 slices=0 aotb=94490 aoti=569853 aotfb=4329 aotmiss=282 aotuniq=0 blits=280 collapse=212461 collcalls=1479 stage=340/28018/1767 gmax=6257 smax=36 tmax=2885 kmax=385
+I (4197) DIGICORE: clock seeded 21:53:47 from build time
+I (4683) DIGICORE: frames=140 guest_fps=39.40 mi_s=0.16 host_fps=39.40 pc=200343 sr=0020 sp=0ff5 insns=926 K cyc=224015 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=19 blit_pct=78 blitmax=3062 rows=8960 hot=0 tick_pct=0 slices=0 aotb=109769 aoti=636694 aotfb=5925 aotmiss=284 aotuniq=0 blits=280 collapse=212531 collcalls=1475 stage=368/27958/1708 gmax=6242 smax=36 tmax=1830 kmax=382
+I (5698) DIGICORE: frames=181 guest_fps=40.39 mi_s=0.15 host_fps=40.39 pc=200343 sr=0020 sp=0ff5 insns=1080 K cyc=289621 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=18 blit_pct=78 blitmax=3089 rows=9184 hot=0 tick_pct=0 slices=0 aotb=124553 aoti=691363 aotfb=7558 aotmiss=286 aotuniq=0 blits=287 collapse=217998 collcalls=1511 stage=370/27891/1630 gmax=6182 smax=36 tmax=2959 kmax=321
+I (6703) DIGICORE: frames=222 guest_fps=40.79 mi_s=0.15 host_fps=40.79 pc=200343 sr=0020 sp=0ff5 insns=1234 K cyc=355227 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=18 blit_pct=78 blitmax=3085 rows=9184 hot=0 tick_pct=0 slices=0 aotb=139254 aoti=745618 aotfb=9184 aotmiss=286 aotuniq=0 blits=287 collapse=218004 collcalls=1509 stage=370/27580/1670 gmax=6099 smax=36 tmax=3011 kmax=387
+I (7705) DIGICORE: frames=263 guest_fps=40.90 mi_s=0.15 host_fps=40.90 pc=200343 sr=0020 sp=0ff5 insns=1388 K cyc=420834 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=18 blit_pct=78 blitmax=3095 rows=9184 hot=0 tick_pct=0 slices=0 aotb=153975 aoti=799964 aotfb=10816 aotmiss=288 aotuniq=0 blits=287 collapse=218003 collcalls=1518 stage=321/27563/1604 gmax=6179 smax=36 tmax=1844 kmax=206
+I (8705) DIGICORE: frames=304 guest_fps=41.00 mi_s=0.15 host_fps=41.00 pc=200343 sr=0020 sp=0ff5 insns=1542 K cyc=486440 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=19 blit_pct=77 blitmax=3075 rows=9184 hot=0 tick_pct=0 slices=0 aotb=168762 aoti=854640 aotfb=12449 aotmiss=294 aotuniq=0 blits=287 collapse=217997 collcalls=1520 stage=322/27809/1722 gmax=7681 smax=36 tmax=3055 kmax=321
+I (9708) DIGICORE: frames=345 guest_fps=40.88 mi_s=0.15 host_fps=40.88 pc=200343 sr=0020 sp=0ff5 insns=1697 K cyc=552046 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=19 blit_pct=78 blitmax=3083 rows=9184 hot=0 tick_pct=0 slices=0 aotb=183538 aoti=909247 aotfb=14080 aotmiss=294 aotuniq=0 blits=287 collapse=218000 collcalls=1520 stage=318/27906/1624 gmax=6113 smax=36 tmax=2632 kmax=390
+I (10723) DIGICORE: frames=387 guest_fps=41.37 mi_s=0.15 host_fps=41.37 pc=200343 sr=0020 sp=0ff5 insns=1854 K cyc=619253 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=19 blit_pct=78 blitmax=2807 rows=9408 hot=0 tick_pct=0 slices=0 aotb=198531 aoti=964511 aotfb=15746 aotmiss=296 aotuniq=0 blits=294 collapse=223327 collcalls=1542 stage=331/28126/1603 gmax=6354 smax=36 tmax=1850 kmax=76
+I (11738) DIGICORE: frames=429 guest_fps=41.37 mi_s=0.15 host_fps=41.37 pc=200343 sr=0020 sp=0ff5 insns=2012 K cyc=686460 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=19 blit_pct=77 blitmax=2807 rows=9408 hot=0 tick_pct=0 slices=0 aotb=213668 aoti=1020464 aotfb=17418 aotmiss=298 aotuniq=0 blits=294 collapse=223317 collcalls=1553 stage=334/28572/1616 gmax=6361 smax=36 tmax=2647 kmax=76
+I (12758) DIGICORE: frames=471 guest_fps=41.17 mi_s=0.15 host_fps=41.17 pc=200343 sr=0020 sp=0ff5 insns=2170 K cyc=753666 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=19 blit_pct=77 blitmax=2807 rows=9408 hot=0 tick_pct=0 slices=0 aotb=228800 aoti=1076380 aotfb=19089 aotmiss=298 aotuniq=0 blits=294 collapse=223317 collcalls=1533 stage=330/28422/1763 gmax=6299 smax=36 tmax=2937 kmax=384
+I (13768) DIGICORE: frames=512 guest_fps=40.59 mi_s=0.15 host_fps=40.59 pc=200343 sr=0020 sp=0ff5 insns=2324 K cyc=819272 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=18 blit_pct=78 blitmax=2807 rows=9184 hot=0 tick_pct=0 slices=0 aotb=243524 aoti=1130740 aotfb=20721 aotmiss=300 aotuniq=0 blits=287 collapse=218002 collcalls=1532 stage=323/27814/1680 gmax=6322 smax=36 tmax=1842 kmax=385
+I (14768) DIGICORE: frames=553 guest_fps=41.00 mi_s=0.15 host_fps=41.00 pc=200343 sr=0020 sp=0ff5 insns=2477 K cyc=884879 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=19 blit_pct=78 blitmax=2807 rows=9184 hot=0 tick_pct=0 slices=0 aotb=258218 aoti=1184979 aotfb=22347 aotmiss=302 aotuniq=0 blits=287 collapse=218005 collcalls=1537 stage=321/27659/1672 gmax=6326 smax=36 tmax=3003 kmax=385

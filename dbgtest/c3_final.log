@@ -1,0 +1,39 @@
+I (232) heap_init: At 3FCB5390 len 0000AC70 (43 KiB): RAM
+I (237) heap_init: At 3FCC0000 len 0001C710 (113 KiB): Retention RAM
+I (243) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (249) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (255) spi_flash: detected chip: generic
+I (258) spi_flash: flash io: dio
+I (261) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (267) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (274) main_task: Started on CPU0
+I (276) main_task: Calling app_main()
+I (280) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (287) DIGICORE: build Nov 20 2026 17:19:35, reset cause 11, heap 163816 B (largest block 114688 B)
+I (296) display: init ST7789P3 320x240
+I (430) display: ready, landscape 320x240, backlight off
+I (431) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (434) ROMSTORE: sparse store mapped at 0x3c050000 (6080 KiB), direct read path on
+I (439) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (445) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (453) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (459) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+I (2078) DIGICORE: frames=2 guest_fps=1.24 mi_s=0.72 host_fps=1.24 pc=005f36 sr=0040 sp=0fed insns=1161 K cyc=3200 K
+I (3707) DIGICORE: frames=4 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=005f36 sr=0040 sp=0fed insns=2358 K cyc=6400 K
+I (5335) DIGICORE: frames=6 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=00485e sr=0000 sp=0fe6 insns=3555 K cyc=9600 K
+I (6963) DIGICORE: frames=8 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=005f35 sr=0040 sp=0fed insns=4753 K cyc=12800 K
+I (8591) DIGICORE: frames=10 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=005f36 sr=0040 sp=0fed insns=5950 K cyc=16000 K
+I (10220) DIGICORE: frames=12 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=004862 sr=0000 sp=0fe6 insns=7147 K cyc=19200 K
+I (11849) DIGICORE: frames=14 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=005f36 sr=0040 sp=0fed insns=8345 K cyc=22400 K
+I (13432) DIGICORE: frames=16 guest_fps=1.26 mi_s=0.70 host_fps=1.26 pc=005f36 sr=0040 sp=0fed insns=9466 K cyc=25600 K
+I (15061) DIGICORE: frames=18 guest_fps=1.22 mi_s=0.73 host_fps=1.22 pc=004862 sr=0000 sp=0fe6 insns=10663 K cyc=28800 K
+I (16667) DIGICORE: BOOT_OK first non-blank guest frame at 20 frames, pc=007ca6, display_on=1 sleep=0 madctl=00a8
+I (16667) DIGICORE: frames=20 guest_fps=1.24 mi_s=0.70 host_fps=1.24 pc=007ca6 sr=02a0 sp=0fb3 insns=11803 K cyc=32000 K
+I (18301) DIGICORE: frames=22 guest_fps=1.22 mi_s=0.45 host_fps=1.22 pc=000315 sr=0220 sp=0ff2 insns=12554 K cyc=35200 K
+I (20112) DIGICORE: frames=24 guest_fps=1.10 mi_s=0.43 host_fps=1.10 pc=004864 sr=0000 sp=0feb insns=13348 K cyc=38400 K
+I (21923) DIGICORE: frames=26 guest_fps=1.10 mi_s=0.43 host_fps=1.10 pc=000311 sr=0020 sp=0ff2 insns=14143 K cyc=41600 K
+I (23734) DIGICORE: frames=28 guest_fps=1.10 mi_s=0.43 host_fps=1.10 pc=000319 sr=0020 sp=0ff2 insns=14937 K cyc=44800 K
+I (25545) DIGICORE: frames=30 guest_fps=1.10 mi_s=0.43 host_fps=1.10 pc=0053db sr=0100 sp=0fe9 insns=15732 K cyc=48000 K
+I (27356) DIGICORE: frames=32 guest_fps=1.10 mi_s=0.43 host_fps=1.10 pc=000327 sr=0163 sp=0ff8 insns=16526 K cyc=51200 K
+I (29167) DIGICORE: frames=34 guest_fps=1.10 mi_s=0.43 host_fps=1.10 pc=0002f5 sr=0160 sp=0ff5 insns=17321 K cyc=54400 K

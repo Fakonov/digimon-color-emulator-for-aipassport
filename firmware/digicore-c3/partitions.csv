@@ -1,0 +1,17 @@
+# Digimon Color on the AI Passport (ESP32-C3, 8 MiB flash).
+#
+# 0x000000 bootloader   (esp-idf default)
+# 0x008000 partition table
+# 0x010000 app          2 MiB   - interpreter + SoC model + internal ROM copy
+# 0x210000 roms         0x5f0000 = 6,225,920 B - sparse SPI flash page store
+#                                   (2,515,200 B used, 3,710,720 B free)
+# 0x800000 end of flash
+#
+# The `roms` partition is a custom data subtype (0x40) because it holds neither
+# NVS nor a filesystem; tools/make_sparse_rom.py writes it, rom_esp.cpp reads it.
+# See docs/C3_PORT.md.
+# Name,     Type, SubType, Offset,   Size,     Flags
+nvs,        data, nvs,     0x9000,   0x6000,
+phy_init,   data, phy,     0xf000,   0x1000,
+factory,    app,  factory, 0x10000,  0x200000,
+roms,       data, 0x40,    0x210000, 0x5f0000,

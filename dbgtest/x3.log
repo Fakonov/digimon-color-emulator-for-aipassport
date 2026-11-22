@@ -1,0 +1,2692 @@
+I (129) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 sizeI (229) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (241) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (246) boot: Loaded app from partition at offset 0x10000
+I (246) boot: Disabling RNG early entropy source...
+I (259) cpu_start: Unicore app
+I (267) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (268) cpu_start: Pro cpu start user code
+I (268) cpu_start: cpu freq: 160000000 Hz
+I (270) app_init: Application information:
+I (273) app_init: Project name:     digicore-c3
+I (278) app_init: App version:      1
+I (281) app_init: Compile time:     Nov 20 2026 16:30:13
+I (286) app_init: ELF file SHA256:  b7f3638cc...
+I (290) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (295) efuse_init: Min chip rev:     v0.3
+I (299) efuse_init: Max chip rev:     v1.99 
+I (303) efuse_init: Chip rev:         v1.1
+I (307) heap_init: Initializing. RAM available for dynamic allocation:
+I (313) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (319) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (325) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (331) spi_flash: detected chip: generic
+I (334) spi_flash: flash io: dio
+I (338) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (343) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (350) main_task: Started on CPU0
+I (352) main_task: Calling app_main()
+I (356) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (363) DIGICORE: build Nov 21 2026 13:42:44, reset cause 11, heap 118016 B (largest block 98304 B)
+I (372) display: init ST7789P3 320x240
+I (506) display: ready, landscape 320x240, backlight off
+I (527) DIGICORE: panel cleared to black (320x240)
+I (539) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (541) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (543) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (549) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (557) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (563) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00700000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (328) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00600000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00600000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eaf0 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00780000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eaf0 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x006c0000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eaf0 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (328) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00680000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eafc 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00600000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00640000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00a80000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00c40000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eafc 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00b40000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eafc 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00b00000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00780000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00780000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eaf0 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00780000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eaf0 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00600000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00840000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eafc 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (328) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00700000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00a40000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fcc0034 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x006c0000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eafc 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00d80000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eafc 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (328) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240
+I (504) display: ready, landscape 320x240, backlight off
+I (525) DIGICORE: panel cleared to black (320x240)
+I (537) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (539) ROMSTORE: sparse store mapped at 0x3c0d0000 (6080 KiB), direct read path on
+I (541) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (547) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (555) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (561) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+[spi_flash] unhandled command 00 (ignored)
+
+
+Core  0 register dump:
+MEPC    : 0x000055ac  RA      : 0x4038664c  SP      : 0x3fc94100  GP      : 0x3fc90400  
+TP      : 0x3fcc36a0  T0      : 0x0000001f  T1      : 0x00600000  T2      : 0x00000002  
+S0/FP   : 0x3fcc03bc  S1      : 0x3fcc03c0  A0      : 0x3fcc0960  A1      : 0xe7ffffff  
+A2      : 0x000004b0  A3      : 0x00400000  A4      : 0x00000002  A5      : 0x000055ac  
+A6      : 0xfa000000  A7      : 0x0000003e  S2      : 0x00000001  S3      : 0x3fc94130  
+S4      : 0x3fcc0000  S5      : 0x03ffffff  S6      : 0x003f0000  S7      : 0x00000e00  
+S8      : 0x0000ffc0  S9      : 0x0003ffff  S10     : 0x3fc9eafc  S11     : 0x3fc9eaf0  
+T3      : 0x00000028  T4      : 0x0000004b  T5      : 0xffffffff  T6      : 0x00000000  
+MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000001  MTVAL   : 0x000055ac  
+MHARTID : 0x00000000  
+
+Stack memory:
+3fc94100: 0x00000000 0x80000004 0x60023000 0x40387d5a 0x00000000 0x3fcc1000 0x600ce000 0x00000001
+3fc94120: 0x00001881 0x80000004 0x3fc9eaf0 0x4038026e 0x60023000 0x40385cda 0x40385ce6 0x00000000
+3fc94140: 0x3fc9413c 0x00000000 0x00000000 0x00000000 0x3fc94154 0xffffffff 0x3fc94154 0x3fc94154
+3fc94160: 0x00000000 0x3fc94168 0xffffffff 0x3fc94168 0x3fc94168 0x00000001 0x00000001 0x00000000
+3fc94180: 0x0001ffff 0x00000000 0x00000000 0x00000000 0x00000000 0x3fc94190 0x00000000 0x00000000
+3fc941a0: 0x00000000 0x3fc941a8 0xffffffff 0x3fc941a8 0x3fc941a8 0x00000000 0x3fc941bc 0xffffffff
+3fc941c0: 0x3fc941bc 0x3fc941bc 0x00000001 0x00000001 0x00000000 0x0001ffff 0x00000000 0x00000000
+3fc941e0: 0x00000000 0x60023000 0x40385cda 0x40385ce6 0x3fcc0de8 0x3fcc0e0c 0x3fcc0e34 0x3fcc0e58
+3fc94200: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94220: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94240: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94260: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94280: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc942e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94300: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94320: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94340: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94360: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94380: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc943e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94400: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94420: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94440: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94460: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc94480: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944a0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944c0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+3fc944e0: 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+
+
+
+ELF file SHA256: b7f3638cc
+
+Rebooting...
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40386772
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 20 2026 16:31:29
+I (24) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (32) boot.esp32c3: SPI Mode       : DIO
+I (36) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (44) boot: Partition Table:
+I (47) boot: ## Label            Usage          Type ST Offset   Length
+I (53) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (66) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 005f0000
+I (79) boot: End of partition table
+I (83) esp_image: segment 0: paddr=00010020 vaddr=3c090020 size=3bc50h (244816) map
+I (128) esp_image: segment 1: paddr=0004bc78 vaddr=3fc8fc00 size=03b98h ( 15256) load
+I (131) esp_image: segment 2: paddr=0004f818 vaddr=40380000 size=00800h (  2048) load
+I (133) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=879e0h (555488) map
+I (226) esp_image: segment 4: paddr=000d7a08 vaddr=40380800 size=0f2cch ( 62156) load
+I (238) esp_image: segment 5: paddr=000e6cdc vaddr=50000000 size=00020h (    32) load
+I (243) boot: Loaded app from partition at offset 0x10000
+I (243) boot: Disabling RNG early entropy source...
+I (256) cpu_start: Unicore app
+I (264) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (265) cpu_start: Pro cpu start user code
+I (265) cpu_start: cpu freq: 160000000 Hz
+I (267) app_init: Application information:
+I (271) app_init: Project name:     digicore-c3
+I (275) app_init: App version:      1
+I (278) app_init: Compile time:     Nov 20 2026 16:30:13
+I (283) app_init: ELF file SHA256:  b7f3638cc...
+I (288) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (292) efuse_init: Min chip rev:     v0.3
+I (296) efuse_init: Max chip rev:     v1.99 
+I (300) efuse_init: Chip rev:         v1.1
+I (304) heap_init: Initializing. RAM available for dynamic allocation:
+I (310) heap_init: At 3FCC09C0 len 0001BD50 (111 KiB): Retention RAM
+I (316) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (322) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (329) spi_flash: detected chip: generic
+I (331) spi_flash: flash io: dio
+I (335) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (341) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (348) main_task: Started on CPU0
+I (350) main_task: Calling app_main()
+I (354) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (361) DIGICORE: build Nov 21 2026 13:42:44, reset cause 4, heap 118016 B (largest block 98304 B)
+I (370) display: init ST7789P3 320x240

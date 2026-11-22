@@ -1,0 +1,50 @@
+I (131) esp_image: segment 1: paddr=0004f9a8 vaddr=3fc96400 sizeI (263) esp_image: segment 3: paddr=00111e0c vaddr=3fc96a70 size=03538h ( 13624) load
+I (266) esp_image: segment 4: paddr=0011534c vaddr=40380000 size=16364h ( 90980) load
+I (283) esp_image: segment 5: paddr=0012b6b8 vaddr=50000000 size=00020h (    32) load
+I (290) boot: Loaded app from partition at offset 0x10000
+I (290) boot: Disabling RNG early entropy source...
+I (302) cpu_start: Unicore app
+I (310) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (310) cpu_start: Pro cpu start user code
+I (310) cpu_start: cpu freq: 160000000 Hz
+I (312) app_init: Application information:
+I (316) app_init: Project name:     digicore-c3
+I (320) app_init: App version:      1
+I (323) app_init: Compile time:     Nov 20 2026 16:30:13
+I (328) app_init: ELF file SHA256:  3abdae01f...
+I (333) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (338) efuse_init: Min chip rev:     v0.3
+I (342) efuse_init: Max chip rev:     v1.99 
+I (346) efuse_init: Chip rev:         v1.1
+I (349) heap_init: Initializing. RAM available for dynamic allocation:
+I (356) heap_init: At 3FCCA290 len 00012480 (73 KiB): Retention RAM
+I (362) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (368) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (374) spi_flash: detected chip: generic
+I (377) spi_flash: flash io: dio
+I (380) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (386) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (393) main_task: Started on CPU0
+I (395) main_task: Calling app_main()
+I (399) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (406) DIGICORE: build Nov 21 2026 18:22:04, reset cause 11, heap 74420 B (largest block 55296 B)
+I (415) display: init ST7789P3 320x240
+I (549) display: ready, landscape 320x240, backlight off
+I (570) DIGICORE: panel cleared to black (320x240)
+I (582) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (584) ROMSTORE: sparse store mapped at 0x3c110000 (6080 KiB), direct read path on
+I (586) ROMSTORE: partition `roms` data/0x40 at 0x210000, 6080 KiB
+I (592) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (600) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (606) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+I (612) DIGICORE: press 01 -> holding
+I (616) DIGICORE: port=fff7 (mv=2944)
+[spi_flash] unhandled command 00 (ignored)
+I (809) DIGICORE: port=ffff (mv=2944)
+I (1100) DIGICORE: BOOT_OK first non-blank guest frame at 20 frames, pc=007ca3, display_on=1 sleep=0 madctl=00a8
+I (1618) DIGICORE: frames=45 guest_fps=44.81 mi_s=0.52 host_fps=44.81 pc=200343 sr=0020 sp=0ff5 insns=528 K cyc=72003 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=47 blit_pct=9 blitmax=2757 rows=880 hot=0 tick_pct=0 slices=0 aotb=72787 aoti=469328 aotfb=1970 aotmiss=475 aotuniq=0 blits=46 collapse=126463 collcalls=887 stage=564/71496/2032 gmax=106898 smax=36 tmax=14381 kmax=377
+I (1694) DIGICORE: bench hotblock: 100000 calls in 52493 us -> 524 us/call, 83 cycles/call
+I (1977) DIGICORE: bench split: fetch 52 cycles, dispatch 173 cycles (sink 0)
+I (2619) DIGICORE: frames=84 guest_fps=38.94 mi_s=0.16 host_fps=38.94 pc=200343 sr=0020 sp=0ff5 insns=694 K cyc=134408 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=21 blit_pct=6 blitmax=1715 rows=468 hot=0 tick_pct=0 slices=0 aotb=87977 aoti=540635 aotfb=3434 aotmiss=561 aotuniq=0 blits=39 collapse=207149 collcalls=1439 stage=347/31524/1627 gmax=7507 smax=36 tmax=3366 kmax=381
+I (2718) DIGICORE: press 02 -> holding
+I (2718) DIGICORE: port=ffef (mv=2944)

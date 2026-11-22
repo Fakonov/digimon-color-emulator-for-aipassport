@@ -1,0 +1,26 @@
+004EF0: D6E4      ds:[r4] = r3
+004EF1: 9643      r3 = 03
+004EF2: FE00      ds = 00
+004EF3: 990C 0CA7 r4 = 0ca7
+004EF5: D6E4      ds:[r4] = r3
+004EF6: 6641      r3 =- 01
+004EF7: FE00      ds = 00
+004EF8: 990C 0CA8 r4 = 0ca8
+004EFA: D6E4      ds:[r4] = r3
+004EFB: 9640      r3 = 00
+004EFC: FE00      ds = 00
+004EFD: 990C 0CA9 r4 = 0ca9
+004EFF: D6E4      ds:[r4] = r3
+004F00: 9898      pop bp, pc from [sp]
+004F01: DA88      push bp, bp to [sp]
+004F02: 2043      sp -= 03
+004F03: 0B08 0001 bp = sp + 0001
+004F05: 9840      r4 = 00
+004F06: D800      [bp+00] = r4
+004F07: F040 4FC0 call 004fc0
+004F09: FE00      ds = 00
+004F0A: 990C 0C9A r4 = 0c9a
+004F0C: 98E4      r4 = ds:[r4]
+004F0D: 4840      cmp r4, 00
+004F0E: 5E0B      je 4f1a
+004F0F: FE00      ds = 00

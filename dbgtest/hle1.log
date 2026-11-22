@@ -1,0 +1,288 @@
+I (131) esp_image: segment 1: paddr=0004f9a8 vaddr=3fc96400 sizeI (4575) DIGICORE: press 04 -> holding
+I (4576) DIGICORE: port=ffdf (mv=2944)
+I (4660) DIGICORE: frames=185 guest_fps=60.00 mi_s=0.23 host_fps=60.00 pc=200343 sr=0020 sp=0ff5 insns=1657 K cyc=296042 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=35 blit_pct=11 blitmax=2008 rows=732 hot=0 tick_pct=0 slices=0 aotb=179972 aoti=1262682 aotfb=7459 aotmiss=3032 aotuniq=0 blits=61 collapse=324235 collcalls=2261 stage=514/53907/2673 gmax=9759 smax=36 tmax=4607 kmax=383
+I (4709) DIGICORE: port=ffff (mv=2944)
+I (5664) DIGICORE: frames=224 guest_fps=38.82 mi_s=0.71 host_fps=38.82 pc=000323 sr=0163 sp=0ff8 insns=2379 K cyc=358444 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=61 blit_pct=8 blitmax=2923 rows=588 hot=0 tick_pct=0 slices=0 aotb=252008 aoti=1894520 aotfb=9188 aotmiss=6828 aotuniq=0 blits=39 collapse=187903 collcalls=1307 stage=572/94215/2722 gmax=114675 smax=36 tmax=21855 kmax=383
+I (6543) DIGICORE: press 01 -> holding
+I (6544) DIGICORE: port=fff7 (mv=2944)
+I (6678) DIGICORE: frames=278 guest_fps=53.29 mi_s=0.36 host_fps=53.29 pc=200343 sr=0020 sp=0ff5 insns=2750 K cyc=444851 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=40 blit_pct=10 blitmax=2421 rows=696 hot=0 tick_pct=0 slices=0 aotb=288653 aoti=2133591 aotfb=11295 aotmiss=10796 aotuniq=0 blits=54 collapse=281199 collcalls=1962 stage=582/62057/2351 gmax=90487 smax=36 tmax=8468 kmax=72
+I (6702) DIGICORE: port=ffff (mv=2944)
+I (7691) DIGICORE: frames=327 guest_fps=48.37 mi_s=0.51 host_fps=48.37 pc=000323 sr=0163 sp=0ff8 insns=3270 K cyc=523272 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=48 blit_pct=9 blitmax=3321 rows=684 hot=0 tick_pct=0 slices=0 aotb=341281 aoti=2535131 aotfb=13287 aotmiss=14864 aotuniq=0 blits=49 collapse=248763 collcalls=1735 stage=621/74802/2577 gmax=104140 smax=36 tmax=7668 kmax=352
+I (8329) DIGICORE: press 02 -> holding
+I (8329) DIGICORE: port=ffef (mv=2944)
+I (8462) DIGICORE: port=ffff (mv=2944)
+I (8710) DIGICORE: frames=377 guest_fps=49.05 mi_s=0.51 host_fps=49.05 pc=200343 sr=0020 sp=0ff5 insns=3794 K cyc=603285 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=49 blit_pct=9 blitmax=3156 rows=708 hot=0 tick_pct=0 slices=0 aotb=394390 aoti=2938721 aotfb=15320 aotmiss=19070 aotuniq=0 blits=50 collapse=254043 collcalls=1775 stage=572/76414/2597 gmax=102024 smax=36 tmax=9796 kmax=382
+I (9723) DIGICORE: frames=432 guest_fps=54.30 mi_s=0.36 host_fps=54.30 pc=000321 sr=0163 sp=0ff8 insns=4169 K cyc=691287 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=40 blit_pct=10 blitmax=2355 rows=720 hot=0 tick_pct=0 slices=0 aotb=431289 aoti=3178528 aotfb=17460 aotmiss=23022 aotuniq=0 blits=55 collapse=286507 collcalls=2000 stage=537/62167/2485 gmax=95817 smax=36 tmax=7647 kmax=384
+I (10117) DIGICORE: press 04 -> holding
+I (10117) DIGICORE: port=ffdf (mv=2944)
+I (10250) DIGICORE: port=ffff (mv=2944)
+I (10731) DIGICORE: frames=481 guest_fps=48.59 mi_s=0.51 host_fps=48.59 pc=000323 sr=0163 sp=0ff8 insns=4689 K cyc=769703 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=49 blit_pct=9 blitmax=2304 rows=696 hot=0 tick_pct=0 slices=0 aotb=484072 aoti=3580944 aotfb=19456 aotmiss=27175 aotuniq=0 blits=49 collapse=248733 collcalls=1733 stage=625/75260/2560 gmax=88558 smax=36 tmax=9822 kmax=363
+I (11743) DIGICORE: frames=518 guest_fps=36.57 mi_s=0.81 host_fps=36.57 pc=200343 sr=0020 sp=0ff5 insns=5509 K cyc=828933 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=66 blit_pct=8 blitmax=2789 rows=648 hot=0 tick_pct=0 slices=0 aotb=568949 aoti=4316037 aotfb=21174 aotmiss=31953 aotuniq=0 blits=37 collapse=173073 collcalls=1211 stage=680/102850/2884 gmax=102408 smax=37 tmax=9719 kmax=377
+I (12494) DIGICORE: press 01 -> holding
+I (12494) DIGICORE: port=fff7 (mv=2944)
+I (12724) DIGICORE: port=ffff (mv=2944)
+I (12758) DIGICORE: frames=550 guest_fps=31.50 mi_s=0.96 host_fps=31.50 pc=000323 sr=0163 sp=0ff8 insns=6485 K cyc=880164 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=75 blit_pct=6 blitmax=2682 rows=636 hot=0 tick_pct=0 slices=0 aotb=670557 aoti=5222056 aotfb=22790 aotmiss=37337 aotuniq=0 blits=32 collapse=140493 collcalls=985 stage=796/118185/2903 gmax=100658 smax=36 tmax=7089 kmax=360
+I (13802) DIGICORE: frames=579 guest_fps=27.79 mi_s=1.02 host_fps=27.79 pc=007cc5 sr=9420 sp=0fb3 insns=7551 K cyc=926605 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=78 blit_pct=6 blitmax=3087 rows=622 hot=0 tick_pct=0 slices=0 aotb=781827 aoti=6225947 aotfb=24341 aotmiss=43030 aotuniq=0 blits=29 collapse=120943 collcalls=855 stage=823/125839/3030 gmax=99139 smax=36 tmax=6752 kmax=350
+I (14830) DIGICORE: frames=608 guest_fps=28.20 mi_s=0.99 host_fps=28.20 pc=200343 sr=0020 sp=0ff5 insns=8578 K cyc=973044 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=76 blit_pct=6 blitmax=3192 rows=626 hot=0 tick_pct=0 slices=0 aotb=889089 aoti=7190637 aotfb=25860 aotmiss=48310 aotuniq=0 blits=29 collapse=122368 collcalls=862 stage=744/121967/2876 gmax=101178 smax=37 tmax=7500 kmax=343
+I (15579) DIGICORE: press 02 -> holding
+I (15579) DIGICORE: port=ffef (mv=2944)
+I (15809) DIGICORE: port=ffff (mv=2944)
+I (15843) DIGICORE: frames=640 guest_fps=31.57 mi_s=0.96 host_fps=31.57 pc=200343 sr=0020 sp=0ff5 insns=9554 K cyc=1024276 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=75 blit_pct=7 blitmax=3301 rows=624 hot=0 tick_pct=0 slices=0 aotb=990603 aoti=8096043 aotfb=27473 aotmiss=53672 aotuniq=0 blits=32 collapse=140509 collcalls=989 stage=735/117375/3002 gmax=104231 smax=36 tmax=7088 kmax=383
+I (16890) DIGICORE: frames=669 guest_fps=27.70 mi_s=1.02 host_fps=27.70 pc=007cc5 sr=9420 sp=0fb3 insns=10631 K cyc=1070716 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=78 blit_pct=6 blitmax=3043 rows=628 hot=0 tick_pct=0 slices=0 aotb=1103074 aoti=9111072 aotfb=29030 aotmiss=59405 aotuniq=0 blits=29 collapse=120559 collcalls=858 stage=770/127231/3097 gmax=107005 smax=36 tmax=6896 kmax=383
+I (17893) DIGICORE: frames=698 guest_fps=28.92 mi_s=1.00 host_fps=28.92 pc=200343 sr=0020 sp=0ff5 insns=11636 K cyc=1117153 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=75 blit_pct=7 blitmax=2832 rows=632 hot=0 tick_pct=0 slices=0 aotb=1208377 aoti=10054406 aotfb=30521 aotmiss=64659 aotuniq=0 blits=29 collapse=122859 collcalls=865 stage=749/117319/2982 gmax=101341 smax=36 tmax=6644 kmax=383
+BLKHEAD 726
+BLK 005B4A 235008
+BLK 005B57 235008
+BLK 005F8B 122308
+BLK 207D10 24384
+BLK 207A35 24384
+BLK 207A4C 24384
+BLK 207A67 24288
+BLK 207A59 24288
+BLK 00485D 23295
+BLK 0053DB 23295
+BLK 0054E6 23295
+BLK 004869 23295
+BLK 200343 21937
+BLK 230321 21917
+BLK 207A83 14760
+BLK 0053E5 14423
+BLK 207A8F 9624
+BLK 005B29 9216
+BLK 005B1E 9215
+BLK 0053FA 8686
+BLK 207B53 5136
+BLK 207AC8 5136
+BLK 207A91 5136
+BLK 207BBE 5136
+BLK 207CA7 5136
+BLK 207BD8 5136
+BLK 207C58 5136
+BLK 207B45 5136
+BLK 207BF7 5136
+BLK 207C72 5136
+BLK 207B5F 5136
+BLK 207C11 5136
+BLK 207ABA 5136
+BLK 207BB0 5136
+BLK 207BE6 2448
+BLK 207A33 2448
+BLK 207D15 2448
+BLK 207D22 2448
+BLK 207A28 2448
+BLK 005B5F 2448
+BLK 00481D 1813
+BLK 005F35 1617
+BLK 201DA0 1024
+BLK 0050A0 1000
+BLK 0050A4 1000
+BLK 005F40 960
+BLK 005F38 960
+BLK 005F45 960
+BLK 005F30 960
+BLK 005F47 960
+BLK 004E1F 959
+BLK 004887 745
+BLK 005898 731
+BLK 2300E8 726
+BLK 005028 726
+BLK 200C9F 726
+BLK 200152 726
+BLK 23010F 726
+BLK 230107 726
+BLK 209349 726
+BLK 200059 726
+BLK 230121 726
+BLK 2300EA 726
+BLK 200620 726
+BLK 200D0F 726
+BLK 200CA1 726
+BLK 230133 726
+BLK 005BE2 726
+BLK 230109 726
+BLK 200698 726
+BLK 2005F3 726
+BLK 200068 726
+BLK 2300F9 726
+BLK 200622 726
+BLK 23011B 726
+BLK 005C5F 726
+BLK 209384 726
+BLK 23010B 726
+BLK 200019 726
+BLK 207992 726
+BLK 23012D 726
+BLK 004F09 726
+BLK 00506D 726
+BLK 230103 726
+BLK 230335 725
+BLK 23032A 725
+BLK 005022 725
+BLK 004FD3 725
+BLK 20060E 723
+BLK 00487F 722
+BLK 004F0F 716
+BLK 004FBE 716
+BLK 200C92 711
+BLK 200C3D 711
+BLK 200024 710
+BLK 20799B 678
+BLK 2079EE 678
+BLK 200C43 666
+BLK 200CF0 665
+BLK 200C29 664
+BLK 005BF5 617
+BLK 004DE8 577
+BLK 20042A 544
+BLK 20044C 544
+BLK 200453 544
+BLK 005AF7 497
+BLK 005AEC 497
+BLK 005AE4 497
+BLK 005AF3 497
+BLK 004A02 372
+BLK 004D28 299
+BLK 005AE2 236
+BLK 005AD7 236
+BLK 005ACF 236
+BLK 005ADE 236
+BLK 004953 197
+BLK 0049F0 192
+BLK 004A12 192
+BLK 0049F4 192
+BLK 0049DF 192
+BLK 0049FC 180
+BLK 2070D5 144
+BLK 2070F1 144
+BLK 20710B 144
+BLK 207051 144
+BLK 207125 144
+BLK 20706B 144
+BLK 20713F 144
+BLK 207085 144
+BLK 005BF0 109
+BLK 00494B 108
+BLK 004945 104
+BLK 2024B2 103
+BLK 200976 102
+BLK 200992 102
+BLK 203EB0 102
+BLK 20097A 102
+BLK 203EAD 102
+BLK 200950 102
+BLK 20091E 102
+BLK 200A06 101
+BLK 203DB0 101
+BLK 203EB5 101
+BLK 203F3D 101
+BLK 203EBA 101
+BLK 201D28 96
+BLK 201D2C 96
+BLK 203EA3 95
+BLK 203E9B 95
+BLK 203E0D 95
+BLK 203E2B 94
+BLK 203E15 89
+BLK 203B5B 88
+BLK 203B60 88
+BLK 203E32 88
+BLK 200889 80
+BLK 200835 80
+BLK 20091D 79
+BLK 2008E3 79
+BLK 200875 79
+BLK 200910 78
+BLK 2008F5 78
+BLK 2008EF 78
+BLK 200911 78
+BLK 005486 69
+BLK 005454 69
+BLK 005495 69
+BLK 005492 69
+BLK 0054CE 69
+BLK 0054B9 69
+BLK 0054A4 69
+BLK 0054B6 69
+BLK 00584C 64
+BLK 200C24 62
+BLK 200CEF 61
+BLK 200CB5 61
+BLK 20319A 55
+BLK 20312C 55
+BLK 20314E 55
+BLK 2031B4 55
+BLK 20313E 55
+BLK 2031A4 55
+BLK 203155 55
+BLK 2031AE 55
+BLK 203177 55
+BLK 203191 55
+BLK 203145 55
+BLK 203135 55
+BLK 203120 55
+BLK 203186 55
+BLK 20315C 55
+BLK 207D28 54
+BLK 207A21 54
+BLK 2079FC 54
+BLK 200CC6 53
+BLK 2079E9 48
+BLK 20799D 48
+BLK 20C3E4 46
+BLK 20C234 46
+BLK 200C45 45
+BLKEND
+I (18708) DIGICORE: press 04 -> holding
+I (18708) DIGICORE: port=ffdf (mv=2944)
+I (18841) DIGICORE: port=ffff (mv=2944)
+I (18909) DIGICORE: frames=732 guest_fps=33.45 mi_s=0.45 host_fps=33.45 pc=200343 sr=0020 sp=0ff5 insns=12100 K cyc=1171567 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=40 blit_pct=7 blitmax=3203 rows=498 hot=0 tick_pct=0 slices=0 aotb=1255913 aoti=10437146 aotfb=31950 aotmiss=68033 aotuniq=0 blits=34 collapse=168985 collcalls=1178 stage=446/63004/2011 gmax=99360 smax=36 tmax=7566 kmax=383
+I (19965) DIGICORE: frames=772 guest_fps=37.88 mi_s=0.72 host_fps=37.88 pc=200343 sr=0020 sp=0ff5 insns=12865 K cyc=1235589 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=69 blit_pct=7 blitmax=2770 rows=652 hot=0 tick_pct=0 slices=0 aotb=1329828 aoti=11090913 aotfb=33745 aotmiss=91133 aotuniq=0 blits=40 collapse=192782 collcalls=1354 stage=648/112698/2826 gmax=118723 smax=36 tmax=22632 kmax=382
+I (20720) DIGICORE: press 01 -> holding
+I (20721) DIGICORE: port=fff7 (mv=2944)
+I (20976) DIGICORE: frames=817 guest_fps=44.50 mi_s=0.60 host_fps=44.50 pc=200343 sr=0020 sp=0ff5 insns=13472 K cyc=1307610 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=62 blit_pct=9 blitmax=2114 rows=576 hot=0 tick_pct=0 slices=0 aotb=1386957 aoti=11568616 aotfb=35614 aotmiss=117165 aotuniq=0 blits=45 collapse=225492 collcalls=1578 stage=650/97826/2613 gmax=90484 smax=36 tmax=29852 kmax=384
+I (21011) DIGICORE: port=ffff (mv=2944)
+I (21993) DIGICORE: frames=858 guest_fps=40.32 mi_s=0.39 host_fps=40.32 pc=200343 sr=0020 sp=0ff5 insns=13872 K cyc=1373214 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=63 blit_pct=6 blitmax=1922 rows=500 hot=0 tick_pct=0 slices=0 aotb=1419162 aoti=11793229 aotfb=37190 aotmiss=195411 aotuniq=0 blits=41 collapse=211992 collcalls=1489 stage=478/100755/1889 gmax=235363 smax=36 tmax=18146 kmax=72
+I (23030) DIGICORE: frames=895 guest_fps=35.66 mi_s=0.49 host_fps=35.66 pc=007cc5 sr=0020 sp=0fb3 insns=14388 K cyc=1432430 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=67 blit_pct=6 blitmax=1593 rows=448 hot=0 tick_pct=0 slices=0 aotb=1463945 aoti=12146039 aotfb=38681 aotmiss=273054 aotuniq=0 blits=37 collapse=186065 collcalls=1288 stage=446/109747/2080 gmax=256127 smax=36 tmax=13447 kmax=260
+I (23157) DIGICORE: press 02 -> holding
+I (23158) DIGICORE: port=ffef (mv=2944)
+I (23591) DIGICORE: port=ffff (mv=2944)
+I (24042) DIGICORE: frames=935 guest_fps=39.53 mi_s=0.68 host_fps=39.53 pc=200343 sr=0020 sp=0ff5 insns=15079 K cyc=1496452 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=59 blit_pct=6 blitmax=2357 rows=560 hot=0 tick_pct=0 slices=0 aotb=1529523 aoti=12737067 aotfb=40360 aotmiss=282887 aotuniq=0 blits=40 collapse=196153 collcalls=1378 stage=646/92175/2488 gmax=111342 smax=36 tmax=33755 kmax=357
+I (24957) DIGICORE: press 04 -> holding
+I (24958) DIGICORE: port=ffdf (mv=2944)
+I (25136) DIGICORE: frames=995 guest_fps=54.84 mi_s=0.30 host_fps=54.84 pc=007cc5 sr=0020 sp=0fb3 insns=15411 K cyc=1592456 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000200 guest_pct=39 blit_pct=8 blitmax=1956 rows=720 hot=0 tick_pct=0 slices=0 aotb=1559205 aoti=12917416 aotfb=42621 aotmiss=290697 aotuniq=0 blits=60 collapse=315802 collcalls=2193 stage=560/65395/2505 gmax=108715 smax=36 tmax=32823 kmax=383
+I (25391) DIGICORE: port=ffff (mv=2944)
+I (26142) DIGICORE: frames=1037 guest_fps=41.72 mi_s=0.64 host_fps=41.72 pc=200343 sr=0020 sp=0ff5 insns=16064 K cyc=1659662 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=62 blit_pct=8 blitmax=2253 rows=600 hot=0 tick_pct=0 slices=0 aotb=1623441 aoti=13451280 aotfb=44362 aotmiss=314838 aotuniq=0 blits=42 collapse=206727 collcalls=1449 stage=579/96959/2608 gmax=102760 smax=36 tmax=12861 kmax=375
+I (26975) DIGICORE: press 01 -> holding
+I (26976) DIGICORE: port=fff7 (mv=2944)
+I (27199) DIGICORE: frames=1085 guest_fps=45.43 mi_s=0.56 host_fps=45.43 pc=200343 sr=0020 sp=0ff5 insns=16659 K cyc=1736475 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=60 blit_pct=7 blitmax=1803 rows=600 hot=0 tick_pct=0 slices=0 aotb=1679856 aoti=13908694 aotfb=46312 aotmiss=341981 aotuniq=0 blits=48 collapse=241673 collcalls=1688 stage=672/97655/2526 gmax=86695 smax=36 tmax=29931 kmax=382
+I (27498) DIGICORE: port=ffff (mv=2944)
+I (28354) DIGICORE: frames=1119 guest_fps=29.43 mi_s=0.47 host_fps=29.43 pc=007a4c sr=01a0 sp=0faf insns=17207 K cyc=1790878 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=74 blit_pct=4 blitmax=1701 rows=420 hot=0 tick_pct=0 slices=0 aotb=1723770 aoti=14260156 aotfb=47695 aotmiss=460095 aotuniq=0 blits=34 collapse=170240 collcalls=1186 stage=440/133848/1929 gmax=266164 smax=36 tmax=18548 kmax=278
+I (29368) DIGICORE: frames=1169 guest_fps=49.27 mi_s=0.42 host_fps=49.27 pc=200343 sr=0020 sp=0ff5 insns=17637 K cyc=1870884 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=56 blit_pct=8 blitmax=1546 rows=608 hot=0 tick_pct=0 slices=0 aotb=1762769 aoti=14530112 aotfb=49609 aotmiss=501428 aotuniq=0 blits=50 collapse=258445 collcalls=1814 stage=544/88453/2522 gmax=104000 smax=36 tmax=14124 kmax=323
+I (29403) DIGICORE: press 02 -> holding
+I (29403) DIGICORE: port=ffef (mv=2944)
+I (29809) DIGICORE: port=ffff (mv=2944)
+I (30383) DIGICORE: frames=1213 guest_fps=43.37 mi_s=0.59 host_fps=43.37 pc=200343 sr=0020 sp=0ff5 insns=18241 K cyc=1941291 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=55 blit_pct=8 blitmax=2569 rows=594 hot=0 tick_pct=0 slices=0 aotb=1820980 aoti=15027696 aotfb=51419 aotmiss=508151 aotuniq=0 blits=44 collapse=219095 collcalls=1531 stage=742/85484/2608 gmax=107270 smax=36 tmax=33622 kmax=359
+I (31182) DIGICORE: press 04 -> holding
+I (31183) DIGICORE: port=ffdf (mv=2944)
+I (31473) DIGICORE: frames=1266 guest_fps=48.62 mi_s=0.42 host_fps=48.62 pc=005b57 sr=0140 sp=0fab insns=18704 K cyc=2026106 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=44 blit_pct=8 blitmax=2451 rows=694 hot=0 tick_pct=0 slices=0 aotb=1864991 aoti=15359042 aotfb=53492 aotmiss=514227 aotuniq=0 blits=53 collapse=273159 collcalls=1901 stage=573/74332/2638 gmax=111945 smax=36 tmax=33271 kmax=384
+I (31616) DIGICORE: port=ffff (mv=2944)
+I (32484) DIGICORE: frames=1314 guest_fps=47.46 mi_s=0.51 host_fps=47.46 pc=200343 sr=0020 sp=0ff5 insns=19224 K cyc=2102914 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=56 blit_pct=8 blitmax=1987 rows=610 hot=0 tick_pct=0 slices=0 aotb=1914474 aoti=15740523 aotfb=55382 aotmiss=541550 aotuniq=0 blits=48 collapse=244075 collcalls=1706 stage=573/88258/2516 gmax=98693 smax=37 tmax=12879 kmax=384
+I (33205) DIGICORE: press 01 -> holding
+I (33206) DIGICORE: port=fff7 (mv=2944)
+I (33723) DIGICORE: frames=1358 guest_fps=35.52 mi_s=0.60 host_fps=35.52 pc=005b57 sr=0140 sp=0fab insns=19974 K cyc=2173318 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=69 blit_pct=6 blitmax=2272 rows=558 hot=0 tick_pct=0 slices=0 aotb=1983208 aoti=16324213 aotfb=57251 aotmiss=608687 aotuniq=0 blits=44 collapse=216008 collcalls=1500 stage=665/132915/2672 gmax=257268 smax=37 tmax=29923 kmax=72
+I (33748) DIGICORE: port=ffff (mv=2944)
+I (34733) DIGICORE: frames=1393 guest_fps=34.65 mi_s=0.42 host_fps=34.65 pc=200343 sr=0020 sp=0ff5 insns=20402 K cyc=2229321 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=68 blit_pct=7 blitmax=1957 rows=440 hot=0 tick_pct=0 slices=0 aotb=2017415 aoti=16579636 aotfb=58620 aotmiss=699019 aotuniq=0 blits=35 collapse=178795 collcalls=1248 stage=396/106762/1885 gmax=275370 smax=37 tmax=13518 kmax=383
+I (35626) DIGICORE: press 02 -> holding
+I (35626) DIGICORE: port=ffef (mv=2944)
+I (35744) DIGICORE: frames=1447 guest_fps=53.41 mi_s=0.39 host_fps=53.41 pc=200343 sr=0020 sp=0ff5 insns=20803 K cyc=2315726 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=52 blit_pct=10 blitmax=1872 rows=648 hot=0 tick_pct=0 slices=0 aotb=2054348 aoti=16823038 aotfb=60676 aotmiss=728198 aotuniq=0 blits=54 collapse=280806 collcalls=1955 stage=524/80601/2562 gmax=106220 smax=37 tmax=12505 kmax=383
+I (35777) DIGICORE: port=ffff (mv=2944)
+I (36797) DIGICORE: frames=1481 guest_fps=32.28 mi_s=0.79 host_fps=32.28 pc=007bf7 sr=01a0 sp=0faf insns=21641 K cyc=2370141 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=69 blit_pct=6 blitmax=2940 rows=522 hot=0 tick_pct=0 slices=0 aotb=2132537 aoti=17570292 aotfb=62226 aotmiss=745105 aotuniq=0 blits=34 collapse=159255 collcalls=1110 stage=767/112214/2670 gmax=161112 smax=37 tmax=27889 kmax=350
+I (37860) DIGICORE: frames=1490 guest_fps=8.46 mi_s=1.15 host_fps=8.46 pc=007a83 sr=01a0 sp=0faf insns=22865 K cyc=2384555 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=93 blit_pct=4 blitmax=3101 rows=686 hot=0 tick_pct=0 slices=0 aotb=2247016 aoti=18740933 aotfb=62921 aotmiss=793494 aotuniq=0 blits=9 collapse=10779 collcalls=82 stage=780/154244/2869 gmax=133086 smax=36 tmax=11264 kmax=371
+I (38930) DIGICORE: frames=1500 guest_fps=9.34 mi_s=1.24 host_fps=9.34 pc=007cc5 sr=a820 sp=0fb3 insns=24200 K cyc=2400587 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=92 blit_pct=4 blitmax=3066 rows=710 hot=0 tick_pct=0 slices=0 aotb=2375387 aoti=20034511 aotfb=63687 aotmiss=828060 aotuniq=0 blits=10 collapse=11980 collcalls=92 stage=791/154642/2972 gmax=120129 smax=37 tmax=11577 kmax=370
+I (39956) DIGICORE: frames=1511 guest_fps=10.72 mi_s=1.32 host_fps=10.72 pc=005b4a sr=0040 sp=0fab insns=25559 K cyc=2418193 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=93 blit_pct=4 blitmax=2775 rows=544 hot=0 tick_pct=0 slices=0 aotb=2508723 aoti=21356005 aotfb=64526 aotmiss=856752 aotuniq=0 blits=11 collapse=17465 collcalls=133 stage=742/149135/2827 gmax=112626 smax=36 tmax=11449 kmax=372
+I (40967) DIGICORE: frames=1524 guest_fps=12.85 mi_s=1.47 host_fps=12.85 pc=007cc5 sr=a820 sp=0fb3 insns=27048 K cyc=2439021 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=94 blit_pct=2 blitmax=2447 rows=250 hot=0 tick_pct=0 slices=0 aotb=2658815 aoti=22816587 aotfb=65507 aotmiss=873323 aotuniq=0 blits=13 collapse=23585 collcalls=173 stage=798/148745/2933 gmax=104303 smax=36 tmax=11578 kmax=358
+I (41718) DIGICORE: press 04 -> holding
+I (41718) DIGICORE: port=ffdf (mv=2944)
+I (41978) DIGICORE: frames=1532 guest_fps=7.91 mi_s=1.03 host_fps=7.91 pc=000323 sr=0163 sp=0ff8 insns=28095 K cyc=2451851 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=95 blit_pct=1 blitmax=1953 rows=156 hot=0 tick_pct=0 slices=0 aotb=2754711 aoti=23774909 aotfb=66105 aotmiss=955303 aotuniq=0 blits=8 collapse=13122 collcalls=101 stage=615/151479/2297 gmax=171109 smax=36 tmax=11169 kmax=374
+I (42616) DIGICORE: port=ffff (mv=2944)
+I (42984) DIGICORE: frames=1560 guest_fps=27.82 mi_s=0.77 host_fps=27.82 pc=200343 sr=0020 sp=0ff5 insns=28874 K cyc=2496653 K mv=2944 btn=0 int_ctrl=0000 int_stat=20000000 guest_pct=76 blit_pct=5 blitmax=2554 rows=368 hot=0 tick_pct=0 slices=0 aotb=2827181 aoti=24449619 aotfb=67401 aotmiss=1000239 aotuniq=0 blits=28 collapse=128175 collcalls=894 stage=552/119143/2420 gmax=149010 smax=36 tmax=33124 kmax=374
