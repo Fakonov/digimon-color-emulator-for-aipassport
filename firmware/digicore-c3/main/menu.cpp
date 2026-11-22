@@ -225,6 +225,20 @@ static const uint8_t kRowRound[5] = {5, 2, 1, 1, 1};
 
 static uint16_t s_row[320];
 static uint16_t s_wide[320];
+static const MenuBackdrop *s_bg = nullptr;
+
+// Panel pixel -> guest pixel.  Anything outside the window is black, which is
+// the same thing the panel shows there when the menu is closed.
+static uint16_t backdrop_px(int x, int y)
+{
+    if (s_bg == nullptr)
+        return kPage;
+    const int dx = (x - s_bg->out_x) / s_bg->scale;
+    const int dy = (y - s_bg->out_y) / s_bg->scale;
+    if (dx < 0 || dy < 0 || dx >= s_bg->w || dy >= s_bg->h)
+        return kPage;
+    return s_bg->pixels[(s_bg->y + dy) * s_bg->stride + s_bg->x + dx];
+}
 
 // Writes one scanline of a 2x-scaled string.  `out_row` is 0..kTextH-1 within
 // the glyph cell, so callers can render a string one line at a time without
@@ -278,8 +292,10 @@ static bool round_span(int dy, int h, const uint8_t *tab, int tabn, int *xoff)
 // Fills the card, its border and the selected row's bar for one screen line.
 static void card_line(int y)
 {
+    // The card floats over the game, not over a black page: sample the guest
+    // framebuffer so the pixels the card does not cover keep showing it.
     for (int x = 0; x < 320; ++x)
-        s_row[x] = kPage;
+        s_row[x] = backdrop_px(x, y);
 
     int inset = 0;
     if (!round_span(y - kCardY, kCardH, kCardRound, 8, &inset))
@@ -418,11 +434,12 @@ void menu_banner_present(uint8_t *strip, int width, const char *text)
         ESP_LOGE(TAG, "banner push failed: %d", int(err));
 }
 
-void menu_present(uint8_t *strip, int w, int h)
+void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg)
 {
     if (!s_dirty)
         return;
     s_dirty = false;
+    s_bg = bg;
 
     // w * 2 bytes per line; the caller's strip holds 24 of them.
     const int band_rows = 24;

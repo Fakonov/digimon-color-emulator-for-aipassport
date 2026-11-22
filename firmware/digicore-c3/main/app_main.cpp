@@ -1360,9 +1360,20 @@ static void update_sleep_backlight(void)
     }
 
     const bool dark = auto_off > 0 && idle >= int64_t(auto_off) * 1000000;
-    if (dark == !s_lit)
+    // Brightness can change while the panel stays lit, so the level needs its
+    // own change detector; without it a BRIGHT edit does nothing until the
+    // screen happens to go dark and come back.
+    static int s_bright_applied = -1;
+    if (dark == !s_lit) {
+        if (s_lit && s_bright_applied != s_brightness_pct) {
+            s_bright_applied = s_brightness_pct;
+            display_backlight_set(s_brightness_pct);
+            ESP_LOGI(TAG, "backlight -> %d%%", s_brightness_pct);
+        }
         return;
+    }
     s_lit = !dark;
+    s_bright_applied = s_lit ? s_brightness_pct : -1;
     display_backlight_set(s_lit ? s_brightness_pct : 0);
     ESP_LOGI(TAG, "panel %s after %lld ms idle (auto-off %d s)",
              s_lit ? "lit" : "dark", (long long)(idle / 1000), auto_off);
@@ -1664,7 +1675,9 @@ extern "C" void app_main(void)
         // window to restore from.  s_menu_was_open makes the close push the
         // untouched fb[] once so the game comes back in full.
         if (menu_is_open()) {
-            menu_present(s_strip, kDstW, kDstH);
+            const MenuBackdrop bg = {s_soc.lcd.fb, kFbPanel, kWinX, kWinY, kWinW, kWinH,
+                                     kLeft, kTop, kScale};
+            menu_present(s_strip, kDstW, kDstH, &bg);
             s_menu_was_open = true;
         } else {
             if (s_menu_was_open) {

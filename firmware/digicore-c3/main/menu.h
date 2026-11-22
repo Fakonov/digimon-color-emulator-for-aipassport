@@ -35,6 +35,20 @@ int  menu_bright_pct();       // 20..100
 int  menu_volume_pct();       // 0..100
 int  menu_autosave_sec();     // 0 = off, otherwise the guest-state snapshot period
 
+// Where the emulator's framebuffer sits on the panel.  The menu pushes whole
+// scanlines, so the pixels it does not own have to come from somewhere: filling
+// them black would erase the game behind the card.  app_main describes the
+// window once and the menu samples it, upscaling the same way blit_frame() does.
+struct MenuBackdrop
+{
+    const uint16_t *pixels;   // guest framebuffer, fb[y * stride + x]
+    int stride;               // pixels per framebuffer row (128)
+    int x, y;                 // window origin inside the framebuffer
+    int w, h;                 // window size in framebuffer pixels
+    int out_x, out_y;         // where that window lands on the panel
+    int scale;                // panel pixels per framebuffer pixel
+};
+
 // Pushes the menu straight to the panel instead of drawing into fb[].
 //
 // Drawing into fb[] does not work: the guest only repaints the pixels it
@@ -42,8 +56,9 @@ int  menu_autosave_sec();     // 0 = off, otherwise the guest-state snapshot per
 // there is no DRAM left (10 KB free) for the 38 KB copy of the window that
 // restoring it would need.  `strip` is the caller's tile-transfer scratch
 // buffer; it holds w * 2 * 24 bytes, which is why the menu goes out in bands of
-// 24 rows.  Closing the menu only requires re-pushing fb[] once.
-void menu_present(uint8_t *strip, int w, int h);
+// 24 rows.  `bg` supplies the pixels outside the card; pass nullptr for black.
+// Closing the menu only requires re-pushing fb[] once.
+void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg);
 
 // One line of text in the panel's top margin, above the guest window.  Used to
 // say the real machine would already be dark, which only happens when the
