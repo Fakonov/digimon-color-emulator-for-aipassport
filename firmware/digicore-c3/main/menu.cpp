@@ -1,4 +1,4 @@
-﻿// Settings menu: values, persistence and a 2x-scaled 5x7 text renderer.
+// Settings menu: values, persistence and a 2x-scaled 5x7 text renderer.
 //
 // The visual target is the digimon-passport settings panel: a 300x200 ivory
 // card centred on the panel, a 2 px dark olive border with 8 px rounded
@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 
@@ -134,7 +135,9 @@ void menu_load()
 void menu_open()
 {
     s_open = true;
-    s_sel = MENU_IDX_AUTO_OFF;
+    // Row 0 is the A+C chord and it is the reason most people open this card, so
+    // the cursor starts there.  The value rows are one A press away.
+    s_sel = MENU_IDX_CHORD;
     s_dirty = true;
     ESP_LOGI(TAG, "open");
 }
@@ -157,6 +160,17 @@ void menu_press_b()
 {
     s_dirty = true;
     switch (s_sel) {
+    case MENU_IDX_CHORD:
+        // Rows 0 and 1 are the chords themselves.  The menu only queues them:
+        // app_main owns the injection timer, and it closes the card on the way
+        // out so the user is looking at the game when the chord lands.
+        s_action = MENU_ACTION_CHORD;
+        ESP_LOGI(TAG, "A+C chord requested");
+        break;
+    case MENU_IDX_CHORD_AB:
+        s_action = MENU_ACTION_CHORD_AB;
+        ESP_LOGI(TAG, "A+B chord requested");
+        break;
     case MENU_IDX_AUTO_OFF:
         s_auto_idx = (s_auto_idx + 1) % kAutoOffCount;
         persist_u8("auto", (uint8_t)s_auto_idx);
@@ -232,9 +246,13 @@ static constexpr int kEdge = 2;
 static constexpr int kPad = 3;
 static constexpr int kRowX = kCardX + kEdge + kPad + 8;    // 23
 static constexpr int kRowW = 278;
-static constexpr int kRowH = 24;
-static constexpr int kRowY0 = kCardY + kEdge + kPad + 24;  // 45; seven 24 px rows, 26 px apart
-static constexpr int kRowPitch = 26;                       // 45 + 6*26 + 24 = 225, inside the 212 px card
+// Nine rows now that both chords are in the card (A+C and A+B), and the 20/22
+// that fitted eight does not: 45 + 8*22 + 20 = 241 against a card bottom of 228.
+// 18 px rows at a 20 px pitch put the last row's bottom at 223, five px clear of
+// the border, and still leave the 14 px glyphs 2 px of air above and below.
+static constexpr int kRowH = 18;
+static constexpr int kRowY0 = kCardY + kEdge + kPad + 24;  // 45; nine 18 px rows, 20 px apart
+static constexpr int kRowPitch = 20;                       // 45 + 8*20 + 18 = 223, inside the 212 px card
 static constexpr int kTitleY = kCardY + kEdge + kPad - 1;  // 24, TOP_MID offset -1
 static constexpr int kVerY = kCardY + kEdge + kPad + 1;    // 26, TOP_RIGHT offset +1
 static constexpr int kVerRight = kCardX + kCardW - kEdge - kPad - 6;  // 299
@@ -440,6 +458,10 @@ static void card_line(int y)
 static void label_for(char *buf, size_t n, int item)
 {
     switch (item) {
+    // Command rows: the name already says what it does, so the value column
+    // stays empty rather than repeating it.
+    case MENU_IDX_CHORD:    buf[0] = '\0'; break;
+    case MENU_IDX_CHORD_AB: buf[0] = '\0'; break;
     case MENU_IDX_AUTO_OFF: snprintf(buf, n, "%s", kAutoOffNames[s_auto_idx]); break;
     case MENU_IDX_BRIGHT:   snprintf(buf, n, "%d%%", kBrightChoices[s_bright_idx]); break;
     case MENU_IDX_VOLUME:   snprintf(buf, n, "%d%%", kVolumeChoices[s_volume_idx]); break;
@@ -453,6 +475,8 @@ static void label_for(char *buf, size_t n, int item)
 static const char *name_for(int item)
 {
     switch (item) {
+    case MENU_IDX_CHORD:    return "SEND A+C";
+    case MENU_IDX_CHORD_AB: return "SEND A+B";
     case MENU_IDX_AUTO_OFF: return "AUTO OFF";
     case MENU_IDX_BRIGHT:   return "BRIGHT";
     case MENU_IDX_VOLUME:   return "VOLUME";
@@ -547,6 +571,8 @@ void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg)
         return;
     s_dirty = false;
     s_bg = bg;
+    const int64_t t_start = esp_timer_get_time();
+    int64_t t_render_us = 0;
 
     // w * 2 bytes per line; the caller's strip holds 24 of them.
     const int band_rows = 24;
@@ -556,6 +582,7 @@ void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg)
         const int rows = (h - y0 < band_rows) ? (h - y0) : band_rows;
         uint8_t *p = strip;
 
+        const int64_t t_render0 = esp_timer_get_time();
         for (int r = 0; r < rows; ++r) {
             render_line(y0 + r);
             for (int x = 0; x < w; ++x) {
@@ -576,6 +603,7 @@ void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg)
                 printf("%s\n", out);
             }
         }
+        t_render_us += esp_timer_get_time() - t_render0;
 
         const esp_err_t err = display_draw_bitmap(0, y0, w, rows, strip);
         if (err != ESP_OK) {
@@ -587,7 +615,14 @@ void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg)
         if (s_capture > 0 && --s_capture == 0)
             printf("CAPTURE DONE\n");
     }
-    ESP_LOGI(TAG, "pushed %d band(s), %dx%d", bands, w, h);
+    // Split the cost: the render figure is the translucent compositing (guest
+    // sample + drop shadow + 90 % wash + text) for all 240 lines, and the total
+    // minus it is the SPI push.  This only runs when the menu is dirty, i.e. on
+    // open and on a key, so the steady-state cost is zero either way - but the
+    // number is what decides whether a 90 % wash is affordable.
+    const int64_t total_us = esp_timer_get_time() - t_start;
+    ESP_LOGI(TAG, "pushed %d band(s), %dx%d: render %d ms, total %d ms",
+             bands, w, h, int(t_render_us / 1000), int(total_us / 1000));
 }
 
 void menu_set_capture(int frames)

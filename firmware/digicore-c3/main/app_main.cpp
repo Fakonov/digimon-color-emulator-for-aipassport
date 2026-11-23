@@ -155,45 +155,51 @@ static constexpr uint16_t kPortB3 = 0x0020;
 // visible for ~100 ms without making a real press feel sticky.
 static constexpr int kPressFrames = 6;
 
-// Hold B for this long and the emulator's own settings menu opens.  The retail
-// handset uses 1.5 s for its menu (long C); B is the confirm key here, so the
-// gesture was moved off C to keep the guest's own cancels clean.  1.5 s is the
-// reference port's tuned value: it is ten times the ROM's ~120 ms key sampling
-// window, and their notes record that going shorter starts misreading the hold.
-static constexpr int64_t kMenuHoldUs = 1500000;
+// The settings menu used to open on a 1.5 s B hold.  It does not any more: the
+// hold is a guest gesture again, because the 1.5 s of B that reached the ROM
+// first was enough to walk the game onto the clock screen.  The menu gesture is
+// the long-A threshold below, and there is no separate menu timer left.
 
-// Long-press A -> A+C.  The handset has three keys on one resistor ladder, so a
-// real A+C chord can never be produced: the ladder reports a single contact.
-// Two screens need that chord (the clock/time editor and the tombstone screen a
-// dead pet leaves behind), so a held A is converted into a synthetic A+C pulse
-// once it has been down for kAcHoldUs.  The pulse is injected through the same
-// path as a physical tap, which means it already carries the latch semantics
-// the guest expects.
+// Long-press A -> settings menu, whose first row sends A+C.  The handset has
+// three keys on one resistor ladder, so a real A+C chord can never be produced:
+// the ladder reports a single contact.  Two screens need that chord (the
+// clock/time editor and the tombstone screen a dead pet leaves behind), so it
+// lives as an explicit command row instead of a gesture - the cartridge's title
+// screen drops a pad that merely reads A+C, which is why the chord cannot just
+// be injected on a held key.
 //
-// Driving it from the A key rather than from a guest-side screen test keeps the
-// change independent of the ROM's menu state: the only cost is that a long A in
-// some other screen also emits the chord, and that is observable in one test
-// pass rather than inferred from a guess about internal addresses.
 // Runtime so the console can shorten it while bench testing; H <ms> changes it
 // without a reflash.  1.2 s matches the reference port, whose notes measured the
 // same ROM family ignoring a 700 ms chord and only reacting at 3.2 s.
 static int64_t s_ac_hold_us = 1200000;
 static constexpr int64_t kAcHoldDefaultUs = 1200000;
-// How long A+C is injected once the confirmation card has been accepted.  The
-// reference port measured this ROM family ignoring a 700 ms chord and only
-// reacting at 3.2 s, and the device runs the guest well below real time, so the
-// window is generous: the card makes the gesture explicit, there is nothing
-// else for the chord to collide with.
+// How long A+C is injected when menu row 0 is chosen.  The reference port
+// measured this ROM family ignoring a 700 ms chord and only reacting at 3.2 s,
+// and the device runs the guest well below real time, so the window is generous.
 static constexpr int64_t kAcChordUs = 3200000;
 // How long the pad stays blank after the card closes.  Long enough for the
 // finger (or the console injector) to release the key that dismissed it, short
 // enough that the next press is not lost.
 static constexpr int64_t kPadBlankUs = 700000;
 
-// The chord is held, not pulsed.  Released when the deadline passes; there is
-// no finger to lift any more because the card consumed the press.
-static bool s_ac_active = false;
-static int64_t s_ac_until_us = 0;
+// A chord injected on the user's behalf.  The chord is held, not pulsed, and
+// released when the deadline passes -- there is no finger to lift any more.
+//
+// One slot is enough: a chord only starts from a menu row, and the menu closes
+// as soon as it does, so two can never overlap.  `s_chord_keys` says which pair
+// (A+C or A+B) this one is; the pad is built from it below.
+static bool s_chord_active = false;
+static int s_chord_keys = 0;
+static int64_t s_chord_until_us = 0;
+
+// Start a chord.  `keys` is the pair to hold; the caller has already decided how
+// long, which is the only thing that differs between the menu rows.
+static void start_chord(int keys, int64_t hold_us)
+{
+    s_chord_active = true;
+    s_chord_keys = keys;
+    s_chord_until_us = esp_timer_get_time() + hold_us;
+}
 // Edge memory for the confirmation card, so the press that opened it cannot
 // also dismiss it.  The card opens inside the long-press detector, which runs
 // before the console injector is drained, so the frame that raises it still has
@@ -204,14 +210,17 @@ static bool s_confirm_fresh = false;
 // pad and would otherwise be read as a long B by the menu detector.
 static int64_t s_pad_blank_us = 0;
 // Long-A detector state, at file scope so the S log can report it: this is the
-// one piece of the gesture that decides whether the card ever opens.
+// one piece of the gesture that decides whether the settings menu ever opens.
 static int64_t s_a_down_us = 0;
 static bool s_ac_fired = false;
-// The B contact that confirmed the chord card is one continuous press.  On the
-// handset a frame lasts 60-300 ms, so a console injection of 30 frames keeps B
-// down for ten seconds -- long past kMenuHoldUs -- and the settings menu opens
-// on the very key that accepted the chord, parks the guest, and eats every
-// later press.  While this is set the menu detector ignores B until it lifts.
+// Set while A is down and has not yet been shown to the guest.  Cleared either
+// by the long-press threshold (the press becomes the menu gesture and never a
+// tap) or by the release below it (the press is delivered as a kPressFrames
+// pulse).  This is what keeps the menu gesture out of the ROM.
+static bool s_a_withheld = false;
+// Set by the (now unused) chord confirmation card when a B press accepted it.
+// The menu no longer opens on a B hold, so nothing reads this any more; it is
+// kept because the card code path still sets it and may come back.
 static bool s_b_hold_locked = false;
 // diagnostic: press B1 once at this guest frame (0 = disabled)
 static constexpr uint32_t kAutoPressAt = 0;   // diagnostic auto-press, off by default
@@ -923,7 +932,7 @@ static void console_exec(char *line)
         // Gesture state: without this the "card never opened" case is invisible.
         std::printf("GEST ac=%d fired=%d adown=%lld blank=%lld ban=%d card=%d menu=%d "
                     "scr=%04X pad=%04X\n",
-                    s_ac_active ? 1 : 0, s_ac_fired ? 1 : 0,
+                    s_chord_active ? s_chord_keys : 0, s_ac_fired ? 1 : 0,
                     (long long)s_a_down_us, (long long)s_pad_blank_us,
                     menu_auto_off_sec(), menu_confirm_is_open() ? 1 : 0, menu_is_open() ? 1 : 0,
                     unsigned(s_soc.ram[0x0C88]), unsigned(s_port_bits));
@@ -1341,32 +1350,72 @@ static void update_buttons(void)
         // it is the same physical gesture as far as the guest is concerned, and
         // without this the detector only ever sees real fingers.
         const int pressed = instant | (s_inject_left > 0 ? s_inject_mask : 0);
-        // Measured on the handset: this cartridge's title screen only advances
-        // on A+C.  Pure A, B, C and A+B+C all leave [0x0C88] at 0 with the logo
-        // on the panel, while A+C reaches the clock screen -- which is exactly
-        // what the two-screen gestures on the real shell use, and why the chord
-        // cannot simply be folded into the press.
-        // Not while the settings menu owns the panel: the injected C would read
-        // back as a fresh edge and close the menu the user just opened.
-        if ((pressed & BTN_KEY0) != 0 && !menu_is_open() && !menu_confirm_is_open()) {
+        const bool a_down = (pressed & BTN_KEY0) != 0;
+        // A is WITHHELD from the guest: the pulse is delivered on release, not
+        // on press.
+        //
+        // A is the settings gesture now, and any A that leaks into the ROM
+        // walks the game off the screen whose chord the menu is about to send.
+        // Measured, not theorised: with the old "pulse on press" behaviour a
+        // cold boot sits on the title screen ([0x0C88] = 0), the first six
+        // frames of a long A move it to the LOAD/RESET menu ([0x0C88] = 1), and
+        // by the time the card's SEND A+C row ran, the chord was landing on a
+        // screen that does not act on it -- which is exactly the "SEND A+C does
+        // nothing" report.
+        //
+        // Holding the press until release costs one short-press of latency (the
+        // finger's own 100-200 ms) and buys a gesture that cannot touch the game.
+        // The cartridge's title screen only advances on A+C anyway; pure A does
+        // nothing there, so the withheld press is invisible on the screen that
+        // matters most.
+        if (a_down && !menu_is_open() && !menu_confirm_is_open()) {
             const int64_t now = esp_timer_get_time();
-            if (s_a_down_us == 0)
+            if (s_a_down_us == 0) {
                 s_a_down_us = now;
-            else if (!s_ac_fired && now - s_a_down_us >= s_ac_hold_us) {
+                s_a_withheld = true;
+            } else if (!s_ac_fired && now - s_a_down_us >= s_ac_hold_us) {
                 s_ac_fired = true;
-                // Do NOT inject anything yet.  The cartridge's title screen
-                // rejects a pad that reads A+C and then looks like it never got
-                // a key at all, which is exactly how every long press ended up
-                // as "the game will not start".  Raise a card instead and let
-                // the second press decide.
-                menu_confirm_set(true);
-                s_confirm_pad_prev = latched;
-                s_confirm_fresh = true;
+                s_a_withheld = false;      // the long press never becomes a tap
+                // Two things happen in the same frame the threshold passes:
+                //   * the pad goes back to the guest released.  A has been down
+                //     for 1.2 s and this ROM reads a held key as a stream of
+                //     repeats -- that is exactly why long B used to walk the
+                //     game onto the clock screen before the user ever saw a
+                //     menu;
+                //   * the menu opens, so every press after this one lands in
+                //     the card instead of the game.
+                if (s_port_bits != 0xffff) {
+                    s_port_bits = 0xffff;
+                    s_soc.set_port(0, 0xffff);
+                }
+                s_hold_left = 0;
+                s_held_frames = 0;
+                menu_open();
+                // Seed the menu's edge detector with the pad as it will look
+                // AFTER the injector is drained further down, not as it looks
+                // now: a console hold arrives through s_inject_mask, so
+                // `instant` is still 0 at this point and the very A that opened
+                // the menu would read back as a fresh edge on the next frame and
+                // walk the cursor off row 0.
+                s_menu_pad_prev = pressed;
                 s_blit_repaint_all = true;
-                ESP_LOGI(TAG, "long A (%lld ms) -> A+C confirm card",
+                ESP_LOGI(TAG, "long A (%lld ms) -> settings menu",
                          (long long)((now - s_a_down_us) / 1000));
             }
-        } else {
+        } else if (!a_down && s_a_withheld) {
+            // Released before the threshold: this was a tap, so the guest gets
+            // its press now.  The pulse goes out through the same hold mask the
+            // other keys use, which is what makes it last kPressFrames guest
+            // frames rather than one.
+            s_a_withheld = false;
+            s_hold_mask = BTN_KEY0;
+            s_hold_left = kPressFrames;
+            s_held_frames = 0;
+            ESP_LOGI(TAG, "short A (%lld ms) -> press",
+                     (long long)((esp_timer_get_time() - s_a_down_us) / 1000));
+            s_a_down_us = 0;
+            s_ac_fired = false;
+        } else if (!a_down) {
             s_a_down_us = 0;
             s_ac_fired = false;
         }
@@ -1398,44 +1447,13 @@ static void update_buttons(void)
         s_pad_blank_us = 0;
     }
 
-    // Long B opens the emulator's settings menu.  It is chrome, not a guest
-    // input: the hold is timed here, and once it fires the guest gets its own B
-    // released rather than sitting on a two second hold, which this ROM reads as
-    // a burst of repeats.
-    {
-        static int64_t s_b_down_us = 0;
-        static bool s_b_fired = false;
-        // The contact that accepted the chord card is not a menu request.  A
-        // frame here can be 60-300 ms, so "B held for 1.5 s" and "B pressed to
-        // confirm" are the same physical event; the menu would open on the very
-        // key that sent the chord and then own every later press.
-        if (s_b_hold_locked && (instant & BTN_KEY1) == 0)
-            s_b_hold_locked = false;          // released: arm the detector again
-        if (s_b_hold_locked) {
-            s_b_down_us = 0;
-            s_b_fired = false;
-        } else if ((instant & BTN_KEY1) != 0 && !menu_is_open()) {
-            const int64_t now = esp_timer_get_time();
-            if (s_b_down_us == 0)
-                s_b_down_us = now;
-            else if (!s_b_fired && now - s_b_down_us >= kMenuHoldUs) {
-                s_b_fired = true;
-                if (s_port_bits != 0xffff) {
-                    s_port_bits = 0xffff;
-                    s_soc.set_port(0, 0xffff);
-                }
-                s_hold_left = 0;
-                s_held_frames = 0;
-                menu_open();
-                s_menu_pad_prev = instant | latched;
-                ESP_LOGI(TAG, "long B (%lld ms) -> settings menu",
-                         (long long)((now - s_b_down_us) / 1000));
-            }
-        } else {
-            s_b_down_us = 0;
-            s_b_fired = false;
-        }
-    }
+    // Long B used to open the settings menu here.  It no longer does: the hold
+    // is a guest gesture again.  Keeping the menu on B meant the 1.5 s hold
+    // streamed into the ROM first (a held key is a burst of repeats to this
+    // cartridge), so the game switched to the clock screen before the card was
+    // even drawn - the user got their menu and a moved game.  The gesture now
+    // lives on long A, which stops feeding the pad once the guest has seen one
+    // full press (see the hold block below).
 
     // Any key restarts the idle timer that drives the screen-off behaviour.
     // This has to sit after the injector above, otherwise a console-injected
@@ -1450,11 +1468,16 @@ static void update_buttons(void)
         }
     }
 
-    if (instant != 0) {
-        if (s_hold_mask != instant) {
-            s_hold_mask = instant;
+    // A never reaches the guest from this path: it is withheld until release by
+    // the detector above, which is what keeps the menu gesture from walking the
+    // game off its screen.  Only B and C go through the hold machinery, and they
+    // keep the old level semantics -- a hold is a hold for them.
+    const int pad = instant & ~BTN_KEY0;
+    if (pad != 0) {
+        if (s_hold_mask != pad) {
+            s_hold_mask = pad;
             s_held_frames = 0;
-            ESP_LOGI(TAG, "press %02x -> holding", unsigned(instant));
+            ESP_LOGI(TAG, "press %02x -> holding", unsigned(pad));
         }
         if (s_held_frames < kPressFrames)
             s_held_frames++;
@@ -1469,11 +1492,15 @@ static void update_buttons(void)
             s_hold_mask = 0;
             s_held_frames = 0;
         }
-    } else if (latched != 0) {
-        s_hold_mask = latched;
+    } else if ((latched & ~BTN_KEY0) != 0) {
+        // A is stripped here too: a latched A belongs to the withheld detector
+        // above, and letting the latch start a press would put A back into the
+        // ROM by the side door.
+        const int tap = latched & ~BTN_KEY0;
+        s_hold_mask = tap;
         s_hold_left = kPressFrames;
         s_held_frames = 0;
-        ESP_LOGI(TAG, "tap %02x -> holding %d guest frames", unsigned(latched), kPressFrames);
+        ESP_LOGI(TAG, "tap %02x -> holding %d guest frames", unsigned(tap), kPressFrames);
     } else {
         s_hold_mask = 0;
         s_held_frames = 0;
@@ -1505,6 +1532,39 @@ static void update_buttons(void)
             menu_close();             // the restored frame replaces the card
             s_blit_repaint_all = true;
             break;
+        case MENU_ACTION_CHORD:
+            // Row 0 of the card.  The chord is a level, not a pulse: the
+            // cartridge ignores anything shorter than a couple of seconds, and
+            // the card closes first so what the user sees while it is held is
+            // the game reacting to it, not the menu sitting on top.
+            //
+            // The pad is blanked for kPadBlankUs before the chord starts.  That
+            // is what the old confirmation card did and what the menu version
+            // was missing: the B that chose this row is still physically down,
+            // and handing the ROM "B down, then one frame later a chord" is a
+            // transition it drops on the floor.  The card's sequence was
+            // B -> 700 ms of nothing -> chord, and that is the one that worked.
+            start_chord(BTN_KEY0 | BTN_KEY2, kPadBlankUs + kAcChordUs);
+            s_b_hold_locked = true;   // this B chose a row, it is not a menu request
+            s_pad_blank_us = esp_timer_get_time() + kPadBlankUs;
+            menu_close();
+            s_blit_repaint_all = true;
+            ESP_LOGI(TAG, "menu row 0 -> A+C in %lld ms, held %lld ms",
+                     (long long)(kPadBlankUs / 1000), (long long)(kAcChordUs / 1000));
+            break;
+        case MENU_ACTION_CHORD_AB:
+            // Row 1: A+B, the mix the manual lists for the grave screen (hatch a
+            // new egg).  Same sequence as row 0 - blank the pad, then hold the
+            // pair - because what the ROM is picky about is the transition into
+            // the chord, not what the chord means on that screen.
+            start_chord(BTN_KEY0 | BTN_KEY1, kPadBlankUs + kAcChordUs);
+            s_b_hold_locked = true;
+            s_pad_blank_us = esp_timer_get_time() + kPadBlankUs;
+            menu_close();
+            s_blit_repaint_all = true;
+            ESP_LOGI(TAG, "menu row 1 -> A+B in %lld ms, held %lld ms",
+                     (long long)(kPadBlankUs / 1000), (long long)(kAcChordUs / 1000));
+            break;
         default:
             break;
         }
@@ -1528,8 +1588,7 @@ static void update_buttons(void)
             // read back as a fresh edge and cancel the card in the same frame.
             s_confirm_fresh = false;
         } else if ((edge & BTN_KEY1) != 0) {
-            s_ac_active = true;
-            s_ac_until_us = esp_timer_get_time() + kAcChordUs;
+            start_chord(BTN_KEY0 | BTN_KEY2, kAcChordUs);
             menu_confirm_set(false);
             s_b_hold_locked = true;      // this B accepts the chord, it does not open the menu
             s_pad_blank_us = esp_timer_get_time() + kPadBlankUs;
@@ -1559,13 +1618,18 @@ static void update_buttons(void)
         s_hold_left = kPressFrames;
     }
 
-    // A chord that the user accepted on the confirmation card outranks the
-    // physical pad: the card already swallowed the A press, so the guest gets a
-    // clean A+C pair and nothing else.  Short cards are the reason this is timed
-    // rather than gated on the finger -- there is no finger any more.
-    if (s_ac_active && esp_timer_get_time() >= s_ac_until_us)
-        s_ac_active = false;
-    int mask = s_ac_active ? (BTN_KEY0 | BTN_KEY2) : instant;
+    // A chord the user asked for outranks the physical pad.  The menu closed as
+    // soon as the row was chosen, so there is no finger on it any more and the
+    // guest should see a clean pair and nothing else.
+    if (s_chord_active && esp_timer_get_time() >= s_chord_until_us)
+        s_chord_active = false;
+    // The physical pad reaches the guest WITHOUT A: A is delivered only as the
+    // release-time pulse pushed through s_hold_mask below, which is the whole
+    // point of the withheld detector.  Leaving `instant` here was the line that
+    // kept long A moving the game from the title screen to LOAD/RESET
+    // ([0x0C88] 0 -> 1) even after the pulse path had been rewritten, and it is
+    // why the menu's SEND A+C had nothing to act on.
+    int mask = s_chord_active ? s_chord_keys : (instant & ~BTN_KEY0);
     if (mask == 0 && s_hold_left > 0)
         mask = s_hold_mask;
 

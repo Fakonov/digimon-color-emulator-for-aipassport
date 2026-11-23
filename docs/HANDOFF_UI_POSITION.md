@@ -350,4 +350,251 @@ static_assert(kStripBytes >= kDstW * 2 * kMenuBandRows,
 
 1.2.1 那一版带这个 bug，**未做归档**（tag 与里程碑都已撤销）。里程碑是 **v1.2.2 = 画面居中 + 闪退修复**，
 见 `milestones/2026-11-23_v1.2.2_centered/`。
+
+---
+
+## 12. 2026-11-23 23:3x — 设置界面改到长按 A，第一项发 A+C（v1.3.0）
+
+### 12.1 需求与原因
+
+原设计：长按 A 弹 A+C 确认卡、长按 B 呼出设置菜单。
+问题：**长按 B 的 1.5 s 先被喂给了 ROM**（一帧 60–300 ms，按住就持续喂），游戏收到长按 B 后切到时钟画面，用户"既开了菜单也换了画面"。
+
+新设计：
+
+| 手势 | 行为 |
+|---|---|
+| 长按 A（1.2 s，`H <ms>` 可调） | 呼出设置菜单，光标默认落在第 0 行 |
+| 菜单第 0 行 | **SEND A+C** —— 按 B 发送 3.2 s A+C，并关闭菜单 |
+| 菜单第 1–7 行 | AUTO OFF / BRIGHT / VOLUME / AUTO SAVE / SAVE OUT / SAVE IN / VERSION，行为不变 |
+| 长按 B | **归还给游戏**，不再呼出任何东西 |
+
+A+C 确认卡（`menu_confirm_*`）不再被触发，代码保留并标注 superseded——它仍是唯一能画 modal 的路径。
+
+### 12.2 改动清单
+
+| 文件 | 改动 |
+|---|---|
+| `menu.h` | `MENU_ITEMS` 7→8；新增 `MENU_IDX_CHORD = 0`，其余 1..7；新增 `MENU_ACTION_CHORD` |
+| `menu.cpp` | 行高 24→20、行距 26→22（8 行：45 + 7×22 + 20 = 219 < 228 卡片底）；`name_for/label_for` 加 CHORD；`menu_press_b` 加 case；`menu_open` 光标默认 CHORD；`menu_present` 加渲染/总耗时日志 |
+| `app_main.cpp` | 长按 A → `menu_open()`；删除长按 B 的菜单触发；A 只喂 `kPressFrames` 帧脉冲（长按不再灌进 ROM）；`MENU_ACTION_CHORD` → 置 `s_ac_active` 3.2 s 并关菜单；`kMenuHoldUs` 删除 |
+| `font5x7.inc` | 由 `tmp/make_font.py` 重新生成，补了 `+` 字形（原来 43 号是空的，SEND A+C 显示成 "SEND A C"） |
+
+### 12.3 两个当场踩到的坑
+
+1. **时间戳倒挂让改动编不进去**：`edit` 写入的 mtime 比上一次编译产物的 mtime 旧（并行执行时构建先读了文件），ninja 判定 obj 更新、跳过编译，于是连着两次烧的固件行为一模一样。症状是"改了代码但设备表情不变"。**改完源码先 touch 再 build**，或者直接 `-Clean`。
+2. **长按 A 打开菜单后，同一个 A 又把光标挪走一格**：`s_menu_pad_prev` 原本用 `instant | latched` 种子，而 K 注入是在长按判定**之后**才覆盖 `instant` 的，所以种子是 0，下一帧 A 读回来就是"新边沿"，`menu_press_a()` 把光标从第 0 行推到第 1 行（用户按 B 改的是 AUTO OFF）。改成用 `pressed`（含 `s_inject_mask`）种子。
+
+### 12.4 性能评估：半透明要不要改成不透明
+
+`menu_present()` 现在会打印自己的耗时：
+
+```
+menu: pushed 10 band(s), 320x240: render 79 ms, total 100 ms
+```
+
+| 指标 | 值 | 含义 |
+|---|---|---|
+| render | **79–81 ms** | 240 行 × 320 px 的合成：客人画面采样 + 12 px 阴影 + 90 % 卡片混合 + 文字 |
+| total | 98–100 ms | 含 10 个 band 的 SPI 推送 |
+| 频次 | 只有 `s_dirty` 时才跑 | 打开菜单、每次按键各一次；菜单期间 guest 已 park，静止时开销为 **0** |
+
+**结论：不改不透明。** 理由不是"还能忍"，是**改不透明解决不了主要成本**：
+
+- 卡片**外面**必须继续显示游戏画面（否则四周全黑），所以 `backdrop_px()` 的逐像素采样一次都省不掉；
+- 不透明只能省掉 `blend565()`（每像素 3 次乘法），估计只回收 10–15 ms 里的一部分；
+- 换来的是失去半透明质感和投影——那是照 digimon 参考面板做的观感，代价明确、收益可疑。
+
+真正的成本在**每次按键都重绘整张卡**。正确的优化是**只重推变化的行**：
+
+| 方案 | 打开菜单 | 每次按键 | 观感 |
+|---|---|---|---|
+| 现状 | 79 ms | 79 ms | 半透明 ✓ |
+| 改不透明 | ~65 ms | ~65 ms | 失去质感，收益小 |
+| **局部重绘（建议）** | 79 ms | **~2 ms** | 半透明 ✓ |
+| 局部重绘 + backdrop 移位代替除法 | ~55 ms | ~2 ms | 半透明 ✓ |
+
+（`scale` 固定为 2，`backdrop_px()` 里的两次整数除法可以换成移位，约占 79 ms 的三分之一。）
+
+要不要做局部重绘，等拍板。改动集中在 `menu_present()` 的 band 循环：把"整卡 dirty"换成行区间 dirty。
+
+### 12.5 验证
+
+```
+长按 A → menu: open / long A (1575 ms) -> settings menu
+         menu: pushed 10 band(s) ... render 79 ms, total 100 ms
+按 B   → menu: A+C chord requested → menu: close
+         DIGICORE: menu row 0 -> A+C sent (3200 ms)
+         port=ffd7（A+C，A 0x08 + C 0x20）→ 3.2 s 后 port=ffff
+长按 B → 只有 port=ffef（B 到 guest），没有 menu: open
+```
+
+卡片外观用 `tmp/s31/menu_shot.py` 从串口抓回（`N 10` 通道，菜单不写 fb[]）：
+
+```
+SETTINGS                              1.3.0
+[ SEND A+C ]                       ← 第 0 行，黄色选择条
+  AUTO OFF                  FOLLOW 16S
+  BRIGHT                          80%
+  VOLUME                          20%
+  AUTO SAVE                       60S
+  SAVE OUT                   SAVE NOW
+  SAVE IN                   LOAD LAST
+  VERSION                       1.3.0
+```
+
+---
+
+## 13. 2026-11-23 23:4x — 「SEND A+C 没有作用」：两条真 bug，和一个不成立的前提
+
+### 13.1 修掉的两条（都实测过）
+
+**① 长按 A 会把游戏推离当前画面。**
+
+A 按下后先喂了 guest 6 帧（`kPressFrames`）才进入长按计时。在标题画面（`[0x0C88] = 0`）实测：
+
+```
+冷启动              0x0C88 = 0000
+长按 A（修前）      0x0C88 = 0001   ← A 的脉冲把游戏推进了 LOAD/RESET 菜单
+```
+
+于是菜单里那条 SEND A+C 落在一个不认它的画面上——这就是"SEND A+C 没作用"的直接原因。
+
+修法：**A 按下时扣住不投递，松手时才决定**。短按 → 补发一个 `kPressFrames` 脉冲；长按 → 只开菜单，一个字节都不进 ROM。四处要一起堵：
+
+| 位置 | 原来 | 现在 |
+|---|---|---|
+| `if (instant != 0) { ... s_hold_left = kPressFrames; }` | A 在按下时就被喂 | 用 `instant & ~BTN_KEY0`，A 不进这条路 |
+| `else if (latched != 0)` | 锁存的 A 从侧门进来 | 同样剥掉 `BTN_KEY0` |
+| `int mask = ... : instant;` | **A 从这里再次进入** | `instant & ~BTN_KEY0` |
+| 松开检测 | 无 | `s_a_withheld` → 投递一次脉冲 |
+
+修后实测：长按 A `0x0C88` 保持 `0000`；短按 A（325 ms）→ `0001`，短按手感正常。
+
+代价：短按 A 从"按下即响应"变成"松手才响应"，延迟就是一个手指的按击时长（100–300 ms）。标题画面对纯 A 本来就不响应（见下），所以最要紧的那个画面上看不出差别。
+
+**② 菜单发 chord 前少了 700 ms 静默期。**
+
+旧确认卡是 `B 确认 → 700 ms 全松开（kPadBlankUs）→ A+C`；菜单版是 `B 选中 → 下一帧直接 A+C`。B 还按着就跳到 A+C，ROM 那次跳变直接丢掉。已补：
+
+```cpp
+s_ac_until_us = now + kPadBlankUs + kAcChordUs;
+s_b_hold_locked = true;
+s_pad_blank_us = now + kPadBlankUs;
+```
+
+实测 `port=ffd7` 现在从按键后 +752 ms 才开始，3.2 s 后释放——时序和旧卡片一致。
+
+### 13.2 前提是成立的，但注入方式不对
+
+**先更正 13.2 的初版结论**：A+C 不是"不存在"的组合键。官方说明书写着三条组合键（见 `docs/RESEARCH_DMC_MANUAL.md`）：
+
+| 组合 | 界面 | 功能 |
+|---|---|---|
+| **A+C** | 主画面 | **静音 / 取消静音**（屏幕上没有任何反馈） |
+| **A+C** | 时钟画面（B 显示时钟后） | **进入改时间** |
+| **A+B** | 墓碑 | 孵新蛋 |
+
+所以 13.1 修好的两条仍然必要，但"A+C 无效"另有原因。实测（`K 5 <n>` 直接注入 `0xFFD7`）：
+
+| 画面 | 输入 | 结果 |
+|---|---|---|
+| 标题 `[0x0C88]=0` | A+C 6 / 20 / 30 帧 | 无变化 |
+| LOAD/RESET `1` | A+C | 无变化 |
+| 宠物 + 时钟叠加 `4` | A+C，以及「先 A 4 帧、再 A+C 24 帧」分阶段 | 画面无变化 |
+
+`port=ffd7` 都完整发出并保持到位，是 ROM 不接。
+
+**最可能的原因**：真机三键在一条电阻梯上，物理上不可能同时产生两个接触，组合键是靠**扫描时序**拼出来的（ROM 轮换扫描线，A+C 在两轮之间被识别），不是靠一个稳定的 `0xFFD7` 电平。我们现在给的是一个稳定电平，ROM 的解码里大概没有这个分支。
+
+**因此**：`SEND A+C` 在有可见反馈的场合（时钟画面）仍需验证；主画面那条即使成功也只是静音，屏幕上看不出来——**这很可能就是"1.2.2 有作用 / 1.3.0 没作用"的观感来源**：1.2.2 那次可能是在有反馈的画面，或者听到了静音，而 1.3.0 测试时画面没对上。
+
+### 13.3 待决
+
+`SEND A+C` 值得再验一次，验法要按手册来：
+
+1. 主画面无图标选中时**短按 B** 显示时钟；
+2. 在时钟画面上按菜单第 0 行；
+3. 看时间数字是否变成可编辑（闪烁 / 可选）。
+
+如果时钟画面也不认，就说明稳定电平注入这条路走不通，那时再决定：
+- 换成分阶段注入（A 先落、C 后加，带间隔）；
+- 或者把这个入口换成真的能用的命令（回标题 / 立即存档）。
+
+在结论出来之前不动代码。
+
+---
+
+## 14. 2026-11-24 00:0x — 菜单加入 A+B（v1.3.1）
+
+### 14.1 为什么加
+
+`docs/RESEARCH_DMC_MANUAL.md` §2 抄了官方说明书的第三条组合键：
+
+> **A+B on a Grave.** This will allow you to hatch a new Digimon.
+
+真机三键在一条电阻梯上，A+B 和 A+C 一样物理上按不出来，所以它和 A+C 一样只能由模拟器代发。
+
+### 14.2 布局：8 行放不下第 9 行
+
+卡片 `kCardY=16 / kCardH=212`，内容底边 228。原来 8 行用 20 px 行高 + 22 px 间距：
+
+```
+45 + 7*22 + 20 = 219   ✓  8 行刚好
+45 + 8*22 + 20 = 241   ✗  9 行溢出 13 px
+```
+
+改成 **18 px 行高 + 20 px 间距**：
+
+```
+45 + 8*20 + 18 = 223   ✓  距底边 5 px，14 px 字形上下各留 2 px
+```
+
+卡片尺寸没动（加高会顶到屏幕底 240）。
+
+### 14.3 实现：两个 chord 共用一个槽位
+
+原来的 `s_ac_active / s_ac_until_us` 换成一组通用的：
+
+```cpp
+static bool s_chord_active = false;
+static int  s_chord_keys = 0;        // BTN_KEY0|BTN_KEY2 = A+C, BTN_KEY0|BTN_KEY1 = A+B
+static int64_t s_chord_until_us = 0;
+static void start_chord(int keys, int64_t hold_us);
+```
+
+一个槽位够用：chord 只从菜单行触发，而菜单在触发的同时就关闭了，两个不可能重叠。
+`mask = s_chord_active ? s_chord_keys : (instant & ~BTN_KEY0);` —— 仍然是"物理 pad 不含 A"。
+
+菜单：
+
+| 行 | 内容 | 动作 |
+|---|---|---|
+| 0 | SEND A+C | `start_chord(A|C, kPadBlankUs + kAcChordUs)` |
+| 1 | SEND A+B | `start_chord(A|B, kPadBlankUs + kAcChordUs)` |
+| 2–8 | AUTO OFF / BRIGHT / VOLUME / AUTO SAVE / SAVE OUT / SAVE IN / VERSION | 不变 |
+
+两条 chord 都先 blank 700 ms 再按住 3.2 s，和旧确认卡一致。
+
+### 14.4 验证
+
+```
+长按 A → menu: open（光标第 0 行）
+按 A   → 光标移到第 1 行（A 的边沿由菜单消费，不喂 guest）
+按 B   → menu: A+B chord requested → menu: close
+         menu row 1 -> A+B in 700 ms, held 3200 ms
+         port=ffe7（A 0x08 + B 0x10）→ 3.2 s 后 port=ffff
+```
+
+卡片渲染（`tmp/s31/menu_shot.py` 从串口抓回）：9 行全在框内，`SEND A+B` 在第 2 行，版本号 1.3.1。
+
+### 14.5 还没验的
+
+**A+B 在墓碑画面到底能不能孵出蛋**，现在验证不了——需要宠物死亡才会出现墓碑，从当前存档走不到。等真的死一只再说。
+
+`port=ffe7` 只证明组合送到了 PORTA，和 A+C 那次一样，ROM 认不认是另一回事（A+C 是在时钟画面才确认有效的）。
+
+### 13.4 测试通道的副作用
+
+`K 5 <n>`（注入 A+C）现在不会生效：`K` 注入走的是同一个 `mask` 表达式，A 的位被一并剥掉了，日志里只会看到 `ffdf`（只剩 C）。这不是 bug，是"A 一律不投递"的直接后果；要测组合键得另外加一条能绕过的命令。
 - **「偏左」的观感来源仍未定位到物证**：要么是旧固件，要么是外壳。下次让用户确认当时装没装外壳、看到的是哪个版本，别再从代码里找。`G 2`（四边白框 + 四角方块）就是为这个留的。
