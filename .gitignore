@@ -69,3 +69,8 @@ _research/
 
 # ---- sdkconfig 手工备份 ----
 firmware/*/sdkconfig.bak-*
+
+# ---- dbgtest 截图/探针输出 ----
+dbgtest/**/*.bmp
+dbgtest/**/*.png
+dbgtest/**/*.txt

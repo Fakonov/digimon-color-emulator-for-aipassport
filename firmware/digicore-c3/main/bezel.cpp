@@ -231,3 +231,44 @@ void bezel_draw_battery(uint8_t *strip, size_t strip_bytes, int batt_pct)
     if (display_draw_bitmap(bx, by, tw, th, strip) != ESP_OK)
         ESP_LOGW(TAG, "battery corner push failed");
 }
+
+void bezel_draw_message(uint8_t *strip, size_t strip_bytes,
+                        const char *line1, const char *line2)
+{
+    if (strip == nullptr)
+        return;
+    const char *lines[2] = {line1, line2};
+    // Two 14 px rows, centred on the glass: the card is the only thing on screen,
+    // so it sits in the middle rather than tucked under the rim.
+    const int tops[2] = {BEZEL_GLASS_Y + 96 - 18, BEZEL_GLASS_Y + 96 + 6};
+    for (int pass = 0; pass < 2; pass++) {
+        const char *t = lines[pass];
+        if (t == nullptr || t[0] == 0)
+            continue;
+        const int n = int(std::strlen(t));
+        const int tw = n * kHudAdv - kHudPx;
+        const int th = 7 * kHudPx;
+        if (tw <= 0 || tw > BEZEL_GLASS_W ||
+            size_t(tw) * size_t(th) * 2u > strip_bytes)
+            continue;
+        const int bx = BEZEL_GLASS_X + (BEZEL_GLASS_W - tw) / 2;
+        uint16_t *px = reinterpret_cast<uint16_t *>(strip);
+        for (int r = 0; r < th; r++) {
+            uint16_t *row = px + r * tw;
+            for (int i = 0; i < tw; i++) {
+                uint16_t c = 0;                 // the glass is black behind the card
+                const int ci = i / kHudAdv;
+                const int col = (i - ci * kHudAdv) / kHudPx;
+                const int gy = r / kHudPx;
+                if (ci < n && col < 5) {
+                    const uint8_t *g = &kFont5x7[((unsigned char)t[ci] - 32) * 5];
+                    if (g[col] & (1u << gy))
+                        c = kHudInk;
+                }
+                row[i] = be16(c);
+            }
+        }
+        if (display_draw_bitmap(bx, tops[pass], tw, th, strip) != ESP_OK)
+            ESP_LOGW(TAG, "message push failed");
+    }
+}

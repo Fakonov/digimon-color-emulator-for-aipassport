@@ -48,6 +48,7 @@
 #include "fbsave.h"
 #include "menu.h"
 #include "bezel.h"
+#include "dmc_link.h"
 #include "esp_rom_crc.h"
 
 // The 5x7 face the settings card draws with.  Its own copy of the table (295 B)
@@ -353,6 +354,10 @@ static_assert(BEZEL_GLASS_X == 64 && BEZEL_GLASS_Y == 24,
 // bezel.cpp, so they stay here beside the 30 s refresh loop that updates them.
 static int s_batt_pct = -1;
 static int64_t s_batt_next_us = 0;
+
+// Set once the "no ROM / uploading" card has been painted, so the idle loop
+// does not re-push the whole shell every 20 ms.
+static bool s_no_rom_painted = false;
 
 static int64_t s_cycle = 0;          // guest cycles since reset
 static uint64_t s_insns = 0;         // guest instructions retired (for mi_s)
@@ -830,6 +835,12 @@ static void console_exec(char *line)
 {
     while (*line == ' ')
         line++;
+
+    // The transfer protocol owns everything that starts with "DMC1".  It has to
+    // be checked before the one-letter table because both 'D' commands exist
+    // (D = machine snapshot).
+    if (dmclink_exec(line))
+        return;
 
     switch (*line) {
     case 'A': {                    // A: inject the A+C chord, like a held A
@@ -2334,9 +2345,13 @@ extern "C" void app_main(void)
         }
     }
 
-    if (!guest_init()) {
-        ESP_LOGE(TAG, "guest boot aborted: no usable ROM store");
-        return;
+    // A published build ships without the ROM (it is Bandai's), so "no usable
+    // ROM store" is the normal first boot, not a fatal error: keep the console
+    // answering, paint the hint, and wait for a DMC1 upload to restart us.
+    const bool guest_ok = guest_init();
+    dmclink_note_rom_state(guest_ok);
+    if (!guest_ok) {
+        ESP_LOGE(TAG, "no usable ROM store - waiting for a DMC1 upload");
     }
 
     int64_t last_log = esp_timer_get_time();
@@ -2349,6 +2364,21 @@ extern "C" void app_main(void)
     for (;;) {
         const int64_t t_guest0 = esp_timer_get_time();
         debug_poll();
+        if (!guest_ok || dmclink_busy()) {
+            // No ROM yet, or a transfer owns the cable.  The guest must not run
+            // through a partition that is being reprogrammed, and this loop is
+            // also the only place that can answer DMC1, so it stays cheap.
+            if (!s_no_rom_painted) {
+                bezel_paint(s_strip, sizeof(s_strip), s_batt_pct);
+                bezel_draw_message(s_strip, sizeof(s_strip),
+                                   guest_ok ? "UPLOADING" : "NO ROM",
+                                   guest_ok ? "WAIT" : "OPEN WEB TOOL");
+                s_no_rom_painted = true;
+            }
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+        s_no_rom_painted = false;
         selftest_step();
         if (s_force_full) {
             s_force_full = false;

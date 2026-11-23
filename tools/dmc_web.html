@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digimon Color · 传输工具</title>
+<style>
+  :root{color-scheme:dark;font-family:system-ui,-apple-system,"PingFang SC",sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;background:#1b1412;color:#f0e6dc}
+  main{max-width:680px;margin:auto;padding:24px 18px 56px}
+  h1{font-size:24px;margin:0 0 6px;color:#e8b17a}
+  h2{font-size:16px;margin:0 0 8px;color:#e8b17a;font-weight:650}
+  p{line-height:1.55;color:#c8b4a4;margin:8px 0}
+  .note{background:#2a1e1a;border:1px solid #57403a;border-radius:12px;padding:12px 14px;margin:14px 0;font-size:14px}
+  section.item{background:#241a17;border:1px solid #553f39;border-radius:12px;padding:14px;margin:12px 0}
+  .head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .state{font-size:13px;color:#b9a596}
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  button{border:0;border-radius:8px;padding:9px 15px;background:#e8b17a;color:#241a17;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.ghost{background:#3a2b26;color:#f0e6dc}
+  input[type=file]{max-width:100%;font-size:13px;color:#c8b4a4}
+  progress{width:100%;height:9px;margin-top:10px;display:none;appearance:none}
+  progress::-webkit-progress-bar{background:#3a2b26;border-radius:5px}
+  progress::-webkit-progress-value{background:#e8b17a;border-radius:5px}
+  #message{min-height:22px;color:#e8b17a;font-size:14px;margin-top:10px}
+  .bad{color:#ff9a91!important}.good{color:#a9e2b7!important}
+  code{background:#3a2b26;padding:1px 5px;border-radius:4px;font-size:13px}
+  ol{padding-left:20px;color:#c8b4a4;line-height:1.6;font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Digimon Color 传输工具</h1>
+  <p>把原机 ROM 写进 AI Passport，或者导出/导入宠物存档。固件本身不含 ROM，ROM 需自备。</p>
+
+  <div class="note" id="guide">
+    需要电脑上的 <strong>Chrome / Edge</strong>（Web Serial），并且本页必须从 <strong>https</strong> 或
+    <code>localhost</code> 打开。用 USB-C 线连上设备，先点“连接设备”。
+  </div>
+
+  <section class="item">
+    <div class="head"><h2>设备</h2><span class="state" id="dev-state">未连接</span></div>
+    <div class="controls">
+      <button id="connect">连接设备</button>
+      <button id="disconnect" class="ghost" disabled>断开</button>
+    </div>
+  </section>
+
+  <section class="item">
+    <div class="head"><h2>机内 ROM</h2><span class="state" id="rom-state">未读取</span></div>
+    <p id="rom-hint">已装 ROM 时这里会显示状态。换 ROM 会重写 <code>roms</code> 分区并让设备重启。</p>
+    <div class="controls">
+      <input id="rom-file" type="file" accept=".bin,application/octet-stream" aria-label="选择 ROM 文件">
+      <button id="rom-upload" disabled>上传 ROM</button>
+    </div>
+    <progress id="rom-progress" max="100"></progress>
+  </section>
+
+  <section class="item">
+    <div class="head"><h2>宠物存档</h2><span class="state" id="save-state">128 KiB</span></div>
+    <p>导出的是整个 <code>save</code> 分区原样镜像；导入后设备需要重启才会读到新存档。</p>
+    <div class="controls">
+      <button id="save-export" disabled>导出存档</button>
+      <input id="save-file" type="file" accept=".dmcsave,application/octet-stream" aria-label="选择存档文件">
+      <button id="save-import" disabled>导入存档</button>
+    </div>
+  </section>
+
+  <div id="message" role="status"></div>
+
+  <section class="item">
+    <h2>步骤</h2>
+    <ol>
+      <li>用 USB-C 连接设备，点“连接设备”，在弹窗里选串口（Windows 上通常是 COM4）。</li>
+      <li>选 ROM 文件（8 MiB 的 <code>.bin</code>），点“上传 ROM”。只传输有数据的页，约 2.5 MiB。</li>
+      <li>传完设备自动重启并进入游戏；重新“连接设备”后可以导出存档。</li>
+    </ol>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+const PAGE = 4096;
+const CHUNK_TIMEOUT = 20000;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+const msg = document.getElementById("message");
+function say(text, bad) {
+  msg.textContent = text;
+  msg.className = bad ? "bad" : "good";
+}
+
+class Link {
+  constructor(port) {
+    this.port = port;
+    this.queue = [];
+    this.offset = 0;
+    this.waiter = null;
+    this.closed = false;
+    this.error = null;
+  }
+
+  async open() {
+    await this.port.open({ baudRate: 115200, bufferSize: 65536 });
+    this.writer = this.port.writable.getWriter();
+    this.reader = this.port.readable.getReader();
+    this.pumpTask = this.pump();
+  }
+
+  async pump() {
+    try {
+      for (;;) {
+        const { value, done } = await this.reader.read();
+        if (done) break;
+        if (value && value.length) {
+          this.queue.push(value);
+          if (this.waiter) { const w = this.waiter; this.waiter = null; w(); }
+        }
+      }
+    } catch (err) {
+      this.error = err;
+    }
+    this.closed = true;
+    if (this.waiter) { const w = this.waiter; this.waiter = null; w(); }
+  }
+
+  async waitForBytes(deadline) {
+    if (this.queue.length) return;
+    if (this.closed) throw this.error || new Error("USB 连接已断开");
+    const left = deadline - Date.now();
+    if (left <= 0) throw new Error("设备无响应（超时）");
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { this.waiter = null; reject(new Error("设备无响应（超时）")); }, left);
+      this.waiter = () => { clearTimeout(timer); resolve(); };
+    });
+  }
+
+  async readBytes(count, timeout = CHUNK_TIMEOUT) {
+    const out = new Uint8Array(count);
+    const deadline = Date.now() + timeout;
+    let used = 0;
+    while (used < count) {
+      await this.waitForBytes(deadline);
+      const part = this.queue[0];
+      const take = Math.min(count - used, part.length - this.offset);
+      out.set(part.subarray(this.offset, this.offset + take), used);
+      used += take;
+      this.offset += take;
+      if (this.offset === part.length) { this.queue.shift(); this.offset = 0; }
+    }
+    return out;
+  }
+
+  async readLine(timeout = CHUNK_TIMEOUT) {
+    const deadline = Date.now() + timeout;
+    let text = "";
+    for (;;) {
+      const one = await this.readBytes(1, Math.max(1, deadline - Date.now()));
+      text += String.fromCharCode(one[0]);
+      if (one[0] !== 10) {
+        if (text.length > 2048) throw new Error("设备回复过长");
+        continue;
+      }
+      const line = text.trim();
+      text = "";
+      if (line.startsWith("DMC1 ERR ")) throw new Error("设备拒绝：" + line.slice(9));
+      if (line.startsWith("DMC1 ")) return line;
+      // Anything else is a firmware log line: the guest prints a ~600 byte
+      // status line every second while it runs, and the transfer replies queue
+      // up behind however much of that is still in the port.
+    }
+  }
+
+  async sendLine(line) {
+    await this.writer.write(encoder.encode(line + "\n"));
+  }
+
+  async writeRaw(bytes) {
+    await this.writer.write(bytes);
+  }
+
+  async command(line, expect, timeout = CHUNK_TIMEOUT) {
+    await this.sendLine(line);
+    const reply = await this.readLine(timeout);
+    if (expect && !reply.startsWith(expect)) throw new Error("设备回复异常：" + reply);
+    return reply;
+  }
+
+  async hello() {
+    return this.command("DMC1 HELLO", "DMC1 READY ");
+  }
+
+  async close() {
+    try { await this.reader.cancel(); } catch (e) {}
+    try { await this.pumpTask; } catch (e) {}
+    try { this.writer.releaseLock(); } catch (e) {}
+    try { await this.port.close(); } catch (e) {}
+    this.closed = true;
+  }
+}
+
+let link = null;
+let busy = false;
+
+function controls() {
+  const on = !!link && !link.closed && !busy;
+  document.getElementById("connect").disabled = busy || (!!link && !link.closed);
+  document.getElementById("disconnect").disabled = !link || busy;
+  document.getElementById("rom-upload").disabled = !on;
+  document.getElementById("save-export").disabled = !on;
+  document.getElementById("save-import").disabled = !on;
+}
+
+async function perform(action) {
+  if (!link || link.closed) { say("请先连接设备", true); controls(); return; }
+  busy = true; controls();
+  try { await action(); }
+  catch (err) { say(err.message || String(err), true); if (!link || link.closed) link = null; }
+  finally { busy = false; controls(); }
+}
+
+function toHex(bytes) {
+  let out = "";
+  for (const b of bytes) out += b.toString(16).padStart(2, "0");
+  return out;
+}
+
+async function sha1Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-1", bytes);
+  return toHex(new Uint8Array(digest));
+}
+
+// Only the non-zero pages cross the wire: the retail image is 8 MiB but 611 of
+// its 2048 pages carry data, so the transfer is 2.5 MiB.  The device writes them
+// into the same sparse store tools/make_sparse_rom.py builds on the host.
+function nonZeroPages(bytes) {
+  const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length >>> 2);
+  const per = PAGE >>> 2;
+  const pages = [];
+  for (let p = 0; p < words.length / per; p++) {
+    const base = p * per;
+    for (let i = 0; i < per; i++) {
+      if (words[base + i] !== 0) { pages.push(p); break; }
+    }
+  }
+  return pages;
+}
+
+document.getElementById("connect").onclick = async () => {
+  if (!navigator.serial || !window.isSecureContext) {
+    say("当前浏览器不支持 Web Serial，或页面不是 https / localhost", true);
+    return;
+  }
+  let port;
+  try { port = await navigator.serial.requestPort(); }
+  catch (err) { if (err.name !== "NotFoundError") say("无法选择设备：" + err.message, true); return; }
+  busy = true; controls();
+  try {
+    link = new Link(port);
+    await link.open();
+    const reply = await link.hello();
+    showStatus(reply);
+    say("已连接");
+  } catch (err) {
+    say(err.message || String(err), true);
+    if (link) { try { await link.close(); } catch (e) {} link = null; }
+  } finally { busy = false; controls(); }
+};
+
+document.getElementById("disconnect").onclick = () => perform(async () => {
+  await link.close(); link = null;
+  document.getElementById("dev-state").textContent = "未连接";
+  document.getElementById("rom-state").textContent = "未读取";
+  say("已断开");
+});
+
+function showStatus(line) {
+  const parts = line.split(" ");           // DMC1 READY <rom> <sha|-> <save>
+  const romOk = parts[2] === "1";
+  const sha = parts[3];
+  const saveOk = parts[4] === "1";
+  document.getElementById("dev-state").textContent = "已连接";
+  document.getElementById("rom-state").textContent = romOk ? "已装 ROM " + sha.slice(0, 8) : "空（需上传）";
+  document.getElementById("save-state").textContent = saveOk ? "存档已装 128 KiB" : "128 KiB";
+}
+
+document.getElementById("rom-upload").onclick = () => perform(async () => {
+  const file = document.getElementById("rom-file").files[0];
+  if (!file) throw new Error("请先选择 ROM 文件");
+  if (file.size !== 8388608 && file.size % PAGE !== 0)
+    throw new Error("ROM 长度不是 4096 的整数倍");
+  if (file.size > 8388608) throw new Error("ROM 超过 8 MiB");
+
+  say("正在读取文件…");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const pages = nonZeroPages(bytes);
+  say("已解析：非零页 " + pages.length + " / " + (bytes.length / PAGE) + "，计算校验…");
+  const sha = await sha1Hex(bytes);
+
+  const bar = document.getElementById("rom-progress");
+  bar.style.display = "block"; bar.value = 0;
+  await link.command("DMC1 ROM BEGIN " + bytes.length + " " + pages.length + " " + sha, "DMC1 OK BEGIN");
+  for (let i = 0; i < pages.length; i++) {
+    const p = pages[i];
+    await link.sendLine("DMC1 PAGE " + p + " " + PAGE);
+    await link.writeRaw(bytes.subarray(p * PAGE, (p + 1) * PAGE));
+    const ack = await link.readLine();
+    if (!ack.startsWith("DMC1 ACK ")) throw new Error("写入进度异常：" + ack);
+    if ((i & 7) === 0) bar.value = Math.round((i / pages.length) * 100);
+  }
+  bar.value = 100;
+  say("正在落盘并重启…");
+  await link.command("DMC1 END", "DMC1 OK END", 30000);
+  bar.style.display = "none";
+  say("ROM 已写入，设备正在重启；稍后重新连接即可");
+  link = null;
+  document.getElementById("dev-state").textContent = "设备重启中";
+});
+
+document.getElementById("save-export").onclick = () => perform(async () => {
+  await link.sendLine("DMC1 SAVE GET");
+  const head = await link.readLine();
+  const size = Number(head.split(" ")[2]);
+  if (!size || size < PAGE || size > 262144) throw new Error("存档长度不合理：" + head);
+  say("正在下载存档 " + size + " B…");
+  const data = await link.readBytes(size, 30000);
+  const done = await link.readLine();
+  if (done !== "DMC1 OK SAVE") throw new Error("下载未完成：" + done);
+  const url = URL.createObjectURL(new Blob([data], { type: "application/octet-stream" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "digimon-color-" + new Date().toISOString().slice(0, 10) + ".dmcsave";
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  say("存档已下载（" + size + " B）");
+});
+
+document.getElementById("save-import").onclick = () => perform(async () => {
+  const file = document.getElementById("save-file").files[0];
+  if (!file) throw new Error("请先选择 .dmcsave 存档");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes.length % PAGE !== 0 || bytes.length < PAGE || bytes.length > 262144)
+    throw new Error("存档长度不是 4096 的整数倍");
+  if (!confirm("导入会覆盖设备上的存档，确认继续？")) return;
+  await link.command("DMC1 SAVE BEGIN " + bytes.length, "DMC1 OK BEGIN");
+  for (let off = 0; off < bytes.length; off += PAGE) {
+    await link.sendLine("DMC1 PAGE " + off + " " + PAGE);
+    await link.writeRaw(bytes.subarray(off, off + PAGE));
+    const ack = await link.readLine();
+    if (!ack.startsWith("DMC1 ACK ")) throw new Error("写入进度异常：" + ack);
+  }
+  await link.command("DMC1 END", "DMC1 OK END", 30000);
+  say("存档已导入；点“连接设备”后可用“导出存档”核对，重启后生效");
+});
+
+if (!navigator.serial || !window.isSecureContext) {
+  say("当前浏览器不支持 Web Serial，或页面不是 https / localhost", true);
+  document.getElementById("connect").disabled = true;
+}
+if (navigator.serial) {
+  navigator.serial.addEventListener("disconnect", (event) => {
+    if (link && event.target === link.port) { link = null; say("USB 设备已断开", true); controls(); }
+  });
+}
+controls();
+</script>
+</body>
+</html>

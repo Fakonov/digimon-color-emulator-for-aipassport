@@ -34,6 +34,12 @@ void bezel_paint(uint8_t *strip, size_t strip_bytes, int batt_pct);
 /* Just the battery corner, for the 30 s refresh. */
 void bezel_draw_battery(uint8_t *strip, size_t strip_bytes, int batt_pct);
 
+/* Two centred lines inside the glass, black behind them.  The "no ROM" card has
+ * to be readable before the engine exists, so it cannot go through the guest
+ * framebuffer. */
+void bezel_draw_message(uint8_t *strip, size_t strip_bytes,
+                        const char *line1, const char *line2);
+
 /* 30 px rounded-corner mask: false means the pixel is outside the visible area. */
 bool bezel_visible(int x, int y);
 

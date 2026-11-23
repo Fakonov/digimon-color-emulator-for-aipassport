@@ -13,6 +13,7 @@ idf_component_register(
          "fbsave.cpp"
          "menu.cpp"
          "bezel.cpp"
+         "dmc_link.cpp"
          "buttons.c"
          "audio.c"
          "battery.c"
