@@ -716,12 +716,14 @@ enum {
 static int s_inject_mask = 0;      // key bits the host wants held down
 static int s_inject_left = 0;      // guest frames still to hold them
 static volatile bool s_force_full = false;
-static int s_pattern = 0;          // 0 = guest picture, 1 = alignment pattern
+static int s_pattern = 0;          // 0 = guest picture, 1 = fb pattern, 2 = panel edges
 
 // Defined next to the snapshot code below; the console needs them here.
 static void snapshot_machine_state(void);
 static void restore_machine_state(void);
 static bool load_panel_frame(void);
+// Defined with paint_pattern(); the G command pushes it once on demand.
+static void panel_edge_test(void);
 
 // A snapshot payload has to describe the whole machine, not just the guest's
 // own address space: the interrupt gates, the port directions and the panel
@@ -935,11 +937,17 @@ static void console_exec(char *line)
         }
         break;
     }
-    case 'G':                      // G 0|1: alignment pattern on/off
-        s_pattern = (line[1] == '1') ? 1 : 0;
+    case 'G': {                    // G 0|1|2: 0 off, 1 fb pattern, 2 panel edges
+        const char *arg = line + 1;
+        while (*arg == ' ')
+            arg++;
+        s_pattern = (*arg >= '0' && *arg <= '2') ? (*arg - '0') : 0;
         s_force_full = true;
+        if (s_pattern == 2)
+            panel_edge_test();
         std::printf("ACK G %d\n", s_pattern);
         break;
+    }
     case 'P': {                    // P 0|1: LCD push hook off/on (live A/B)
         const char *arg = line + 1;
         while (*arg == ' ')
@@ -1120,6 +1128,37 @@ static void paint_pattern(void)
             fb[(kWinY + y) * kFbPanel + kWinX + x] =
                 border ? 0xF800 : (cross ? (tick ? 0x001F : 0xFFFF) : 0x0000);
         }
+}
+
+// Panel-level geometry test (G 2).  G 1 paints into fb[], so the photograph can
+// only show the picture, never where the picture sits on the glass.  This one is
+// pushed straight to the panel: a 1 px white frame around the full 320x240 area
+// plus 8x8 corner blocks.  Measure the gaps on a photo and the panel's visible
+// area is then known in the same coordinates the blitter uses -- which is the
+// only way to answer "is the picture really off-centre, or is the glass?"
+static void panel_edge_test(void)
+{
+    if (!s_display_ok)
+        return;
+    uint8_t *p = s_strip;
+    const int row_px = kDstW;
+
+    for (int i = 0; i < row_px * 2; i += 2) { p[i] = 0xFF; p[i + 1] = 0xFF; }
+    display_draw_bitmap(0, 0, kDstW, 1, p);
+    display_draw_bitmap(0, kDstH - 1, kDstW, 1, p);
+
+    for (int y = 0; y < kDstH; y++) {
+        p[y * 2] = 0xFF;
+        p[y * 2 + 1] = 0xFF;
+    }
+    display_draw_bitmap(0, 0, 1, kDstH, p);
+    display_draw_bitmap(kDstW - 1, 0, 1, kDstH, p);
+
+    for (int i = 0; i < 8 * 8 * 2; i += 2) { p[i] = 0xFF; p[i + 1] = 0xFF; }
+    display_draw_bitmap(0, 0, 8, 8, p);
+    display_draw_bitmap(kDstW - 8, 0, 8, 8, p);
+    display_draw_bitmap(0, kDstH - 8, 8, 8, p);
+    display_draw_bitmap(kDstW - 8, kDstH - 8, 8, 8, p);
 }
 
 // ---------------------------------------------------------------------------
@@ -2076,7 +2115,7 @@ extern "C" void app_main(void)
         selftest_step();
         if (s_force_full) {
             s_force_full = false;
-            if (s_pattern)
+            if (s_pattern == 1)
                 paint_pattern();
         }
 #if C3_AUTOWALK
@@ -2138,6 +2177,10 @@ extern "C" void app_main(void)
         if (s_display_ok && !menu_is_open() && !menu_confirm_is_open()) {
             const int64_t t_blit0 = esp_timer_get_time();
             blit_frame();
+            // The edge frame has to go out after the blit, or the tiles paint
+            // over it; it is a diagnostic overlay, not part of the picture.
+            if (s_pattern == 2)
+                panel_edge_test();
             s_blit_us += uint32_t(esp_timer_get_time() - t_blit0);
             s_host_frames++;
         }
