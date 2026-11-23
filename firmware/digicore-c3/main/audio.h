@@ -23,6 +23,14 @@ void audio_beep(int freq, int ms);
 // Blocking silence, used to flush the DMA queue so the next beep starts clean.
 void audio_silence(int ms);
 
+// The I2C0 bus this module opened, or NULL before audio_init() succeeds.
+//
+// The CW2017 fuel gauge sits on the same two pins (SDA 10 / SCL 7) as the
+// ES8311 codec, so the battery module has to attach to this bus instead of
+// opening its own: two masters driving the same pins is not a thing this board
+// can survive.  Returned as void* to keep driver headers out of this one.
+void *audio_i2c_bus(void);
+
 #ifdef __cplusplus
 }
 #endif

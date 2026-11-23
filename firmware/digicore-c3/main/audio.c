@@ -349,3 +349,9 @@ void audio_silence(int ms)
 		written += n;
 	}
 }
+
+// See audio.h: the fuel gauge shares these pins, so it must not open a bus.
+void *audio_i2c_bus(void)
+{
+	return s_ready ? (void *)s_bus : NULL;
+}
