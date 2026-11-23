@@ -611,45 +611,60 @@ static void panel_fill_black(void)
     ESP_LOGI(TAG, "panel cleared to black (320x240)");
 }
 
-// The settings card is 300 px wide (menu.cpp kCardX=10, kCardW=300) while the
-// blit loop only owns the 256 px guest window at x=32..287.  The menu paints the
-// panel directly, so the card colour lands in the 22 px columns on either side
-// that the game never draws into -- and closing the menu repaints the window
-// only, which left two vertical card-coloured bars beside the picture (read as
-// "the game is half black").  Nothing but the host ever owns those columns, so
-// black is their only correct state and a menu close is the one moment they
-// have to be put back.
+// Fill a panel rectangle with one 565 colour, band by band out of s_strip.
+// Clipped to the panel; a zero or negative size is a no-op.
+static void panel_fill_rect(int x, int y, int w, int h, uint16_t color)
+{
+    if (!s_display_ok)
+        return;
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > kDstW) w = kDstW - x;
+    if (y + h > kDstH) h = kDstH - y;
+    if (w <= 0 || h <= 0)
+        return;
+    const int rows = (h < kChunkRows) ? h : kChunkRows;
+    const size_t px_count = size_t(w) * size_t(rows);
+    if (px_count * 2u > sizeof(s_strip)) {
+        ESP_LOGE(TAG, "fill rect too wide: %d", w);
+        return;
+    }
+    const uint16_t sw = uint16_t((color >> 8) | (color << 8));   // panel wants big endian
+    uint16_t *px = reinterpret_cast<uint16_t *>(s_strip);
+    for (size_t i = 0; i < px_count; i++)
+        px[i] = sw;
+    for (int dy = 0; dy < h; dy += rows) {
+        const int n = (dy + rows <= h) ? rows : (h - dy);
+        if (display_draw_bitmap(x, y + dy, w, n, s_strip) != ESP_OK) {
+            ESP_LOGE(TAG, "fill rect failed at y=%d", y + dy);
+            return;
+        }
+    }
+}
+
+// Put back everything the guest window does NOT cover, after the settings card
+// has painted over the whole panel.
+//
+// This used to clear two vertical bands only, which was correct while the window
+// was 256x224 at (32,8): the card is 300x212 at (10,16), so it sat entirely
+// inside the window vertically and the next blit covered its top and bottom.
+// The window is 192x192 at (64,24) now, so the card sticks out 8 rows above it
+// (16..23) and 12 rows below it (216..227) - two horizontal strips nothing ever
+// repainted, which is the "settings elements left above and below the game" the
+// owner reported.  Four bands now: left, right, and the slivers above and below
+// the window.
 static void panel_clear_side_margins(void)
 {
     if (!s_display_ok)
         return;
     const int lx = left_px();
-    const int right_x = lx + kWinW * kScale;
-    const int right_w = kDstW - right_x;
-    const int widest = lx > right_w ? lx : right_w;
-    // Both bands are cleared a band at a time.  They used to be one transfer
-    // each, which worked while a band was 32 px wide (32*240*2 = 15,360 B);
-    // at a 64 px margin that is 30,720 B and s_strip is 12 KB.  Nothing here
-    // needs the whole column at once, so kChunkRows is the natural unit.
-    if (widest <= 0)
-        return;
-    if (size_t(widest) * size_t(kChunkRows) * 2u > sizeof(s_strip)) {
-        ESP_LOGE(TAG, "margin band too wide: %d", widest);
-        return;
-    }
-    memset(s_strip, 0, size_t(widest) * size_t(kChunkRows) * 2u);
-    for (int y = 0; y < kDstH; y += kChunkRows) {
-        const int rows = (y + kChunkRows <= kDstH) ? kChunkRows : (kDstH - y);
-        if (lx > 0 && display_draw_bitmap(0, y, lx, rows, s_strip) != ESP_OK) {
-            ESP_LOGE(TAG, "left margin clear failed at y=%d", y);
-            return;
-        }
-        if (right_w > 0 &&
-            display_draw_bitmap(right_x, y, right_w, rows, s_strip) != ESP_OK) {
-            ESP_LOGE(TAG, "right margin clear failed at y=%d", y);
-            return;
-        }
-    }
+    const int ty = top_px();
+    const int rw = kWinW * kScale;
+    const int rh = kWinH * kScale;
+    panel_fill_rect(0, 0, lx, kDstH, 0);                                  // left
+    panel_fill_rect(lx + rw, 0, kDstW - (lx + rw), kDstH, 0);             // right
+    panel_fill_rect(lx, 0, rw, ty, 0);                                    // above
+    panel_fill_rect(lx, ty + rh, rw, kDstH - (ty + rh), 0);               // below
 }
 
 static void blit_frame(void)
