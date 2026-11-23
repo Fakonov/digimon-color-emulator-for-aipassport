@@ -8,10 +8,12 @@
 //  nothing repaints and the panel stays black until the game decides to redraw
 //  the whole screen.
 //
-//  This module keeps one copy of the visible 128x112 RGB565 window (28672 B) in
-//  the gap the `save` partition has between the gueststate ring (5 records now)
-//  and the two saveimg slots.  Only the snapshot path touches it, so the wear
-//  follows the same 60 s cadence as the snapshots themselves.
+//  This module keeps one copy of the visible band of the GRAM -- the 96 rows the
+//  guest actually shows, at the framebuffer's full 128-column width so the run
+//  stays contiguous (24576 B) -- in the gap the `save` partition has between the
+//  gueststate ring (5 records now) and the two saveimg slots.  Only the snapshot
+//  path touches it, so the wear follows the same 60 s cadence as the snapshots
+//  themselves.
 //
 //  Region layout inside the `save` partition (128 KiB):
 //

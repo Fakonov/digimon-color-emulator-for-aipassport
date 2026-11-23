@@ -75,21 +75,59 @@ static uint32_t s_frame_cycles = kCpuClock / 60u;            // live: F <hz>
 static constexpr uint32_t kSliceCycles = 48000u;
 
 // ---- panel composition ----------------------------------------------------
-// The guest framebuffer is 128x128 and the game paints edge to edge: the row
-// of menu icons along the bottom sits at fb[100..119] and a 96-row window cut
-// it in half (the "bottom icons are clipped" report).  The window therefore
-// covers the full 128 columns and 120 of the 128 rows; 120*2 = 240 is exactly
-// the panel height, so at 2x the picture fills the panel with no letterbox.
-// Rows 120..127 are the guest's own bottom margin and stay off screen.
+// The window is the guest's ACTUAL visible area, not its framebuffer.  MAME
+// defines it for this machine as `m_screen->set_visarea(0, 96-1, 18, 114-1)`
+// (generalplus_gpce4.cpp, digicolr), i.e. 96 columns by 96 rows starting at
+// (0,18) of the 128x128 GRAM.  Dumping the framebuffer confirms the ROM agrees:
+// in both captured frames the non-black pixels occupy exactly x 0..95 and
+// y 18..113, and everything outside that rectangle reads 0.
+//
+// The window used to be 128x112 at (0,8) - the whole width plus a taller slice
+// "so the bottom icons are not clipped".  That is what made the picture look
+// off-centre: 2x of 128 columns is 256 px of which only 192 carry content, so
+// 64 px of empty black sat on the right of the picture while only 32 px of
+// panel margin sat on its left.  The reported "off to the left" was never the
+// x arithmetic; it was 32 columns of nothing being scaled up along with the
+// picture.  96x96 at 2x is 192x192, which centres at (64,24) with equal margins.
+//
+// The vertical slice was also wrong: starting at row 8 pulled in ten empty rows
+// above the visible area and cut the last six below it, which is why a 96-row
+// window at y=8 clipped the bottom icons.  Starting at 18 fixes both ends.
 static constexpr int kWinX = 0;
-static constexpr int kWinY = 8;   // guest content starts at row 8 of the 128x128 fb
-static constexpr int kWinW = 128;
-static constexpr int kWinH = 112;
-static constexpr int kScale = 2;   // 2x: 128x120 -> 256x240 on a 320x240 panel
+static constexpr int kWinY = 18;   // visarea top row inside the 128x128 GRAM
+static constexpr int kWinW = 96;   // visarea width  (MAME: 0..95)
+static constexpr int kWinH = 96;   // visarea height (MAME: 18..113)
+static constexpr int kScale = 2;   // 2x: 96x96 -> 192x192 on a 320x240 panel
 static constexpr int kDstW = 320;
 static constexpr int kDstH = 240;
-static constexpr int kLeft = (kDstW - kWinW * kScale) / 2;   // 32
-static constexpr int kTop = (kDstH - kWinH * kScale) / 2;    // 0
+static constexpr int kLeftHome = (kDstW - kWinW * kScale) / 2;   // 64
+static constexpr int kTopHome = (kDstH - kWinH * kScale) / 2;    // 24
+static constexpr int kMaxOffX = kDstW - kWinW * kScale;           // 128
+static constexpr int kMaxOffY = kDstH - kWinH * kScale;           // 48
+// Live correction, in panel pixels.  Positive dx moves the picture right,
+// positive dy moves it down.  Zero is the geometric centre, so an empty
+// calibration is the correct default rather than a guess.
+static int s_off_x = 0;
+static int s_off_y = 0;
+
+static int clamp_axis(int v, int hi)
+{
+    return v < 0 ? 0 : (v > hi ? hi : v);
+}
+
+// Where the guest window lands on the panel.  Every consumer goes through these
+// two so one E correction reaches the blitter, the side-margin clear, the menu
+// backdrop and the V report together - the reason the old constants could not be
+// adjusted live without the menu and the blit disagreeing.
+static int left_px(void)
+{
+    return clamp_axis(kLeftHome + s_off_x, kMaxOffX);
+}
+
+static int top_px(void)
+{
+    return clamp_axis(kTopHome + s_off_y, kMaxOffY);
+}
 static constexpr int kBlitEvery = 2;   // 1 = every frame, 2 = 30 Hz for moving content
 static constexpr int kChunkRows = 16;                        // <= display max 80; 12 keeps the double buffer inside DRAM
 static constexpr int kGuardRows = 6;                        // idle repair band
@@ -261,14 +299,30 @@ static constexpr int kRowBytes = kWinW * kScale * 2;      // one panel row
 // which made every other row read from the gap between two written rows: the
 // panel showed one good row and one garbage row, i.e. the stripe pattern.
 static constexpr int kSrcRowStride = kRowBytes;
-// One contiguous strip for the whole 96-row window.  Sending a frame as one
-// SPI transaction is what keeps vertical motion coherent: the old code pushed
-// 24-row chunks with a semaphore handshake between them, so a sprite that moved
-// while the chunk loop ran landed on the panel 1.4 ms apart top-to-bottom.
-// One chunk of guest rows, not the whole window: at 2x a full-window strip is
-// 72 KB and the C3 has no room for it.  32 rows keeps each burst under 3 ms,
-// so the skew between chunks stays below two pixels of motion.
-static uint8_t s_strip[kSrcRowStride * kChunkRows * kScale] __attribute__((aligned(4)));
+// s_strip is shared by two producers with different sizes, so its size is the
+// larger of the two - not a function of the window width:
+//
+//   * the blitter fills kSrcRowStride * kChunkRows * kScale bytes in one go
+//     (384 * 16 * 2 = 12,288 at the 96x96 window);
+//   * the menu layer writes w * 2 * 24 = 15,360 bytes per band straight into
+//     the same buffer.  menu.h states that contract in prose ("it holds
+//     w * 2 * 24 bytes, which is why the menu goes out in bands of 24 rows")
+//     and menu.cpp hard-codes `band_rows = 24` in both presenters.
+//
+// Sizing it from kWinW alone was a latent bug that only stayed hidden while the
+// window was 128 columns wide: 512 * 32 = 16,384 happened to clear the menu's
+// 15,360.  Shrinking the window to the guest's real 96x96 took the array to
+// 12,288 and the first opened menu then wrote 3 KB past its end - the panel
+// flickered for a few frames and the machine reset.  Both sizes are now named
+// and the max is taken, so the two consumers cannot silently diverge again.
+static constexpr int kMenuBandRows = 24;                        // must match menu.cpp
+static constexpr int kStripBlitBytes = kSrcRowStride * kChunkRows * kScale;
+static constexpr int kStripMenuBytes = kDstW * 2 * kMenuBandRows;
+static constexpr int kStripBytes =
+    kStripBlitBytes > kStripMenuBytes ? kStripBlitBytes : kStripMenuBytes;
+static_assert(kStripBytes >= kDstW * 2 * kMenuBandRows,
+              "s_strip must hold one menu band or the menu writes past it");
+static uint8_t s_strip[kStripBytes] __attribute__((aligned(4)));
 
 static int64_t s_cycle = 0;          // guest cycles since reset
 static uint64_t s_insns = 0;         // guest instructions retired (for mi_s)
@@ -560,22 +614,32 @@ static void panel_clear_side_margins(void)
 {
     if (!s_display_ok)
         return;
-    const int right_x = kLeft + kWinW * kScale;   // 288
-    const int right_w = kDstW - right_x;          // 32
-    const size_t bytes = size_t(kLeft) * size_t(kDstH) * 2u;
-    if (bytes > sizeof(s_strip)) {
-        ESP_LOGE(TAG, "margin buffer too small: %u > %u", unsigned(bytes),
-                 unsigned(sizeof(s_strip)));
+    const int lx = left_px();
+    const int right_x = lx + kWinW * kScale;
+    const int right_w = kDstW - right_x;
+    const int widest = lx > right_w ? lx : right_w;
+    // Both bands are cleared a band at a time.  They used to be one transfer
+    // each, which worked while a band was 32 px wide (32*240*2 = 15,360 B);
+    // at a 64 px margin that is 30,720 B and s_strip is 12 KB.  Nothing here
+    // needs the whole column at once, so kChunkRows is the natural unit.
+    if (widest <= 0)
+        return;
+    if (size_t(widest) * size_t(kChunkRows) * 2u > sizeof(s_strip)) {
+        ESP_LOGE(TAG, "margin band too wide: %d", widest);
         return;
     }
-    memset(s_strip, 0, bytes);
-    if (display_draw_bitmap(0, 0, kLeft, kDstH, s_strip) != ESP_OK) {
-        ESP_LOGE(TAG, "left margin clear failed");
-        return;
-    }
-    if (right_w > 0 && display_draw_bitmap(right_x, 0, right_w, kDstH, s_strip) != ESP_OK) {
-        ESP_LOGE(TAG, "right margin clear failed");
-        return;
+    memset(s_strip, 0, size_t(widest) * size_t(kChunkRows) * 2u);
+    for (int y = 0; y < kDstH; y += kChunkRows) {
+        const int rows = (y + kChunkRows <= kDstH) ? kChunkRows : (kDstH - y);
+        if (lx > 0 && display_draw_bitmap(0, y, lx, rows, s_strip) != ESP_OK) {
+            ESP_LOGE(TAG, "left margin clear failed at y=%d", y);
+            return;
+        }
+        if (right_w > 0 &&
+            display_draw_bitmap(right_x, y, right_w, rows, s_strip) != ESP_OK) {
+            ESP_LOGE(TAG, "right margin clear failed at y=%d", y);
+            return;
+        }
     }
 }
 
@@ -652,8 +716,8 @@ static void blit_frame(void)
 
         const int wpx = (bmaxx - bminx + 1) * kTile;
         const int rowb = wpx * kScale * 2;
-        const int outx = kLeft + bminx * kTile * kScale;
-        const int outy = kTop + ty * kTile * kScale;
+        const int outx = left_px() + bminx * kTile * kScale;
+        const int outy = top_px() + ty * kTile * kScale;
 
         for (int r = 0; r < kTile; r++) {
             const uint16_t *src = fb + (kWinY + ty * kTile + r) * kFbPanel + kWinX + bminx * kTile;
@@ -716,7 +780,7 @@ enum {
 static int s_inject_mask = 0;      // key bits the host wants held down
 static int s_inject_left = 0;      // guest frames still to hold them
 static volatile bool s_force_full = false;
-static int s_pattern = 0;          // 0 = guest picture, 1 = fb pattern, 2 = panel edges
+static int s_pattern = 0;          // 0 = guest picture, 1 = fb pattern, 2 = panel edges, 3 = align target
 
 // Defined next to the snapshot code below; the console needs them here.
 static void snapshot_machine_state(void);
@@ -724,6 +788,7 @@ static void restore_machine_state(void);
 static bool load_panel_frame(void);
 // Defined with paint_pattern(); the G command pushes it once on demand.
 static void panel_edge_test(void);
+static void panel_align_test(void);
 
 // A snapshot payload has to describe the whole machine, not just the guest's
 // own address space: the interrupt gates, the port directions and the panel
@@ -793,8 +858,9 @@ static void console_exec(char *line)
         break;
     }
     case 'T':                      // T: dump the guest framebuffer as hex rows
-        // Decoded by tools/c3_shot.py.  A 128x112 window is 128*4+1 bytes per
-        // row, so the whole block is ~59 KB and takes ~5 s at 115200 baud.
+        // Decoded by tools/c3_shot.py.  The dump is the visible window: 96 rows
+        // of 96*4+1 bytes, so the whole block is ~37 KB and takes ~3 s at
+        // 115200 baud.
         dump_frame_hex();
         break;
     case 'X': {                    // X <0|1>: render_band HLE off/on (A/B)
@@ -937,15 +1003,46 @@ static void console_exec(char *line)
         }
         break;
     }
-    case 'G': {                    // G 0|1|2: 0 off, 1 fb pattern, 2 panel edges
+    case 'G': {                    // G 0|1|2|3: 0 off, 1 fb pattern, 2 panel edges, 3 align target
         const char *arg = line + 1;
         while (*arg == ' ')
             arg++;
-        s_pattern = (*arg >= '0' && *arg <= '2') ? (*arg - '0') : 0;
+        s_pattern = (*arg >= '0' && *arg <= '3') ? (*arg - '0') : 0;
         s_force_full = true;
         if (s_pattern == 2)
             panel_edge_test();
+        else if (s_pattern == 3)
+            panel_align_test();
         std::printf("ACK G %d\n", s_pattern);
+        break;
+    }
+    case 'E': {                    // E [<left> [<top>]]: where the window sits on the panel
+        int lx = 0, ty = 0;
+        const int got = sscanf(line + 1, "%d %d", &lx, &ty);
+        if (got == 0) {
+            std::printf("ACK E left=%d top=%d off=%d,%d home=%d,%d\n",
+                        left_px(), top_px(), s_off_x, s_off_y, kLeftHome, kTopHome);
+            break;
+        }
+        if (got >= 1) {
+            s_off_x = clamp_axis(lx, kMaxOffX) - kLeftHome;
+            if (got == 2)
+                s_off_y = clamp_axis(ty, kMaxOffY) - kTopHome;
+            s_force_full = true;
+            s_blit_repaint_all = true;
+            // The bands at the old position are outside the window the blitter
+            // will touch, so nothing would ever repaint them: wipe the panel
+            // once and let the repaint-all below bring the picture back.
+            panel_fill_black();
+            if (s_pattern == 2)
+                panel_edge_test();
+            else if (s_pattern == 3)
+                panel_align_test();
+            std::printf("ACK E left=%d top=%d off=%d,%d\n", left_px(), top_px(),
+                        s_off_x, s_off_y);
+        } else {
+            std::printf("NAK E\n");
+        }
         break;
     }
     case 'P': {                    // P 0|1: LCD push hook off/on (live A/B)
@@ -994,8 +1091,11 @@ static void console_exec(char *line)
         break;
     }
     case 'V':                      // version / geometry
-        std::printf("VER ver=" DIGICORE_VERSION " win=%d,%d %dx%d scale=%d left=%d top=%d fb=%d chunk=%d\n",
-                    kWinX, kWinY, kWinW, kWinH, kScale, kLeft, kTop, kFbPanel, kChunkRows);
+        std::printf("VER ver=" DIGICORE_VERSION
+                    " win=%d,%d %dx%d scale=%d left=%d top=%d off=%d,%d home=%d,%d"
+                    " fb=%d chunk=%d\n",
+                    kWinX, kWinY, kWinW, kWinH, kScale, left_px(), top_px(),
+                    s_off_x, s_off_y, kLeftHome, kTopHome, kFbPanel, kChunkRows);
         break;
     default:
         std::printf("NAK ?\n");
@@ -1159,6 +1259,57 @@ static void panel_edge_test(void)
     display_draw_bitmap(kDstW - 8, 0, 8, 8, p);
     display_draw_bitmap(0, kDstH - 8, 8, 8, p);
     display_draw_bitmap(kDstW - 8, kDstH - 8, 8, 8, p);
+}
+
+// Panel-level alignment target (G 3).  G 2 answers "where does the glass end";
+// this one answers "where is the picture".  Drawn straight to the panel:
+//
+//   * a ruler along the top edge - a tick every 8 px, a long tick every 40 - so
+//     a photograph can be read off in 8 px steps instead of eyeballed;
+//   * a green outline exactly where the guest window is being pushed right now
+//     (left_px .. left_px+255, top_px .. top_px+223);
+//   * a cyan cross through the centre of that window.
+//
+// The judgement is the two gaps the outline leaves at the left and right edges:
+// equal means the picture is centred on the glass, whatever the bezel does.  And
+// because the outline follows left_px()/top_px(), E <left> moves it while you
+// watch the device, instead of editing a constant, reflashing and looking again.
+static void panel_align_test(void)
+{
+    if (!s_display_ok)
+        return;
+    uint16_t *px = reinterpret_cast<uint16_t *>(s_strip);
+    const int l = left_px();
+    const int t = top_px();
+    const int r = l + kWinW * kScale;      // exclusive
+    const int b = t + kWinH * kScale;      // exclusive
+    const int cx = l + kWinW * kScale / 2;
+    const int cy = t + kWinH * kScale / 2;
+
+    for (int y0 = 0; y0 < kDstH; y0 += kChunkRows) {
+        const int rows = (y0 + kChunkRows <= kDstH) ? kChunkRows : (kDstH - y0);
+        for (int ry = 0; ry < rows; ry++) {
+            const int y = y0 + ry;
+            uint16_t *row = px + ry * kDstW;
+            for (int x = 0; x < kDstW; x++) {
+                uint16_t c = 0x0000;
+                if (y < 12 && (x % 40) == 0) {
+                    c = 0xFFFF;                        // long tick, every 40 px
+                } else if (y < 6 && (x % 8) == 0) {
+                    c = 0xFFFF;                        // short tick, every 8 px
+                }
+                if (y == cy || x == cx) {
+                    c = 0x07FF;                        // centre of the window
+                }
+                if ((y >= t && y < b && (x == l || x == r - 1)) ||
+                    (x >= l && x < r && (y == t || y == b - 1))) {
+                    c = 0x07E0;                        // where the window sits
+                }
+                row[x] = (uint16_t)((c >> 8) | (c << 8));   // panel wants big endian
+            }
+        }
+        display_draw_bitmap(0, y0, kDstW, rows, s_strip);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1608,16 +1759,17 @@ static void persist_save_image(void)
 //  internal_unsp_state can be copied verbatim.  m_icount is restored too but is
 //  overwritten before the next execute_run(), so its stale value is harmless.
 // ---------------------------------------------------------------------------
-// The guest's picture lives at rows kWinY..kWinY+kWinH-1 of the 128x128 GRAM,
-// which is one contiguous run of 112*128 uint16_t.  fbsave.cpp stores exactly
-// those bytes, so a restore can put the panel back instead of waiting for a
-// guest that believes the screen is already drawn.
+// The guest's picture lives at rows kWinY..kWinY+kWinH-1 of the 128x128 GRAM.
+// fbsave.cpp stores exactly those rows -- at FULL width, because a row is the
+// only contiguous run: storing kWinW*kWinH would make it walk off the end of
+// each 96-column row into the next one and the picture would come back sheared.
+// 96 rows x 128 columns x 2 B = 24,576 B, inside the 32,768 B fbsave block.
 static uint16_t *panel_window()
 {
     return &s_soc.lcd.fb[size_t(kWinY) * size_t(kFbPanel)];
 }
 
-static constexpr uint32_t kPanelWindowBytes = uint32_t(kWinW) * uint32_t(kWinH) * 2u;
+static constexpr uint32_t kPanelWindowBytes = uint32_t(kWinH) * uint32_t(kFbPanel) * 2u;
 
 // Returns the CRC of what reached flash, or 0 when the block was not written.
 static uint32_t save_panel_frame(void)
@@ -2152,12 +2304,12 @@ extern "C" void app_main(void)
             // counter simply accumulates, which is why the card does not have to
             // keep re-pushing itself.
             const MenuBackdrop bg = {s_soc.lcd.fb, kFbPanel, kWinX, kWinY, kWinW, kWinH,
-                                     kLeft, kTop, kScale};
+                                     left_px(), top_px(), kScale};
             menu_confirm_present(s_strip, kDstW, kDstH, &bg);
             s_menu_was_open = true;
         } else if (menu_is_open()) {
             const MenuBackdrop bg = {s_soc.lcd.fb, kFbPanel, kWinX, kWinY, kWinW, kWinH,
-                                     kLeft, kTop, kScale};
+                                     left_px(), top_px(), kScale};
             menu_present(s_strip, kDstW, kDstH, &bg);
             s_menu_was_open = true;
         } else {
@@ -2181,6 +2333,8 @@ extern "C" void app_main(void)
             // over it; it is a diagnostic overlay, not part of the picture.
             if (s_pattern == 2)
                 panel_edge_test();
+            else if (s_pattern == 3)
+                panel_align_test();
             s_blit_us += uint32_t(esp_timer_get_time() - t_blit0);
             s_host_frames++;
         }

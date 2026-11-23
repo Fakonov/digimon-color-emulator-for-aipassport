@@ -17,6 +17,10 @@
 
 ## 2. 当前几何（源码实测，不是回忆）
 
+> **⚠ 本节的数字已被 §10 作废（v1.2.1）。** 保留在此只为说明"为什么当时会得出对称"：
+> 那时用的窗口是 128×112 @ (0,8)，确实是 32/32 对称，但那个窗口本身取错了。
+> 现行几何见 §10：96×96 @ (0,18)，2× = 192×192 落在 (64,24)。
+
 `firmware/digicore-c3/main/app_main.cpp` 顶部：
 
 ```cpp
@@ -125,12 +129,16 @@ G 0     → 关掉
 发送 "G 2"，等 1 s，拍照
 发送 "G 0" 复位
 
+# 画面落点（不拍照也能判断：绿框左右两边的黑边等宽就是居中）
+& $py tmp\s29\align.py G 3 --noreset   →  ACK G 3
+& $py tmp\s29\align.py G 0 --noreset   →  ACK G 0
+
 # 几何自检
-发送 "V"   →  VER ver=1.1.0 win=0,8 128x112 scale=2 left=32 top=8 fb=128 chunk=16
-              left/top 必须和 kLeft/kTop 一致
+发送 "V"   →  VER ver=1.2.0 win=0,8 128x112 scale=2 left=32 top=8 off=0,0 home=32,8 fb=128 chunk=16
+              left/top 必须等于 left_px()/top_px()，home 是几何基准（32,8）
 ```
 
-**判据**：G 2 照片上四条白边到面板物理边缘的距离，左右相等、上下相等，才算"居中"。只靠 `FB_CRC` 或者抓 `fb[]` 判断不了位置——**fb 只有 128×112，它不知道自己在玻璃上的哪里**。
+**判据**：G 2 照片上四条白边到面板物理边缘的距离，左右相等、上下相等，才算"居中"。只靠 `FB_CRC` 或者抓 `fb[]` 判断不了位置——**fb 只有 128×112，它不知道自己在玻璃上的哪里**。G 3 的绿框同理，但它比 G 2 多一层好处：绿框跟着 `left_px()` 动，所以 `E` 命令调完立刻能看见结果。
 
 ---
 
@@ -149,9 +157,197 @@ G 0     → 关掉
 
 ## 8. 当前状态速查
 
-- 固件：v1.1.0，commit `344aab9`，tag `v1.1.0`，已烧在设备上
+- 固件：源码 `1.2.0`（`version.txt`），已烧在设备上，`V` 回 `VER ver=1.2.0 …`；**改动尚未提交**，基线仍是 tag `v1.1.0` / commit `344aab9`
 - 按键：**低有效**（A 按下 = `0xFFF7`），**不要改回高有效**
 - 游戏能进：短按 A → LOAD/RESET 菜单（`[0x0C88]=1`）→ C 到宠物（`=4`）
 - 长按 A 1.2 s：弹 A+C 确认卡；B 确认，C 取消
 - 串口：COM4，115200，`serial.Serial(..., dtr=False, rts=False)`
 - 烧写/构建命令见 `docs/HANDOFF_NEXT.md` §5
+
+---
+
+## 9. 2026-11-23 22:40 — 左右居中已实测确认（v1.2.0，已烧在设备上）
+
+> **⚠ 本节的部分结论已被 §10 修正**：`kLeftHome=32`、画面 256×224 是错的窗口算出来的；
+> 现行是 64 / 192×192。本节保留的价值是 `E` / `G 3` 两个工具的说明，机制不变（量程变大）。
+
+**结论：画面在面板上左右本来就是对称的 32 / 32，实机 `G 3` 目视确认「左右一样宽」。**
+
+第 4 轮那句「主画面偏左」不是 blit 的坐标问题。剩下的解释只有两种：看的是旧固件（`kTop=0` 那个版本），或者外壳/开窗遮挡。**不要再改 `kLeft` 的算术**——它从来没错过，从 baseline 到现在一直是 `(320-256)/2 = 32`。
+
+这一轮把「能不能现场调」这件事补齐了，以后不管偏移来自屏、外壳还是安装，都不用重烧一遍固件去试。
+
+### 9.1 改了什么
+
+- **布局常量拆成「几何基准 + 运行时偏移」**：`kLeftHome = 32`、`kTopHome = 8`，新增 `s_off_x / s_off_y`（默认 0）。所有落点统一走 `left_px() / top_px()`：`blit_frame()`、`panel_clear_side_margins()`、`menu_present()` / `menu_confirm_present()` 的 `MenuBackdrop`、以及 `V` 的报告行。原来这四个地方各自硬编码 `kLeft`，一处改不全就会「游戏居中、菜单偏」——这正是它没法现场调的原因。
+- **新增 `E [<left> [<top>]]`**：把画面左上角放到指定的**面板绝对坐标**（不是增量），无参数时回报当前值。执行时先 `panel_fill_black()` 再整帧重推：旧位置那几条边带没有任何代码会重画，不清就是两道残影。
+- **新增 `G 3` 对齐靶**：顶部 8 px 刻度尺（每 8 一格、40 一长格）+ 绿框（当前窗口落点）+ 青色十字（窗口中心），直接推面板。与 `G 2` 的分工：`G 2` 问「玻璃到哪结束」，`G 3` 问「画面在哪」。
+- `G` 的参数解析原来只认 `0..2`，`G 3` 会被当成 `G 0`；已扩到 `0..3`。
+- 修掉 `kTop` 那句 `// 0` 的错注释（实际是 `(240-224)/2 = 8`）。
+- `version.txt` → `1.2.0`（改完要碰 `main/CMakeLists.txt` 时间戳强制重配，否则 `file(READ)` 不重跑）。
+
+### 9.2 实机验证记录
+
+```
+V   → VER ver=1.2.0 win=0,8 128x112 scale=2 left=32 top=8 off=0,0 home=32,8 fb=128 chunk=16
+G 3 → ACK G 3            （屏上：刻度尺 + 绿框 x=32..287 y=8..231 + 十字 160,120）
+目视 → 绿框到左右两边的黑边一样宽
+G 0 → ACK G 0            （复位，游戏画面原样回来）
+```
+
+### 9.3 怎么用（下次量偏移，不用重烧）
+
+```powershell
+$py="C:\Users\DuWeisi\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe"
+& $py tmp\s29\align.py                # 复位 + V + 推 G 3
+& $py tmp\s29\align.py G 3 --noreset  # 不打断当前游戏状态
+& $py tmp\s29\align.py E 40 --noreset # 把画面左边挪到面板 x=40（往右 8 px）
+& $py tmp\s29\align.py E --noreset    # 只回报当前 left/top/off
+```
+
+判据：`E <left>` 之后 `V` 里 `left` 必须等于该值（会被 `0..kMaxOffX` 夹住，v1.2.1 起是 `0..128` / `0..48`）。满意后把这个值折回 `s_off_x / s_off_y` 的初值再编一次，别指望它跨重启。
+
+---
+
+## 10. 2026-11-23 23:0x — 「偏左」的真根因与修复（v1.2.1，该版本已撤销归档，见 §11）
+
+### 10.1 根因：窗口取的不是可见区
+
+MAME 对这个机种写死了可见区（`ref/generalplus_gpce4.cpp:397`）：
+
+```cpp
+void generalplus_gpce4_digicolr_state::digicolr(machine_config &config)
+{
+    generalplus_gpce4(config);
+    m_screen->set_visarea(0, 96-1, 18, 114-1);   // x 0..95, y 18..113 → 96x96
+}
+```
+
+抓帧统计也证实 ROM 只画这块：两张不同画面里非黑像素**严格**落在 x 0..95、y 18..113，矩形外全 0。
+
+旧代码取的是 `kWinW=128 / kWinY=8 / kWinH=112`（全宽 + 更高的切片，注释理由是"底部图标被切"）。后果：
+
+| 方向 | 旧窗口 | 真实可见区 | 多出来的部分 |
+|---|---|---|---|
+| 宽 | 128 列 | 96 列 | **右侧 32 列全是空** → 2× 后画面块右边多出 64 px 黑 |
+| 上面 | 从行 8 起 | 从行 18 起 | 顶部 10 行空 |
+| 下面 | 到行 119 | 到行 113 | 底部 6 行空 |
+
+所以 2× 之后画面块 256 px 宽，**只有左边 192 px 有内容**，右边 64 px 空；而面板左边距只有 32 px。视觉上就是"整块偏左"。居中算术从没错，是缩放了一座空房子。
+
+顺带解开历史谜团：注释说"96 行窗口把底部图标切一半"——那是因为当时 `kWinY` 用的是 8 而不是 18，切掉的是行 114..119 之外的部分。**改成从 18 起，96 行正好完整**。
+
+### 10.2 修复
+
+```cpp
+kWinX = 0;  kWinW = 96;
+kWinY = 18; kWinH = 96;
+kLeftHome = (320-192)/2 = 64;
+kTopHome  = (240-192)/2 = 24;
+```
+
+连带三处必须一起改，否则各自静默出错：
+
+1. **`panel_clear_side_margins()` 改成分 band**（`kChunkRows` 行一次）。原来一次性清一列：32 px 宽时是 15,360 B，勉强塞进 16 KB 的 `s_strip`；64 px 宽就变 30,720 B，而 `s_strip` 现在只有 12 KB。不清就是关菜单后两道残影。
+2. **`panel_window()` / `kPanelWindowBytes` 改成按整行保存**：`kWinH * kFbPanel * 2` = 24,576 B。fbsave 只认连续内存，如果按 `kWinW*kWinH` 存，它会从 96 列的行尾直接走进下一行行首，恢复出来的画面是剪切错位的。
+3. **`T` dump 的注释**（56 KB→37 KB），代码本身跟着 `kWinW/kWinH` 走，不用改。
+
+### 10.3 验证
+
+```
+V   → VER ver=1.2.1 win=0,18 96x96 scale=2 left=64 top=24 off=0,0 home=64,24 fb=128 chunk=16
+T   → SHOT_BEGIN 96 96；抓帧后内容列 0..95（满宽，右侧无空白）
+```
+
+### 10.4 副作用：画面变小了，这是对的
+
+`256×224 → 192×192`。小掉的那 64×32 本来就是空的（32 列 × 2 + 16 行 × 2）。
+源是 96×96，整数倍只有 2×（3× = 288 超过 240 高），**2.5× 会让每个格子宽窄不均、糊成灰块**，这是官方文档明令禁止的。所以 192×192 是唯一可选项。
+
+### 10.5 外壳规格自动对上了
+
+新几何下：glass 192×192 @ (64,24)，rim `+12` = **204×204 @ (58,18)**，well `+6` = 198×198 @ (61,21)。
+这正好是 `docs/HANDOFF_2026-11-23.md:202` 里用户拍板的「外壳 + 画面作为 204×204 块整体居中，左右各 58、上下各 18」。
+
+**说明 204×204 的规格本来就是按 96×96 玻璃算的，是代码里那个 128×112 让它对不上。**
+
+### 10.6 还没解决
+
+- **上下方向仍无实测**：几何上 24 / 24。`G 3` 绿框现在应该是 x 64..255 / y 24..215、中心 (160,120)，让用户看一眼即可。
+- **30 px 圆角仍未实现**：本机内容全部落在圆角安全区内，所以看不出来；要看出圆角必须先把外壳底纹铺满四角。详见 `docs/RESEARCH_SCREEN_AND_ROUNDING.md`。
+
+---
+
+## 11. 2026-11-23 23:2x — v1.2.1 的回归：长按弹卡/弹菜单后闪几下就重启（v1.2.2 已修）
+
+### 11.1 症状
+
+长按 A（上键）弹 A+C 确认卡、或长按 B（下键）弹设置菜单，屏幕闪烁几次后自动重启。
+**v1.1.0 没有这个问题，是 §10 那次改窗口引入的。**
+
+### 11.2 根因：`s_strip` 被缩到装不下一个菜单 band
+
+`s_strip` 是唯一的暂存区，有两个互不相干的消费者：
+
+| 消费者 | 需要的字节 | 来源 |
+|---|---|---|
+| `blit_frame()` | `kSrcRowStride * kChunkRows * kScale` = 384 × 16 × 2 = **12,288** | 跟着 `kWinW` 算 |
+| `menu_present()` / `menu_confirm_present()` | `w * 2 * 24` = 320 × 2 × 24 = **15,360** | `menu.h:66` 明文契约，`menu.cpp` 里 `band_rows = 24` 硬编码两处 |
+
+而 `s_strip` 的定义是 `kStripBytes = kSrcRowStride * kChunkRows * kScale` —— **只按 blitter 算**。
+
+`s_strip` 具体大小历史上是 `128×2×2 × 16 × 2 = 16,384`，**刚好**盖住菜单的 15,360。
+§10 把 `kWinW` 从 128 改成 96 之后，它变成 `96×2×2 × 16 × 2 = 12,288`，**短了 3,072 B**。
+菜单一画，`menu_present()` 就往数组外写 3 KB，踩坏相邻静态变量，下一次间接访问就炸。
+
+### 11.3 证据（v1.2.1 实机）
+
+```
+ACK K 1 40
+I (2237) DIGICORE: long A (1414 ms) -> A+C confirm card
+Guru Meditation Error: Core  0 panic'ed (Load access fault). Exception was unhandled.
+  MEPC : 0x4200d5f6   RA : 0x4200d5e4   SP : 0x3fccefc0
+rst:0xc (RTC_SW_CPU_RST),boot:0xa (SPI_FAST_FLASH_BOOT)     ← 软件复位
+```
+
+`Load access fault` = 读非法地址，不是除零也不是看门狗，**指针/长度被踩坏**的典型形状。
+卡片日志与 panic 之间只隔一帧，正好是第一次 `menu_confirm_present()`。
+
+### 11.4 修法
+
+两个尺寸都具名，取最大值，并用 `static_assert` 钉死契约：
+
+```cpp
+static constexpr int kMenuBandRows = 24;                        // must match menu.cpp
+static constexpr int kStripBlitBytes = kSrcRowStride * kChunkRows * kScale;
+static constexpr int kStripMenuBytes = kDstW * 2 * kMenuBandRows;
+static constexpr int kStripBytes =
+    kStripBlitBytes > kStripMenuBytes ? kStripBlitBytes : kStripMenuBytes;
+static_assert(kStripBytes >= kDstW * 2 * kMenuBandRows,
+              "s_strip must hold one menu band or the menu writes past it");
+```
+
+结果 `kStripBytes = 15,360`（菜单需求）。`static_assert` 保证以后谁再动 `kWinW`、`kDstW` 或菜单 band 行数，编译期就报错，而不是上机闪几下。
+
+### 11.5 验证（v1.2.2 实机）
+
+```
+长按 A → I (3451) long A (1221 ms) -> A+C confirm card          无重启
+长按 B → I (2349) long B (1525 ms) -> settings menu
+         I (2452) menu: pushed 10 band(s), 320x240              无重启
+按 C 关菜单 → 抓帧 96x96 游戏画面完整，左右边带无残影
+```
+
+复现脚本：`tmp/s31/repro.py <mask> <frames> <seconds> [--reset]`，会在日志里找
+`ESP-ROM` / `rst:` / `Guru` / `wdt` / `canary` 这些标记，命中即判重启。
+
+### 11.6 教训
+
+免费内存是挪出来的，不是白送的：把缓冲区大小绑在某个几何常量上，等于给所有消费者发了一张它没同意签的支票。
+**共享缓冲区必须按"最大消费者"定尺寸，并把每个消费者的语义写进同一个文件。**
+
+### 11.7 版本归档
+
+1.2.1 那一版带这个 bug，**未做归档**（tag 与里程碑都已撤销）。里程碑是 **v1.2.2 = 画面居中 + 闪退修复**，
+见 `milestones/2026-11-23_v1.2.2_centered/`。
+- **「偏左」的观感来源仍未定位到物证**：要么是旧固件，要么是外壳。下次让用户确认当时装没装外壳、看到的是哪个版本，别再从代码里找。`G 2`（四边白框 + 四角方块）就是为这个留的。

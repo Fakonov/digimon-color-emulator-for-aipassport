@@ -21,6 +21,9 @@ emu/build/
 
 # ---- 固件镜像 ----
 *.bin
+# 里程碑是唯一需要实物归档的地方：只放 app 分区镜像（不含 ROM）。
+# 整片镜像（含 sparse ROM）永远不入库，见 milestones/*/sha256.txt 的指纹。
+!milestones/**/*.bin
 
 # ---- 由 tools/aot.py 生成的副本（真源是 emu/aot_blocks.c）----
 firmware/*/main/emu/aot_blocks.c

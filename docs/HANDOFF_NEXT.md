@@ -89,6 +89,8 @@ $py="C:\Users\DuWeisi\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe
 #   C             FB_CRC                O                  IRQ handler 直方图
 #   S             统计 + IRQ + GEST     T                  dump 可见区
 #   N <n>         抓菜单/确认卡像素     D / U              存 / 恢复快照
+#   E <left> [top] 画面落点在面板上的绝对坐标（现场校准，不用重烧）
+#   G 0..3        诊断图：1=fb 框 2=面板四边 3=对齐靶（刻度尺+绿框+中心十字）
 ```
 
 **注意**：`H <ms>` 是长按 A 阈值，`H 0` 不是"关闭"而是"一按下就触发"。
