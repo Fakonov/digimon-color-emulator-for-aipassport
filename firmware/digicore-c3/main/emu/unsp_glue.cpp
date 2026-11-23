@@ -136,10 +136,15 @@ void unsp_device::trigger_fiq()
 	m_core->m_r[REG_SR] = 0;
 }
 
+extern uint32_t g_irq7_refused;
+
 void unsp_device::trigger_irq(int line)
 {
 	if ((m_core->m_ine == 0 && m_core->m_irq == 1) || m_core->m_pri <= line || !m_core->m_enable_irq)
+	{
+		g_irq7_refused++;
 		return;
+	}
 
 	m_core->m_irq = 1;
 
@@ -603,6 +608,12 @@ static inline void hot_prng_n(HotState *s, uint32_t n, uint16_t tick)
 UNSP_HOT bool unsp_device::wait_loop_collapse(uint32_t lpc)
 {
 	if (!m_fastwait)
+		return false;
+	// TEMP PROBE: the device never reads PORTA and INT2_Status stays 0, which is
+	// what a starved 64 Hz handler looks like.  Collapsing the whole slice here
+	// leaves execute_run() nothing to retire, so check_irqs() never runs and the
+	// pending IRQ7 is never taken.  Disable the collapse to test that theory.
+	if (true)
 		return false;
 	// The wait loop exists twice: once in flash at 0x230321 and once as a RAM
 	// copy the game runs from 0x000321 (it relocates the block before entering
@@ -1287,6 +1298,26 @@ uint32_t g_pc_ring[48];
 uint32_t g_pc_ring_ri = 0;
 uint32_t g_pc_ring_prev = 0xffffffffu;
 
+// IRQ7 handler hits.  0x486B is the vector target (read16(0x401F)); the body
+// runs 0x486B..0x4897 and ends in `9A98 reti`.  If this stays 0 the CPU never
+// took a single IRQ7, which is exactly what a starved 64 Hz source looks like.
+uint32_t g_isr7_hits = 0;
+uint32_t g_isr7_insn = 0;           // m_insn_count at the most recent entry
+uint32_t g_irq7_refused = 0;        // trigger_irq() bailed out
+// Per-PC census of the IRQ7 handler body (0x486B..0x48AF), so the exact exit
+// point of the handler is visible instead of guessed from an instruction count.
+uint32_t g_isr_hist[0x45];
+const uint32_t kIsrHistBase = 0x00486Bu;
+
+// Phase counters for the 64 Hz frame chain.  The host harness runs the exact
+// same ROM and retires 0x230321 about 300k times a second while leaving through
+// 0x230329 once per tick; if the device leaves zero times, the tick never
+// arrives even though the ISR body runs.
+uint32_t g_wait_top = 0;        // 0x230321 / 0x000321
+uint32_t g_wait_exit = 0;       // 0x230329 / 0x000329
+uint32_t g_frame_body = 0;      // 0x2300E8 / 0x0000E8
+uint32_t g_body_alt = 0;        // 0x230139 / 0x000139 (loop back edge)
+
 void aot_dump_pc_ring(void)
 {
 	std::printf("PCRINGHEAD\n");
@@ -1613,11 +1644,20 @@ UNSP_HOT void unsp_device::execute_run()
 		while (core->m_icount >= 0)
 		{
 			const uint32_t lpc = UNSP_LPC;
-			if (lpc >= 0x004000u && lpc < 0x006000u && lpc != g_pc_ring_prev)
+			if (lpc >= 0x004000u && lpc < 0x006000u)
 			{
-				g_pc_ring_prev = lpc;
-				g_pc_ring[g_pc_ring_ri % 48u] = lpc;
-				g_pc_ring_ri++;
+				if (lpc >= 0x00486Bu && lpc <= 0x0048AFu)
+				{
+					g_isr7_hits++;
+					g_isr7_insn = m_insn_count;
+					g_isr_hist[lpc - 0x00486Bu]++;
+				}
+				if (lpc != g_pc_ring_prev)
+				{
+					g_pc_ring_prev = lpc;
+					g_pc_ring[g_pc_ring_ri % 48u] = lpc;
+					g_pc_ring_ri++;
+				}
 			}
 			if (m_block_hist) m_block_hist[lpc & 0x3ffffu]++;
 			// The PRNG block runs from flash (0x2002F4) and, in the scenes that

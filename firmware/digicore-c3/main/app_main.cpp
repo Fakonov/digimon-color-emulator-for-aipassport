@@ -44,6 +44,7 @@
 #include "rom_esp.h"
 #include "saveimg.h"
 #include "gueststate.h"
+#include "fbsave.h"
 #include "menu.h"
 #include "esp_rom_crc.h"
 
@@ -94,6 +95,13 @@ static constexpr int kChunkRows = 16;                        // <= display max 8
 static constexpr int kGuardRows = 6;                        // idle repair band
 static constexpr int kFbPanel = 128;
 
+// AUTO OFF = NEVER refuses System_Sleep and drops the guest here.  0x200300 is
+// inside the cartridge's idle loop (0x2002F4-0x200324, a three-pass delay that
+// the clock screen spends virtually all of its time in), so a bounce lands on an
+// address the guest re-enters millions of times a second instead of on the
+// title-screen wait loop, which is what 0x230321 turned out to be.
+static constexpr uint32_t kGuestResumePc = 0x200300u;
+
 // ---- buttons --------------------------------------------------------------
 static constexpr uint16_t kPortB1 = 0x0008;   // active low PORTA bits
 static constexpr uint16_t kPortB2 = 0x0010;
@@ -133,20 +141,66 @@ static constexpr int64_t kMenuHoldUs = 1500000;
 // same ROM family ignoring a 700 ms chord and only reacting at 3.2 s.
 static int64_t s_ac_hold_us = 1200000;
 static constexpr int64_t kAcHoldDefaultUs = 1200000;
+// How long A+C is injected once the confirmation card has been accepted.  The
+// reference port measured this ROM family ignoring a 700 ms chord and only
+// reacting at 3.2 s, and the device runs the guest well below real time, so the
+// window is generous: the card makes the gesture explicit, there is nothing
+// else for the chord to collide with.
+static constexpr int64_t kAcChordUs = 3200000;
+// How long the pad stays blank after the card closes.  Long enough for the
+// finger (or the console injector) to release the key that dismissed it, short
+// enough that the next press is not lost.
+static constexpr int64_t kPadBlankUs = 700000;
 
-// The chord is held, not pulsed.  The reference port releases A and then keeps
-// A+C down until the ROM reacts, and their notes measured this ROM family
-// ignoring a 700 ms chord entirely and only reacting at 3.2 s -- which is three
-// times the old six-frame pulse, so the old shape was almost certainly invisible.
-// Released when the finger lifts or the deadline passes, whichever comes first.
+// The chord is held, not pulsed.  Released when the deadline passes; there is
+// no finger to lift any more because the card consumed the press.
 static bool s_ac_active = false;
 static int64_t s_ac_until_us = 0;
+// Edge memory for the confirmation card, so the press that opened it cannot
+// also dismiss it.  The card opens inside the long-press detector, which runs
+// before the console injector is drained, so the frame that raises it still has
+// to be swallowed explicitly.
+static int s_confirm_pad_prev = 0;
+static bool s_confirm_fresh = false;
+// Set when the chord card closes: the contact that dismissed it is still on the
+// pad and would otherwise be read as a long B by the menu detector.
+static int64_t s_pad_blank_us = 0;
+// Long-A detector state, at file scope so the S log can report it: this is the
+// one piece of the gesture that decides whether the card ever opens.
+static int64_t s_a_down_us = 0;
+static bool s_ac_fired = false;
+// The B contact that confirmed the chord card is one continuous press.  On the
+// handset a frame lasts 60-300 ms, so a console injection of 30 frames keeps B
+// down for ten seconds -- long past kMenuHoldUs -- and the settings menu opens
+// on the very key that accepted the chord, parks the guest, and eats every
+// later press.  While this is set the menu detector ignores B until it lifts.
+static bool s_b_hold_locked = false;
 // diagnostic: press B1 once at this guest frame (0 = disabled)
 static constexpr uint32_t kAutoPressAt = 0;   // diagnostic auto-press, off by default
 
 // ---- state ----------------------------------------------------------------
 static Gpce4 s_soc;
 extern uint32_t g_aot_uniq;
+// Interrupt-chain diagnostics (2026-11-23).  g_src_set/g_src_clr count status
+// bits 0..31 being raised/cleared; g_irq7_rise/fall count the CPU line itself;
+// g_isr7_hits counts instructions retired inside the ROM's IRQ7 handler
+// (0x486B..0x489F) and g_irq7_refused counts trigger_irq() bailing out.
+extern uint32_t g_src_set[32];
+extern uint32_t g_src_clr[32];
+extern uint32_t g_irq7_rise;
+extern uint32_t g_irq7_fall;
+extern uint32_t g_isr7_hits;
+extern uint32_t g_isr7_insn;
+extern uint32_t g_irq7_refused;
+extern uint32_t g_isr_hist[0x45];
+extern uint32_t g_tick_writes;
+extern uint32_t g_tick_pc;
+extern uint32_t g_tick_val;
+extern uint32_t g_ioa_reads;
+extern uint32_t g_wait_top;
+extern uint32_t g_wait_exit;
+extern uint32_t g_frame_body;
+extern uint32_t g_body_alt;
 // Pixels painted by the transparent-key blit hook.  g_blit_px_win is cleared by
 // this loop once per log line, so the ratio to the frame budget is visible
 // without a second measurement pass.
@@ -494,6 +548,37 @@ static void panel_fill_black(void)
     ESP_LOGI(TAG, "panel cleared to black (320x240)");
 }
 
+// The settings card is 300 px wide (menu.cpp kCardX=10, kCardW=300) while the
+// blit loop only owns the 256 px guest window at x=32..287.  The menu paints the
+// panel directly, so the card colour lands in the 22 px columns on either side
+// that the game never draws into -- and closing the menu repaints the window
+// only, which left two vertical card-coloured bars beside the picture (read as
+// "the game is half black").  Nothing but the host ever owns those columns, so
+// black is their only correct state and a menu close is the one moment they
+// have to be put back.
+static void panel_clear_side_margins(void)
+{
+    if (!s_display_ok)
+        return;
+    const int right_x = kLeft + kWinW * kScale;   // 288
+    const int right_w = kDstW - right_x;          // 32
+    const size_t bytes = size_t(kLeft) * size_t(kDstH) * 2u;
+    if (bytes > sizeof(s_strip)) {
+        ESP_LOGE(TAG, "margin buffer too small: %u > %u", unsigned(bytes),
+                 unsigned(sizeof(s_strip)));
+        return;
+    }
+    memset(s_strip, 0, bytes);
+    if (display_draw_bitmap(0, 0, kLeft, kDstH, s_strip) != ESP_OK) {
+        ESP_LOGE(TAG, "left margin clear failed");
+        return;
+    }
+    if (right_w > 0 && display_draw_bitmap(right_x, 0, right_w, kDstH, s_strip) != ESP_OK) {
+        ESP_LOGE(TAG, "right margin clear failed");
+        return;
+    }
+}
+
 static void blit_frame(void)
 {
     const uint16_t *fb = s_soc.lcd.fb;
@@ -635,6 +720,30 @@ static int s_pattern = 0;          // 0 = guest picture, 1 = alignment pattern
 
 // Defined next to the snapshot code below; the console needs them here.
 static void snapshot_machine_state(void);
+static void restore_machine_state(void);
+static bool load_panel_frame(void);
+
+// A snapshot payload has to describe the whole machine, not just the guest's
+// own address space: the interrupt gates, the port directions and the panel
+// window all live in the SoC, and the retail ROM programs them once at boot and
+// then only waits on the result.  See Gpce4State in emu/gpce4.h for the field
+// list and for why a CPU-only record leaves the next boot stuck on a frame
+// counter that nothing increments.
+struct SnapBlob {
+    unsp_device::internal_unsp_state cpu;
+    Gpce4State io;
+    uint32_t fb_crc;               // 0 when the frame block had to be skipped
+};
+static SnapBlob s_snap_blob;        // ~340 B of DRAM, reused by every path
+
+// UNSP keeps the PC in two places: the low 16 bits in r7 and the bank in the top
+// six bits of SR.  Every other part of this file talks about the flat 24-bit
+// address, so this is the one place that decodes it.
+static uint32_t guest_pc(void)
+{
+    const uint32_t sr = s_cpu.m_core->m_r[unsp_device::REG_SR];
+    return (((sr >> 10) & 0x3fu) << 16) | s_cpu.m_core->m_r[unsp_device::REG_PC];
+}
 
 static void console_exec(char *line)
 {
@@ -669,6 +778,18 @@ static void console_exec(char *line)
         }
         break;
     }
+    case 'N': {                    // N <frames>: dump the next menu pushes
+        // The menu paints straight to the panel, so fb[] never sees it.  This
+        // replays the panel payload back over the console for inspection.
+        int v2 = -1;
+        if (sscanf(line + 1, "%d", &v2) == 1 && v2 >= 0) {
+            menu_set_capture(v2);
+            std::printf("ACK N %d\n", v2);
+        } else {
+            std::printf("NAK N\n");
+        }
+        break;
+    }
     case 'T':                      // T: dump the guest framebuffer as hex rows
         // Decoded by tools/c3_shot.py.  A 128x112 window is 128*4+1 bytes per
         // row, so the whole block is ~59 KB and takes ~5 s at 115200 baud.
@@ -698,6 +819,16 @@ static void console_exec(char *line)
         }
         break;
     }
+    case 'Z': {                    // Z <addr hex>: read guest RAM / IO / flash
+        unsigned a = 0;
+        if (sscanf(line + 1, "%x", &a) == 1) {
+            const unsigned v = (a <= 0x0FFFu) ? s_soc.ram[a] : s_soc.read16((uint32_t)a);
+            std::printf("ACK Z [%06X] = %04X\n", a, v);
+        } else {
+            std::printf("NAK Z\n");
+        }
+        break;
+    }
     case 'S':                      // stats
         std::printf("STAT frames=%u blits=%u rows=%u blitmax=%u errs=%u "
                     "guest_pct=%u blit_pct=%u pc=%06X sr=%04X blitpx=%u bcyc=%u\n",
@@ -708,6 +839,26 @@ static void console_exec(char *line)
                     unsigned(((s_cpu.m_core->m_r[6] & 0x3fu) << 16) | s_cpu.m_core->m_r[7]),
                     unsigned(s_cpu.m_core->m_r[6]),
                     unsigned(g_blit_px_win), unsigned(g_blit_cyc_per_px));
+        // Interrupt chain: is the 64 Hz edge raised, does the line move, does
+        // the CPU take it, and does the handler ever run.
+        std::printf("IRQ isr=%u@%u ref=%u rise=%u fall=%u set0=%u set2=%u set9=%u "
+                    "clr0=%u clr2=%u clr9=%u sirq=%03X ineq=%u enq=%u pri=%u irqf=%u "
+                    "s31=%u c31=%u\n",
+                    unsigned(g_isr7_hits), unsigned(g_isr7_insn), unsigned(g_irq7_refused),
+                    unsigned(g_irq7_rise), unsigned(g_irq7_fall),
+                    unsigned(g_src_set[0]), unsigned(g_src_set[2]), unsigned(g_src_set[9]),
+                    unsigned(g_src_clr[0]), unsigned(g_src_clr[2]), unsigned(g_src_clr[9]),
+                    unsigned(s_cpu.m_core->m_sirq),
+                    unsigned(s_cpu.m_core->m_ine), unsigned(s_cpu.m_core->m_enable_irq),
+                    unsigned(s_cpu.m_core->m_pri), unsigned(s_cpu.m_core->m_irq),
+                    unsigned(g_src_set[31]), unsigned(g_src_clr[31]));
+        // Gesture state: without this the "card never opened" case is invisible.
+        std::printf("GEST ac=%d fired=%d adown=%lld blank=%lld ban=%d card=%d menu=%d "
+                    "scr=%04X pad=%04X\n",
+                    s_ac_active ? 1 : 0, s_ac_fired ? 1 : 0,
+                    (long long)s_a_down_us, (long long)s_pad_blank_us,
+                    menu_auto_off_sec(), menu_confirm_is_open() ? 1 : 0, menu_is_open() ? 1 : 0,
+                    unsigned(s_soc.ram[0x0C88]), unsigned(s_port_bits));
         break;
     case 'R':                      // force a full repaint
         s_force_full = true;
@@ -719,20 +870,29 @@ static void console_exec(char *line)
         snapshot_machine_state();
         std::printf("ACK D seq=%u\n", unsigned(gueststate_newest_seq()));
         break;
-    case 'U':                      // U: resume from the newest snapshot now
+    case 'U': {                    // U: resume from the newest snapshot now
         if (!gueststate_ready()) {
             std::printf("NAK U no partition\n");
             break;
         }
-        if (!gueststate_load(s_cpu.m_core, uint32_t(sizeof(*s_cpu.m_core)), s_soc.ram,
+        if (!gueststate_load(&s_snap_blob, uint32_t(sizeof(s_snap_blob)), s_soc.ram,
                              uint32_t(sizeof(s_soc.ram)))) {
             std::printf("NAK U no valid record\n");
             break;
         }
+        *s_cpu.m_core = s_snap_blob.cpu;
+        if (!s_soc.restore_state(s_snap_blob.io)) {
+            std::printf("NAK U bad SoC block\n");
+            break;
+        }
         s_force_full = true;
-        std::printf("ACK U seq=%u pc=%06X\n", unsigned(gueststate_newest_seq()),
-                    unsigned(((s_cpu.m_core->m_r[6] & 0x3fu) << 16) | s_cpu.m_core->m_r[7]));
+        const bool frame = load_panel_frame();
+        s_blit_repaint_all = true;
+        std::printf("ACK U seq=%u pc=%06X frame=%s\n", unsigned(gueststate_newest_seq()),
+                    unsigned(((s_cpu.m_core->m_r[6] & 0x3fu) << 16) | s_cpu.m_core->m_r[7]),
+                    frame ? "restored" : "none");
         break;
+    }
     case 'F': {                    // F <hz>: guest cycles covered by one rendered frame
         const char *a = line + 1;
         while (*a == ' ') a++;
@@ -813,6 +973,18 @@ static void console_exec(char *line)
     case 'Y':                      // Y: dump (and clear) the block-entry census
         aot_dump_blocks();
         break;
+    case 'O': {                    // O: IRQ7 handler census + frame-tick stores
+        std::printf("ISRONCE hits=%u insn=%u tickw=%u tickpc=%06X tickval=%04X\n",
+                    unsigned(g_isr7_hits), unsigned(g_isr7_insn),
+                    unsigned(g_tick_writes), unsigned(g_tick_pc), unsigned(g_tick_val));
+        std::printf("PHASE wait=%u exit=%u body=%u alt=%u ioa=%u\n",
+                    unsigned(g_wait_top), unsigned(g_wait_exit),
+                    unsigned(g_frame_body), unsigned(g_body_alt), unsigned(g_ioa_reads));
+        for (unsigned i = 0; i < 0x45u; i++)
+            if (g_isr_hist[i])
+                std::printf("ISR %06X %u\n", unsigned(0x00486Bu + i), unsigned(g_isr_hist[i]));
+        break;
+    }
     case 'V':                      // version / geometry
         std::printf("VER ver=" DIGICORE_VERSION " win=%d,%d %dx%d scale=%d left=%d top=%d fb=%d chunk=%d\n",
                     kWinX, kWinY, kWinW, kWinH, kScale, kLeft, kTop, kFbPanel, kChunkRows);
@@ -975,22 +1147,33 @@ static void update_buttons(void)
     // pet leaves behind) want that chord and nothing else on the pad can give
     // it.
     {
-        static int64_t s_a_down_us;
-        static bool s_ac_fired;        // A press that came from the console injector has to count here too:
+        // A press that came from the console injector has to count here too:
         // it is the same physical gesture as far as the guest is concerned, and
         // without this the detector only ever sees real fingers.
         const int pressed = instant | (s_inject_left > 0 ? s_inject_mask : 0);
+        // Measured on the handset: this cartridge's title screen only advances
+        // on A+C.  Pure A, B, C and A+B+C all leave [0x0C88] at 0 with the logo
+        // on the panel, while A+C reaches the clock screen -- which is exactly
+        // what the two-screen gestures on the real shell use, and why the chord
+        // cannot simply be folded into the press.
         // Not while the settings menu owns the panel: the injected C would read
         // back as a fresh edge and close the menu the user just opened.
-        if ((pressed & BTN_KEY0) != 0 && !menu_is_open()) {
+        if ((pressed & BTN_KEY0) != 0 && !menu_is_open() && !menu_confirm_is_open()) {
             const int64_t now = esp_timer_get_time();
             if (s_a_down_us == 0)
                 s_a_down_us = now;
             else if (!s_ac_fired && now - s_a_down_us >= s_ac_hold_us) {
                 s_ac_fired = true;
-                s_ac_active = true;
-                s_ac_until_us = now + 3200000;
-                ESP_LOGI(TAG, "long A (%lld ms) -> A+C chord held",
+                // Do NOT inject anything yet.  The cartridge's title screen
+                // rejects a pad that reads A+C and then looks like it never got
+                // a key at all, which is exactly how every long press ended up
+                // as "the game will not start".  Raise a card instead and let
+                // the second press decide.
+                menu_confirm_set(true);
+                s_confirm_pad_prev = latched;
+                s_confirm_fresh = true;
+                s_blit_repaint_all = true;
+                ESP_LOGI(TAG, "long A (%lld ms) -> A+C confirm card",
                          (long long)((now - s_a_down_us) / 1000));
             }
         } else {
@@ -1005,6 +1188,26 @@ static void update_buttons(void)
         s_inject_left--;
     }
 
+    // The press that accepted the chord card must not also become a long B.
+    // Confirming on the card and holding B for the rest of the injection is one
+    // continuous contact, and the settings menu is bound to a 1.5 s B hold: the
+    // card closes, B stays down, the menu opens and parks the guest, and every
+    // later press lands in the menu instead of the game.  Blank the pad for a
+    // few frames after a card decision so the contact ends there.
+    if (s_pad_blank_us != 0) {
+        if (esp_timer_get_time() < s_pad_blank_us) {
+            instant = 0;
+            latched = 0;
+            if (s_port_bits != 0xffff) {
+                s_port_bits = 0xffff;
+                s_soc.set_port(0, 0xffff);
+            }
+            s_last_input_us = esp_timer_get_time();
+            return;
+        }
+        s_pad_blank_us = 0;
+    }
+
     // Long B opens the emulator's settings menu.  It is chrome, not a guest
     // input: the hold is timed here, and once it fires the guest gets its own B
     // released rather than sitting on a two second hold, which this ROM reads as
@@ -1012,7 +1215,16 @@ static void update_buttons(void)
     {
         static int64_t s_b_down_us = 0;
         static bool s_b_fired = false;
-        if ((instant & BTN_KEY1) != 0 && !menu_is_open()) {
+        // The contact that accepted the chord card is not a menu request.  A
+        // frame here can be 60-300 ms, so "B held for 1.5 s" and "B pressed to
+        // confirm" are the same physical event; the menu would open on the very
+        // key that sent the chord and then own every later press.
+        if (s_b_hold_locked && (instant & BTN_KEY1) == 0)
+            s_b_hold_locked = false;          // released: arm the detector again
+        if (s_b_hold_locked) {
+            s_b_down_us = 0;
+            s_b_fired = false;
+        } else if ((instant & BTN_KEY1) != 0 && !menu_is_open()) {
             const int64_t now = esp_timer_get_time();
             if (s_b_down_us == 0)
                 s_b_down_us = now;
@@ -1091,7 +1303,60 @@ static void update_buttons(void)
             menu_press_b();
         else if ((edge & BTN_KEY2) != 0)
             menu_press_c();
+        // SAVE OUT / SAVE IN are commands, not values.  The menu queues one and
+        // this is the only place that knows how a snapshot is stored, so the
+        // menu module itself never touches flash.
+        switch (menu_take_action()) {
+        case MENU_ACTION_SAVE:
+            snapshot_machine_state();
+            break;
+        case MENU_ACTION_LOAD:
+            restore_machine_state();
+            menu_close();             // the restored frame replaces the card
+            s_blit_repaint_all = true;
+            break;
+        default:
+            break;
+        }
         if (s_port_bits != 0xffff) {   // hand the guest a released pad
+            s_port_bits = 0xffff;
+            s_soc.set_port(0, 0xffff);
+        }
+        return;
+    }
+
+    // The A+C confirmation card is modal over the panel and hands the guest
+    // nothing at all: the finger is still resting on A, and letting that reach
+    // the ROM as a release would already be a key event.  B sends the chord,
+    // A or C drops the card.
+    if (menu_confirm_is_open()) {
+        s_last_input_us = esp_timer_get_time();
+        const int edge = latched & ~s_confirm_pad_prev;
+        s_confirm_pad_prev = latched;
+        if (s_confirm_fresh) {
+            // The A press that raised the card is still on the pad; it must not
+            // read back as a fresh edge and cancel the card in the same frame.
+            s_confirm_fresh = false;
+        } else if ((edge & BTN_KEY1) != 0) {
+            s_ac_active = true;
+            s_ac_until_us = esp_timer_get_time() + kAcChordUs;
+            menu_confirm_set(false);
+            s_b_hold_locked = true;      // this B accepts the chord, it does not open the menu
+            s_pad_blank_us = esp_timer_get_time() + kPadBlankUs;
+            s_blit_repaint_all = true;
+            ESP_LOGI(TAG, "chord card: B -> A+C sent (%lld ms)",
+                     (long long)(kAcChordUs / 1000));
+        } else if ((edge & BTN_KEY2) != 0) {
+            // Only C cancels.  A cannot: it is the key the card was opened with,
+            // the finger is still on it, and a single noisy re-latch of the
+            // ladder reads as a fresh edge and dismisses the card by itself.
+            menu_confirm_set(false);
+            s_b_hold_locked = true;
+            s_pad_blank_us = esp_timer_get_time() + kPadBlankUs;
+            s_blit_repaint_all = true;
+            ESP_LOGI(TAG, "chord card: cancelled");
+        }
+        if (s_port_bits != 0xffff) {
             s_port_bits = 0xffff;
             s_soc.set_port(0, 0xffff);
         }
@@ -1104,15 +1369,23 @@ static void update_buttons(void)
         s_hold_left = kPressFrames;
     }
 
-    // A held chord outranks the physical pad: A is released and C pressed, so
-    // the guest sees exactly the combination the two-screen gestures want.
-    if (s_ac_active &&
-        ((instant & BTN_KEY0) == 0 || esp_timer_get_time() >= s_ac_until_us))
+    // A chord that the user accepted on the confirmation card outranks the
+    // physical pad: the card already swallowed the A press, so the guest gets a
+    // clean A+C pair and nothing else.  Short cards are the reason this is timed
+    // rather than gated on the finger -- there is no finger any more.
+    if (s_ac_active && esp_timer_get_time() >= s_ac_until_us)
         s_ac_active = false;
-    const int pad = s_ac_active ? (BTN_KEY0 | BTN_KEY2) : instant;
+    int mask = s_ac_active ? (BTN_KEY0 | BTN_KEY2) : instant;
+    if (mask == 0 && s_hold_left > 0)
+        mask = s_hold_mask;
 
-    const int mask = pad != 0 ? pad : (s_hold_left > 0 ? s_hold_mask : 0);
-
+    // The pad is drawn active low, exactly as v1.0.0 did -- the version the owner
+    // confirmed could start the game.  A press pulls its bit low, so A alone is
+    // 0xFFF7.  The previous session flipped this to an active-high bitfield on
+    // the strength of an emulator run, and while that does get the guest as far
+    // as the clock screen, nothing on that screen ever responds again: single
+    // keys do nothing at all and only multi-key chords move the time, which is
+    // what "the keys are dead" looked like from the outside.
     uint16_t bits = 0xffff;
     if (mask & BTN_KEY0)
         bits &= uint16_t(~kPortB1);
@@ -1125,6 +1398,11 @@ static void update_buttons(void)
         s_port_bits = bits;
         s_soc.set_port(0, bits);
         ESP_LOGI(TAG, "port=%04x (mv=%d)", unsigned(bits), buttons_last_mv());
+        // A key press is also the hardware wake-up: the ROM parks itself in the
+        // System_Sleep path after 18 s of no input and never polls the pad
+        // again, so without this the screen stays dark until the battery dies.
+        if (bits != 0xffff && s_soc.asleep())
+            s_soc.wake_from_sleep();
         // A short click on every fresh press.  This is the only sound the
         // device can make: the cartridge has no audio source to emulate.
         if (bits != 0xffff)
@@ -1143,6 +1421,26 @@ static void restore_machine_state(void);
 static bool lcd_fill_hook(void *opaque, uint16_t value, uint32_t count)
 {
     return static_cast<Gpce4 *>(opaque)->lcd_fill_pixels(value, count);
+}
+
+// Put the CPU back at the ROM's reset vector, exactly as power-on does.  Used
+// by guest_init() and again by the wake-up path: the handset treats a wake-up key
+// as a reset, and the ROM's own power-down tail runs into blank space, so a
+// wake-up that merely resumed the CPU could never get back into the game.
+static void guest_reset_cpu(void)
+{
+    s_cpu.reset_state();
+    s_cpu.m_vectorbase = 0x4010;
+
+    for (int i = 0; i < 16; i++)
+        s_cpu.m_core->m_r[i] = 0;
+    s_cpu.m_core->m_r[unsp_device::REG_PC] = s_soc.read16(0x4010 + 0x7);
+
+    s_cpu.m_core->m_enable_irq = 0;
+    s_cpu.m_core->m_enable_fiq = 0;
+    s_cpu.m_core->m_fir_move = 1;
+    s_cpu.m_core->m_pri = 8;
+    s_cpu.m_core->m_divq_bit = 0xffffffffu;
 }
 
 static bool guest_init(void)
@@ -1164,18 +1462,7 @@ static bool guest_init(void)
     // the traffic byte by byte.
     s_cpu.m_lcd_fill = lcd_fill_hook;
     s_cpu.m_lcd_fill_opaque = &s_soc;
-    s_cpu.reset_state();
-    s_cpu.m_vectorbase = 0x4010;
-
-    for (int i = 0; i < 16; i++)
-        s_cpu.m_core->m_r[i] = 0;
-    s_cpu.m_core->m_r[unsp_device::REG_PC] = s_soc.read16(0x4010 + 0x7);
-
-    s_cpu.m_core->m_enable_irq = 0;
-        s_cpu.m_core->m_enable_fiq = 0;
-    s_cpu.m_core->m_fir_move = 1;
-    s_cpu.m_core->m_pri = 8;
-    s_cpu.m_core->m_divq_bit = 0xffffffffu;
+    guest_reset_cpu();
 
     s_cycle = 0;
     s_insns = 0;
@@ -1282,6 +1569,33 @@ static void persist_save_image(void)
 //  internal_unsp_state can be copied verbatim.  m_icount is restored too but is
 //  overwritten before the next execute_run(), so its stale value is harmless.
 // ---------------------------------------------------------------------------
+// The guest's picture lives at rows kWinY..kWinY+kWinH-1 of the 128x128 GRAM,
+// which is one contiguous run of 112*128 uint16_t.  fbsave.cpp stores exactly
+// those bytes, so a restore can put the panel back instead of waiting for a
+// guest that believes the screen is already drawn.
+static uint16_t *panel_window()
+{
+    return &s_soc.lcd.fb[size_t(kWinY) * size_t(kFbPanel)];
+}
+
+static constexpr uint32_t kPanelWindowBytes = uint32_t(kWinW) * uint32_t(kWinH) * 2u;
+
+// Returns the CRC of what reached flash, or 0 when the block was not written.
+static uint32_t save_panel_frame(void)
+{
+    if (!fbsave_store(panel_window(), kPanelWindowBytes)) {
+        ESP_LOGW(TAG, "panel frame not stored; a restore will repaint instead");
+        return 0;
+    }
+    return esp_rom_crc32_le(0, reinterpret_cast<const uint8_t *>(panel_window()),
+                            kPanelWindowBytes);
+}
+
+static bool load_panel_frame(void)
+{
+    return fbsave_load(panel_window(), kPanelWindowBytes);
+}
+
 static int64_t s_snap_last_us = 0;
 static uint32_t s_snap_count = 0;
 static uint32_t s_snap_ram_crc = 0;
@@ -1292,6 +1606,18 @@ static void snapshot_machine_state(void)
     if (!gueststate_ready())
         return;
 
+    // Never persist a state the guest cannot resume from: after ~18 s of no
+    // input the ROM walks into its power-down path, and by the time it writes
+    // 0x3036 the PC is already somewhere inside that loop (0x5200-0x5400) with
+    // the peripheral shutdown half done.  Those addresses belong to the ROM, not
+    // to the cartridge, so a record taken there restores a CPU that will never
+    // draw again.  Only snapshot while the guest is executing cartridge code.
+    const uint32_t pc = guest_pc();
+    if (s_soc.asleep() || pc < 0x200000u) {
+        s_snap_last_us = esp_timer_get_time();
+        return;
+    }
+
     // Skip the write when nothing in guest RAM moved: a pet sitting on an idle
     // screen changes nothing, and flash endurance is the scarce resource here.
     const uint32_t crc = esp_rom_crc32_le(
@@ -1301,7 +1627,15 @@ static void snapshot_machine_state(void)
         return;
     }
 
-    if (gueststate_store(s_cpu.m_core, sizeof(*s_cpu.m_core), s_soc.ram, sizeof(s_soc.ram))) {
+    s_snap_blob.cpu = *s_cpu.m_core;
+    s_soc.save_state(s_snap_blob.io);
+    // The panel GRAM is not part of the guest's address space, so it gets its
+    // own flash block (fbsave.cpp).  Its CRC rides in the payload: a record
+    // whose frame block was never written then restores to a repaint instead
+    // of a stale picture.
+    s_snap_blob.fb_crc = save_panel_frame();
+    if (gueststate_store(&s_snap_blob, uint32_t(sizeof(s_snap_blob)), s_soc.ram,
+                         uint32_t(sizeof(s_soc.ram)))) {
         s_snap_ram_crc = crc;
         s_snap_ram_crc_valid = true;
         s_snap_count++;
@@ -1413,18 +1747,62 @@ static void restore_machine_state(void)
 {
     if (!gueststate_init())
         return;
-    if (!gueststate_load(s_cpu.m_core, sizeof(*s_cpu.m_core), s_soc.ram, sizeof(s_soc.ram))) {
+    if (!gueststate_load(&s_snap_blob, uint32_t(sizeof(s_snap_blob)), s_soc.ram,
+                         uint32_t(sizeof(s_soc.ram)))) {
+        // Either nothing was ever saved or the record predates the SoC half of
+        // the payload; both mean a cold boot, which is always safe.
         ESP_LOGI(TAG, "no machine snapshot; starting from reset");
         return;
+    }
+    *s_cpu.m_core = s_snap_blob.cpu;
+    // Restore the SoC registers *after* the CPU file: update_interrupts() walks
+    // the port/IRQ state and drives UNSP_IRQ7_LINE, and the CPU only samples
+    // that line on its next instruction.
+    if (!s_soc.restore_state(s_snap_blob.io)) {
+        ESP_LOGW(TAG, "snapshot SoC block rejected; starting from reset");
+        return;
+    }
+    // The panel GRAM is not part of the guest's address space: ST7735 reset
+    // leaves it black and the guest only pushes the tiles it believes changed,
+    // which after a restore is none of them.  Put the stored picture back first.
+    const bool have_frame = load_panel_frame();
+    // A snapshot taken while the guest was in the System_Sleep path restores a
+    // CPU that will never poll the pad again.  Treat it as a wake-up instead of
+    // restoring a dead state: the RAM (and therefore the pet) survives, only the
+    // PC restarts.
+    const bool was_asleep = s_snap_blob.io.asleep != 0;
+    if (was_asleep) {
+        // A record that captured the ROM's power-down path still has the pet and
+        // the clock in RAM, so the machine picks up where it left off rather than
+        // asking the player to set the clock again: put the PC back on the frame
+        // loop.  set_sleep_inhibit first, so wake_from_sleep() only clears the
+        // flag instead of replaying power-on.
+        s_soc.set_sleep_inhibit(kGuestResumePc);
+        s_soc.wake_from_sleep();
+        s_cpu.m_core->m_r[unsp_device::REG_SR] =
+            uint16_t((s_cpu.m_core->m_r[unsp_device::REG_SR] & 0xffc0u) |
+                     ((kGuestResumePc >> 16) & 0x3fu));
+        s_cpu.m_core->m_r[unsp_device::REG_PC] = uint16_t(kGuestResumePc & 0xffffu);
+    } else if (guest_pc() < 0x200000u) {
+        // A record whose PC sits in the ROM or in the low RAM alias cannot resume:
+        // those addresses are the power-down path or a stale boot artefact.
+        // Replaying power-on is always safe and keeps RAM, so the pet survives.
+        ESP_LOGW(TAG, "snapshot pc=%06x outside the cartridge; replaying power-on",
+                 unsigned(guest_pc()));
+        guest_reset_cpu();
     }
     // The panel still shows the previous power-on frame and the ST7735 window
     // state knows nothing about the restored RAM, so ask for a full repaint.
     s_force_full = true;
+    s_blit_repaint_all = true;
     s_snap_ram_crc_valid = false;
-    ESP_LOGI(TAG, "resumed at pc=%06x sr=%04x sp=%04x",
+    ESP_LOGI(TAG, "resumed at pc=%06x sr=%04x sp=%04x int2=%04x frame=%s%s",
              unsigned(((s_cpu.m_core->m_r[6] & 0x3fu) << 16) | (s_cpu.m_core->m_r[7] & 0xffffu)),
              unsigned(s_cpu.m_core->m_r[6]),
-             unsigned(s_cpu.m_core->m_r[unsp_device::REG_SP] & 0xffffu));
+             unsigned(s_cpu.m_core->m_r[unsp_device::REG_SP] & 0xffffu),
+             unsigned(s_snap_blob.io.interrupt2_ctrl),
+             have_frame ? "restored" : "none",
+             was_asleep ? " wake=reset" : "");
 }
 
 // One guest frame = exactly FRAME_CYCLES of guest time, sliced at the SoC's
@@ -1432,6 +1810,12 @@ static void restore_machine_state(void)
 static void run_guest_frame(void)
 {
     s_slices_frame = 0;
+    // TEMP HLE: the device build never manages to raise INT2 bit 2, so the ROM's
+    // 64 Hz tick at [0x0850] stays 0, the guest spins in 0x230321 forever and
+    // never reaches the code that reads PORT A.  Feed the tick from the host at
+    // roughly the same rate (one per 60 Hz frame) so the frame body runs.
+    if (s_soc.ram[0x0850] < 8u)
+        s_soc.ram[0x0850] = uint16_t(s_soc.ram[0x0850] + 1u);
     const int64_t frame_end = s_cycle + s_frame_cycles;
     const int64_t wall0 = esp_timer_get_time();
     int64_t stuck_cycle = s_cycle;
@@ -1708,13 +2092,31 @@ extern "C" void app_main(void)
         }
 #endif
         update_buttons();
+        // The ROM asks for System_Sleep after ~16 s of no input.  Its power-down
+        // path ends by running off the end of its own code (0x5340 and up is
+        // blank), so letting the request through means the next key press can
+        // only replay power-on -- the game comes back asking CONTINUE/RESET and
+        // the clock has to be set again.  Always refuse it and drop the PC on the
+        // game's frame loop instead: panel darkness is the host's job
+        // (update_sleep_backlight), and the pads stay armed.
+        s_soc.set_sleep_inhibit(kGuestResumePc);
         // While the settings menu is up the guest is parked.  The menu goes
         // straight to the panel rather than into fb[]: the guest only repaints
         // the pixels it animates, so writing the menu into fb[] leaves the text
         // behind after the menu closes, and there is no DRAM for a copy of the
         // window to restore from.  s_menu_was_open makes the close push the
         // untouched fb[] once so the game comes back in full.
-        if (menu_is_open()) {
+        if (menu_confirm_is_open()) {
+            // Modal, like the settings menu, and for the same reason: the card
+            // paints straight to the panel, so the guest must not repaint over
+            // it.  The guest is parked for a few seconds at most and the tick
+            // counter simply accumulates, which is why the card does not have to
+            // keep re-pushing itself.
+            const MenuBackdrop bg = {s_soc.lcd.fb, kFbPanel, kWinX, kWinY, kWinW, kWinH,
+                                     kLeft, kTop, kScale};
+            menu_confirm_present(s_strip, kDstW, kDstH, &bg);
+            s_menu_was_open = true;
+        } else if (menu_is_open()) {
             const MenuBackdrop bg = {s_soc.lcd.fb, kFbPanel, kWinX, kWinY, kWinW, kWinH,
                                      kLeft, kTop, kScale};
             menu_present(s_strip, kDstW, kDstH, &bg);
@@ -1722,6 +2124,7 @@ extern "C" void app_main(void)
         } else {
             if (s_menu_was_open) {
                 s_menu_was_open = false;
+                panel_clear_side_margins();
                 s_blit_repaint_all = true;
             }
             run_guest_frame();
@@ -1732,7 +2135,7 @@ extern "C" void app_main(void)
         if (s_slices_frame > s_slices_max) s_slices_max = s_slices_frame;
 
         const bool content = window_has_content();
-        if (s_display_ok && !menu_is_open()) {
+        if (s_display_ok && !menu_is_open() && !menu_confirm_is_open()) {
             const int64_t t_blit0 = esp_timer_get_time();
             blit_frame();
             s_blit_us += uint32_t(esp_timer_get_time() - t_blit0);

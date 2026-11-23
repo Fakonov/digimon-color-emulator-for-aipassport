@@ -1,4 +1,4 @@
-# digicore-c3: the Digimon Color GPCE4 model + unSP interpreter on the C3.
+﻿# digicore-c3: the Digimon Color GPCE4 model + unSP interpreter on the C3.
 #
 # main/emu/* is a copy of emu/* (the PC harness) with three device-side edits:
 #   gpce4.h/.cpp  SPI flash behind SparseRom instead of a host pointer
@@ -10,6 +10,7 @@ idf_component_register(
          "rom_esp.cpp"
          "saveimg.cpp"
          "gueststate.cpp"
+         "fbsave.cpp"
          "menu.cpp"
          "buttons.c"
          "audio.c"

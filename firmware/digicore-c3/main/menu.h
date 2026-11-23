@@ -9,14 +9,22 @@
 
 #include <stdint.h>
 
-enum { MENU_ITEMS = 5 };
+enum { MENU_ITEMS = 7 };
 enum {
     MENU_IDX_AUTO_OFF = 0,
     MENU_IDX_BRIGHT   = 1,
     MENU_IDX_VOLUME   = 2,
     MENU_IDX_AUTOSAVE = 3,
-    MENU_IDX_ABOUT    = 4,
+    MENU_IDX_SAVE_OUT = 4,
+    MENU_IDX_SAVE_IN  = 5,
+    MENU_IDX_ABOUT    = 6,
 };
+
+// Rows that are commands rather than values.  menu_press_b() on one of them
+// queues the request here; app_main drains it with menu_take_action() so the
+// menu module never has to know how a snapshot is stored.
+enum { MENU_ACTION_NONE = 0, MENU_ACTION_SAVE = 1, MENU_ACTION_LOAD = 2 };
+int  menu_take_action();      // returns the queued action and clears it
 
 // Reads the persisted values out of NVS.  Safe to call once at boot; on any
 // failure the compile-time defaults stay in place.
@@ -65,3 +73,19 @@ void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg);
 // emulator's auto-off is set longer than the machine's 16 s.  `strip` needs
 // 2 * width * 8 bytes and width is the whole panel width (320).
 void menu_banner_present(uint8_t *strip, int width, const char *text);
+
+// Debug aid: dump the next `frames` menu pushes to the console as downsampled
+// hex rows ("B <band> <y> <pixels>").  The menu paints straight to the panel
+// and never touches fb[], so this is the only way to check its output from the
+// serial console.  0 turns it back off.
+void menu_set_capture(int frames);
+
+// ---- A+C confirmation card ------------------------------------------------
+//
+// Long A raises this card instead of injecting the chord.  The cartridge's
+// title screen drops a pad that reads A+C, so the chord has to be an explicit
+// second step: while the card is up the guest sees no key at all, B sends the
+// chord, A or C dismisses it.
+void menu_confirm_set(bool on);
+bool menu_confirm_is_open();
+void menu_confirm_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg);

@@ -278,9 +278,11 @@ struct Gpce4 : public UnspBus {
     uint16_t m_wake_mask_c = 0xffff;         // 0x300e, IOC_WakeUp_Mask
     uint32_t m_sleep_writes = 0;             // how many times 0x3036 was written
     bool m_asleep = false;
+    bool m_halted = false;                   // CPU clock stopped by System_Sleep
     uint32_t sleep_writes() const { return m_sleep_writes; }
     bool asleep() const { return m_asleep; }
-    void wake_from_sleep() { m_asleep = false; }
+    bool halted() const { return m_halted; }
+    void wake_from_sleep();
     uint16_t m_dac_cha1 = 0;                 // 0x3041, last sample (no audio sink)
     uint16_t m_spi_auto_ctrl = 0;
     uint16_t m_spi_bank = 0;

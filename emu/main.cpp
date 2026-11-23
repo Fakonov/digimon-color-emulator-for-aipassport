@@ -277,6 +277,10 @@ int main(int argc, char **argv)
 		const uint32_t *sbv = nullptr;
 		FILE *regd = nullptr;
 		long regd_left = 0;
+		// Cached once: calling getenv() from the per-instruction hook cost more
+		// than the emulation itself (a 40 M instruction run went from 0.2 s to
+		// minutes), so the switch lives in the context instead.
+		int loop_left = 0;
 	};
 	HookCtx hook;
 	hook.trace = trace_path ? &trace : nullptr;
@@ -302,12 +306,27 @@ int main(int argc, char **argv)
 			hook.regd = std::fopen(rdp, "wb");
 			hook.regd_left = 40000;
 		}
+		const char *lr = std::getenv("GPCE4_LOOPREG");
+		if (lr)
+			hook.loop_left = std::atoi(lr);
 	}
-	if (hook.trace || hook.hist || hook.bp != 0xffffffffu || hook.ram_at >= 0 || hook.regd)
+	if (hook.trace || hook.hist || hook.bp != 0xffffffffu || hook.ram_at >= 0 || hook.regd ||
+	    hook.loop_left > 0)
 	{
 		cpu.m_insn_hook = [](void *o, uint32_t lpc) {
 			HookCtx *c = (HookCtx *)o;
 			uint32_t pc = lpc & 0xffffff;
+			if (c->loop_left > 0 &&
+			    ((pc >= 0x5240 && pc <= 0x5262) || (pc >= 0x5370 && pc <= 0x5390)))
+			{
+				const AotCtx *ac = (const AotCtx *)c->dev->m_aot_cur;
+				const uint32_t *r = ac ? ac->r : c->regs;
+				const uint32_t sbv = ac ? ac->sb : *c->sbv;
+				std::printf("[loop] %06X r0=%04X r1=%04X r2=%04X r3=%04X r4=%04X r5=%04X sr=%04X sb=%X\n",
+					pc, r[0] & 0xffffu, r[1] & 0xffffu, r[2] & 0xffffu, r[3] & 0xffffu,
+					r[4] & 0xffffu, r[5] & 0xffffu, r[6] & 0xffffu, sbv & 0xfu);
+				--c->loop_left;
+			}
 			if (c->bp != 0xffffffffu && !c->bp_done && pc == c->bp && c->bp_path)
 			{
 				FILE *fp = std::fopen(c->bp_path, "wb");
@@ -438,6 +457,13 @@ int main(int argc, char **argv)
 		uint16_t bits = 0xffff;
 		if (down) bits = (uint16_t)(0xffff & ~bit);
 		soc.set_port(0, bits);
+		// A wake-up mask match releases the System_Sleep stall, exactly like the
+		// handset: the button that woke the SoC is also the one the ROM sees.
+		if (down) {
+			const uint32_t wpc = ((cpu.m_core->m_r[unsp_device::REG_SR] & 0x3fu) << 16) | (cpu.m_core->m_r[unsp_device::REG_PC] & 0xffffu);
+			std::printf("[wake] key=%04X at pc=%06X halted=%d\n", unsigned(bit), unsigned(wpc), soc.halted() ? 1 : 0);
+			soc.wake_from_sleep();
+		}
 		presses++;
 	};
 
@@ -458,6 +484,16 @@ int main(int argc, char **argv)
 			uint16_t pv = 0xffff;
 			for (const PressSpec &ps : press_specs)
 				if (f >= ps.start && f < ps.end) pv &= (uint16_t)~ps.mask;
+			static uint16_t prev_pv = 0xffff;
+			if ((pv & (uint16_t)~prev_pv) != 0)
+			{
+				// A new button just went down: that is a wake-up event for a SoC
+				// parked in System_Sleep.
+				const uint32_t wpc = ((cpu.m_core->m_r[unsp_device::REG_SR] & 0x3fu) << 16) | (cpu.m_core->m_r[unsp_device::REG_PC] & 0xffffu);
+				std::printf("[wake] key=%04X at pc=%06X halted=%d\n", unsigned(pv), unsigned(wpc), soc.halted() ? 1 : 0);
+				soc.wake_from_sleep();
+			}
+			prev_pv = pv;
 			soc.set_port(0, pv);
 			presses++;
 		}
@@ -467,6 +503,18 @@ int main(int argc, char **argv)
 		int64_t frame_end = cycle + FRAME_CYCLES;
 		while (cycle < frame_end)
 		{
+			if (soc.halted())
+			{
+				// System_Sleep has stopped the CPU clock.  Keep the peripheral clock
+				// running (the timers are what the host uses to pace frames) but do
+				// not execute anything until a key press clears the stall.
+				int64_t remain = frame_end - cycle;
+				uint32_t slice = soc.cycles_to_next_event((uint32_t)std::min<int64_t>(remain, SLICE_CYCLES));
+				if (slice == 0) slice = 1;
+				soc.tick(slice);
+				cycle += slice;
+				continue;
+			}
 			if (hook.trace)
 			{
 				const int64_t rel = cycle - trace_begin;
@@ -530,11 +578,12 @@ int main(int argc, char **argv)
 		(long long)total_frames, (long long)cycle, (double)cycle / CPU_CLOCK, wall,
 		(double)cycle / CPU_CLOCK / (wall > 0 ? wall : 1), (unsigned long long)trace.count,
 		(unsigned long long)soc.now());
-	std::printf("PC=%06X SR=%04X SP=%04X display_on=%d buttons_events=%lld asleep=%d sleep_writes=%u\n",
+extern unsigned long gpce4_ioa_reads();
+	std::printf("PC=%06X SR=%04X SP=%04X display_on=%d buttons_events=%lld asleep=%d sleep_writes=%u ioa=%lu\n",
 		(unsigned)(((cpu.m_core->m_r[unsp_device::REG_SR] & 0x3f) << 16) | cpu.m_core->m_r[unsp_device::REG_PC]),
 		(unsigned)(cpu.m_core->m_r[unsp_device::REG_SR] & 0xffff),
 		(unsigned)(cpu.m_core->m_r[0] & 0xffff), soc.lcd.display_on ? 1 : 0, (long long)presses,
-		soc.asleep() ? 1 : 0, unsigned(soc.sleep_writes()));
+		soc.asleep() ? 1 : 0, unsigned(soc.sleep_writes()), gpce4_ioa_reads());
 	if (const char *stat = std::getenv("GPCE4_AOTSTAT")) aot_dump_pc_hist(stat);
 	std::printf("AOT blocks=%llu insns=%llu fallback=%llu miss=%llu\n",
 		(unsigned long long)cpu.m_aot_blocks, (unsigned long long)cpu.m_aot_insns,

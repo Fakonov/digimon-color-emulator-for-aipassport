@@ -6,6 +6,7 @@
 #include "hotblock.h"
 #include "aot.h"
 #include <cstdio>
+#include <cstdlib>
 #include <utility>
 
 // The C3 executes this file from flash through a 16 KiB icache, and the whole
@@ -709,6 +710,30 @@ void aot_dump_pc_hist(const char *path)
 AotCtx g_aot_ctx;
 bool g_aot_ctx_ready = false;
 
+#ifndef ESP_PLATFORM
+// AOT shadow verification state (GPCE4_AOT_VERIFY=1).  The RAM window is
+// 0x1000 words, so a full snapshot is 8 KiB - cheap enough to take once per
+// block while debugging and never touched in a normal run.
+static int g_aot_verify = -1;
+static unsigned g_aot_vfail = 0;
+static unsp_device::internal_unsp_state g_aot_core_snap;
+static uint16_t g_aot_ram_snap[0x1000];
+static uint16_t g_aot_ram_aot[0x1000];
+
+// A block that ends in an instruction the generator did not emit calls
+// c->fallback() to have the interpreter run that one instruction.  A shadow
+// verification of "block only" semantics must not count it, so during a verify
+// run the fallback is swapped for this stub: the block still charges its own
+// cycles and returns, and the CPU resumes at the fallback PC as it would have.
+static uint32_t g_aot_vfb_lpc = 0;
+static int g_aot_vfb_hit = 0;
+static void aot_verify_skip_fallback(void *, AotCtx *, uint32_t lpc)
+{
+	g_aot_vfb_lpc = lpc;
+	g_aot_vfb_hit = 1;
+}
+#endif
+
 #ifdef ESP_PLATFORM
 // Distinct-block counter (512-byte bitmap).  The full frequency census was a
 // one-off measurement kept in dbgtest/iram_hot.txt; what stays on the device is
@@ -886,11 +911,107 @@ UNSP_HOT bool unsp_device::aot_step(const uint32_t lpc)
 		return false;
 	}
 	m_aot_insns += cnt;
+#ifndef ESP_PLATFORM
+	// ---- AOT shadow verification (GPCE4_AOT_VERIFY=1) --------------------
+	// Run the block, then re-run the same instruction count through the
+	// interpreter from the same entry state and compare.  The first block that
+	// disagrees is a code-generation bug in tools/aot.py; this is the only way
+	// to see it without a MAME reference trace.
+	if (g_aot_verify < 0)
+	{
+		const char *v = std::getenv("GPCE4_AOT_VERIFY");
+		g_aot_verify = (v && v[0] != '0') ? 1 : 0;
+	}
+	const bool verify = g_aot_verify == 1 && g_aot_vfail < 32 && m_ram != nullptr;
+	if (verify)
+	{
+		g_aot_core_snap = *m_core;
+		std::memcpy(g_aot_ram_snap, m_ram, (m_ram_limit + 1) * 2);
+	}
+#endif
 	ac.sb = m_core->m_sb;
 	ac.icount = m_core->m_icount;
-	fn(&ac);
+#ifndef ESP_PLATFORM
+	if (verify)
+	{
+		g_aot_vfb_hit = 0;
+		ac.fallback = aot_verify_skip_fallback;
+		fn(&ac);
+		ac.fallback = aot_fallback_one;
+	}
+	else
+#endif
+		fn(&ac);
 	m_core->m_sb = ac.sb;
 	m_core->m_icount = ac.icount;
+
+#ifndef ESP_PLATFORM
+	if (verify)
+	{
+		internal_unsp_state aot_core = *m_core;
+		// A block that ends by handing one instruction to the interpreter never
+		// writes its own exit PC: the fallback target is the PC the CPU resumes
+		// at.  The interpreter path below reaches the same PC after `cnt`
+		// instructions, so mirror it here instead of comparing the stale r7.
+		if (g_aot_vfb_hit)
+		{
+			aot_core.m_r[6] = (aot_core.m_r[6] & 0xffc0u) | ((g_aot_vfb_lpc >> 16) & 0x3fu);
+			aot_core.m_r[7] = g_aot_vfb_lpc & 0xffffu;
+		}
+		const uint32_t byte_len = (m_ram_limit + 1) * 2;
+		std::memcpy(g_aot_ram_aot, m_ram, byte_len);
+		*m_core = g_aot_core_snap;
+		std::memcpy(m_ram, g_aot_ram_snap, byte_len);
+		set_pc_lpc(lpc);
+		for (uint8_t i = 0; i < cnt; i++)
+		{
+			const uint16_t op = read16(UNSP_LPC);
+			add_lpc(1);
+			execute_one(op);
+		}
+		bool reg_bad = false;
+		int first_bad = -1;
+		for (int i = 0; i < 8; i++)
+			if (aot_core.m_r[i] != m_core->m_r[i])
+			{
+				reg_bad = true;
+				if (first_bad < 0) first_bad = i;
+			}
+		const bool sb_bad = (uint16_t)aot_core.m_sb != (uint16_t)m_core->m_sb;
+		const bool ic_bad = aot_core.m_icount != m_core->m_icount;
+		const bool ram_bad = std::memcmp(g_aot_ram_aot, m_ram, byte_len) != 0;
+		if (reg_bad || sb_bad || ic_bad || ram_bad)
+		{
+			++g_aot_vfail;
+			std::printf("[aot-verify] #%u entry=%06X cnt=%u reg=%d sb=%d ic=%d ram=%d\n",
+				(unsigned)g_aot_vfail, lpc, (unsigned)cnt, (int)reg_bad, (int)sb_bad,
+				(int)ic_bad, (int)ram_bad);
+			for (int i = 0; i < 8; i++)
+				if (aot_core.m_r[i] != m_core->m_r[i])
+					std::printf("    r%d aot=%04X ref=%04X\n", i,
+						(unsigned)aot_core.m_r[i], (unsigned)m_core->m_r[i]);
+			if (sb_bad)
+				std::printf("    sb aot=%04X ref=%04X\n",
+					(unsigned)(uint16_t)aot_core.m_sb, (unsigned)(uint16_t)m_core->m_sb);
+			if (ic_bad)
+				std::printf("    icount aot=%d ref=%d\n", aot_core.m_icount, m_core->m_icount);
+			if (ram_bad)
+			{
+				int shown = 0;
+				for (uint32_t a = 0; a <= m_ram_limit && shown < 8; a++)
+					if (g_aot_ram_aot[a] != m_ram[a])
+					{
+						std::printf("    [%04X] aot=%04X ref=%04X\n", (unsigned)a,
+							(unsigned)g_aot_ram_aot[a], (unsigned)m_ram[a]);
+						shown++;
+					}
+			}
+			(void)first_bad;
+		}
+		*m_core = aot_core;
+		std::memcpy(m_ram, g_aot_ram_aot, byte_len);
+	}
+#endif
 
 #ifndef AOT_NO_HOOKS
 	aot_mark_uniq(lpc);

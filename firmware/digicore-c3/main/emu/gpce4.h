@@ -145,6 +145,62 @@ struct Gpce4SpiFlash {
 
 
 // ===========================================================================
+//  Gpce4State - the SoC registers that a machine snapshot has to carry
+//
+//  Restoring the CPU file and the 8 KiB guest RAM is not enough to resume a
+//  game.  The retail ROM programs INT2_Ctrl (0x3053) once during boot and then
+//  waits on a 64 Hz frame counter that only its IRQ7 handler bumps; the gate
+//  lives in this SoC, not in guest memory, so a snapshot without it comes back
+//  with every interrupt masked and the game spins on that counter forever.
+//  That is exactly the frozen black screen a power cycle used to "fix".
+//
+//  The panel GRAM stays out on purpose: it is 32 KiB and the guest repaints
+//  what it needs from its own RAM once the interrupt chain works again.
+// ===========================================================================
+enum : uint32_t { GPCE4_STATE_MAGIC = 0x34435047u };   // 'GPC4'
+enum : uint16_t { GPCE4_STATE_VERSION = 1 };
+
+struct Gpce4State {
+    uint32_t magic;
+    uint16_t version;
+    uint16_t size;
+
+    uint16_t port_in[3];
+    uint16_t ioa_buffer, iob_buffer;
+    uint16_t ioa_direction, iob_direction, ioc_direction;
+    uint16_t ioa_attribute, iob_attribute, ioc_attribute;
+    uint16_t io_ctrl, iob_out;
+    uint16_t timer_ctrl, cache_ctrl, wait_ctrl;
+    uint16_t wake_mask_a, wake_mask_b, wake_mask_c;
+    uint16_t dac_cha1, dac_cha2;
+
+    uint16_t spi_auto_ctrl, spi_bank, spi_ctrl, spi2_ctrl, spi2_txstatus;
+    uint8_t  spi_tx_fifo[8];
+    uint8_t  spi_rx_fifo[8];
+    int8_t   tx_fifo_entries, rx_fifo_entries;
+    uint8_t  spi_tx_armed;
+    int8_t   spi2_tx_fill;
+
+    uint32_t interrupt_status;
+    uint16_t interrupt_ctrl, interrupt2_ctrl, fiq_sel, fiq2_sel;
+    uint8_t  irq_line[9];
+
+    uint32_t sleep_writes;
+    uint8_t  asleep;
+    uint8_t  pad0;
+
+    // Panel control registers (no GRAM).  The RAMWR cursor/window is deliberately
+    // *not* part of this: a snapshot can land in the middle of a pixel burst,
+    // and resuming with the window still open scatters the next frame into rows
+    // outside the visible area (measured: the whole picture landed in fb rows
+    // 0..7 and 120..127, leaving the 112 visible rows black).
+    uint8_t  lcd_display_on;
+    uint8_t  lcd_sleep;
+    uint16_t lcd_madctl;
+    uint8_t  lcd_colmod;
+};
+
+// ===========================================================================
 //  Gpce4 - the SoC
 // ===========================================================================
 struct Gpce4 : public UnspBus {
@@ -152,6 +208,10 @@ struct Gpce4 : public UnspBus {
     void set_images(const uint8_t *irom, size_t irom_size, SparseRom *flash);
     void set_cpu(unsp_device *cpu);          // may be null in selftest
     void reset();
+
+    // Snapshot / restore of every guest-visible SoC register (Gpce4State).
+    void save_state(Gpce4State &st) const;
+    bool restore_state(const Gpce4State &st);
     uint16_t read16(uint32_t addr) override;
     void write16(uint32_t addr, uint16_t data) override;
 	// Direct host window for opcode fetch (RAM / internal ROM / SPI flash page).
@@ -198,7 +258,7 @@ struct Gpce4 : public UnspBus {
 	// leaves the flash main loop because it is *waiting for a key press*, and
 	// returns as soon as PORT A shows one (measured: `rflash` recovers to 80 k/s
 	// the second after a press).  Unmasking changed nothing except the cost.
-	bool mask_irq0_timer = true;
+	bool mask_irq0_timer = false;
 	bool source_enabled(int i) const
 	{
 		if (i == 1)
@@ -264,9 +324,19 @@ struct Gpce4 : public UnspBus {
     uint16_t m_wake_mask_c = 0xffff;         // 0x300e, IOC_WakeUp_Mask
     uint32_t m_sleep_writes = 0;             // how many times 0x3036 was written
     bool m_asleep = false;
+    // AUTO OFF = NEVER: the handset must not go dark, so System_Sleep is refused
+    // and the guest is dropped back on `m_sleep_resume_pc` instead.  The ROM's
+    // remaining power-down writes (0x3035/0x3030/0x3050/0x3051/0x3054) never run,
+    // which is what keeps the panel and the pads exactly as the game left them.
+    uint32_t m_sleep_resume_pc = 0;
+    bool m_sleep_ignore = false;
+    uint32_t m_sleep_ignored = 0;            // how many requests were refused
+uint32_t m_sleep_bounced = 0;            // power-down sequences bounced at 0x3035
+    void set_sleep_inhibit(uint32_t resume_pc);
     uint32_t sleep_writes() const { return m_sleep_writes; }
+    uint32_t sleep_ignored() const { return m_sleep_ignored; }
     bool asleep() const { return m_asleep; }
-    void wake_from_sleep() { m_asleep = false; }
+    void wake_from_sleep();
     uint16_t m_dac_cha1 = 0;                 // 0x3041, last sample (no audio sink)
     uint16_t m_dac_cha2 = 0;                 // 0x3042
     // How often the guest writes the DAC.  There is no sample clock in the

@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------------------
+﻿// ---------------------------------------------------------------------------
 //  gpce4.cpp - Generalplus GPCE4 SoC (unSP 2.0, Sunplus)
 //
 //  Port of MAME 0.289:
@@ -389,6 +389,154 @@ void Gpce4::reset()
 
 
 // ===========================================================================
+//  Machine snapshots
+//
+//  reset() above is the list of everything that has to survive a resume; the
+//  two functions below mirror it field for field.  Timers are left out on
+//  purpose: their phase is derived from m_now, and a snapshot taken between two
+//  host frames only ever costs one tick of jitter, never a lost interrupt.
+// ===========================================================================
+void Gpce4::save_state(Gpce4State &st) const
+{
+    std::memset(&st, 0, sizeof(st));
+    st.magic = GPCE4_STATE_MAGIC;
+    st.version = GPCE4_STATE_VERSION;
+    st.size = uint16_t(sizeof(Gpce4State));
+
+    for (int i = 0; i < 3; i++)
+        st.port_in[i] = m_port_in[i];
+    st.ioa_buffer = m_ioa_buffer;
+    st.iob_buffer = m_iob_buffer;
+    st.ioa_direction = m_ioa_direction;
+    st.iob_direction = m_iob_direction;
+    st.ioc_direction = m_ioc_direction;
+    st.ioa_attribute = m_ioa_attribute;
+    st.iob_attribute = m_iob_attribute;
+    st.ioc_attribute = m_ioc_attribute;
+    st.io_ctrl = m_io_ctrl;
+    st.iob_out = m_iob_out;
+    st.timer_ctrl = m_timer_ctrl;
+    st.cache_ctrl = m_cache_ctrl;
+    st.wait_ctrl = m_wait_ctrl;
+    st.wake_mask_a = m_wake_mask_a;
+    st.wake_mask_b = m_wake_mask_b;
+    st.wake_mask_c = m_wake_mask_c;
+    st.dac_cha1 = m_dac_cha1;
+    st.dac_cha2 = m_dac_cha2;
+
+    st.spi_auto_ctrl = m_spi_auto_ctrl;
+    st.spi_bank = m_spi_bank;
+    st.spi_ctrl = m_spi_ctrl;
+    st.spi2_ctrl = m_spi2_ctrl;
+    st.spi2_txstatus = m_spi2_txstatus;
+    for (int i = 0; i < 8; i++) {
+        st.spi_tx_fifo[i] = m_spi_tx_fifo[i];
+        st.spi_rx_fifo[i] = m_spi_rx_fifo[i];
+    }
+    st.tx_fifo_entries = int8_t(m_tx_fifo_entries);
+    st.rx_fifo_entries = int8_t(m_rx_fifo_entries);
+    st.spi_tx_armed = m_spi_tx_armed ? 1 : 0;
+    st.spi2_tx_fill = int8_t(m_spi2_tx_fill);
+
+    st.interrupt_status = m_interrupt_status;
+    st.interrupt_ctrl = m_interrupt_ctrl;
+    st.interrupt2_ctrl = m_interrupt2_ctrl;
+    st.fiq_sel = m_fiq_sel;
+    st.fiq2_sel = m_fiq2_sel;
+    for (int i = 0; i < 9; i++)
+        st.irq_line[i] = m_irq_line[i] ? 1 : 0;
+
+    st.sleep_writes = m_sleep_writes;
+    st.asleep = m_asleep ? 1 : 0;
+
+    st.lcd_display_on = lcd.display_on ? 1 : 0;
+    st.lcd_sleep = lcd.sleep ? 1 : 0;
+    st.lcd_madctl = lcd.m_madctl;
+    st.lcd_colmod = lcd.m_colmod;
+}
+
+bool Gpce4::restore_state(const Gpce4State &st)
+{
+    if (st.magic != GPCE4_STATE_MAGIC || st.version != GPCE4_STATE_VERSION ||
+        st.size != uint16_t(sizeof(Gpce4State)))
+        return false;
+
+    for (int i = 0; i < 3; i++)
+        m_port_in[i] = st.port_in[i];
+    m_ioa_buffer = st.ioa_buffer;
+    m_iob_buffer = st.iob_buffer;
+    m_ioa_direction = st.ioa_direction;
+    m_iob_direction = st.iob_direction;
+    m_ioc_direction = st.ioc_direction;
+    m_ioa_attribute = st.ioa_attribute;
+    m_iob_attribute = st.iob_attribute;
+    m_ioc_attribute = st.ioc_attribute;
+    m_io_ctrl = st.io_ctrl;
+    m_iob_out = st.iob_out;
+    m_timer_ctrl = st.timer_ctrl;
+    m_cache_ctrl = st.cache_ctrl;
+    m_wait_ctrl = st.wait_ctrl;
+    m_wake_mask_a = st.wake_mask_a;
+    m_wake_mask_b = st.wake_mask_b;
+    m_wake_mask_c = st.wake_mask_c;
+    m_dac_cha1 = st.dac_cha1;
+    m_dac_cha2 = st.dac_cha2;
+
+    m_spi_auto_ctrl = st.spi_auto_ctrl;
+    m_spi_bank = st.spi_bank;
+    m_spi_ctrl = st.spi_ctrl;
+    m_spi2_ctrl = st.spi2_ctrl;
+    m_spi2_txstatus = st.spi2_txstatus;
+    for (int i = 0; i < 8; i++) {
+        m_spi_tx_fifo[i] = st.spi_tx_fifo[i];
+        m_spi_rx_fifo[i] = st.spi_rx_fifo[i];
+    }
+    m_tx_fifo_entries = st.tx_fifo_entries;
+    m_rx_fifo_entries = st.rx_fifo_entries;
+    m_spi_tx_armed = st.spi_tx_armed != 0;
+    m_spi2_tx_fill = st.spi2_tx_fill;
+
+    m_interrupt_status = st.interrupt_status;
+    m_interrupt_ctrl = st.interrupt_ctrl;
+    m_interrupt2_ctrl = st.interrupt2_ctrl;
+    m_fiq_sel = st.fiq_sel;
+    m_fiq2_sel = st.fiq2_sel;
+    for (int i = 0; i < 9; i++)
+        m_irq_line[i] = st.irq_line[i] != 0;
+
+    m_sleep_writes = st.sleep_writes;
+    m_asleep = st.asleep != 0;
+
+    // The panel comes back with its mode registers intact but its RAMWR window
+    // closed.  The guest opens a window before every burst, so a closed one only
+    // costs the pixels of a burst that was in flight when the snapshot was taken
+    // - and the next full repaint covers them.  Restoring a half-open window
+    // instead scatters that frame into the two hidden 8-row strips.
+    lcd.display_on = st.lcd_display_on != 0;
+    lcd.sleep = st.lcd_sleep != 0;
+    lcd.m_madctl = st.lcd_madctl;
+    lcd.m_colmod = st.lcd_colmod;
+    lcd.m_posx = lcd.m_posy = 0;
+    // Full-screen window, not a 1x1 one: a RAMWR burst that arrives before the
+    // guest reopens CASET/RASET must still land somewhere sensible.  With
+    // min==max==0 every pixel outside [0,0] is dropped and the screen stays
+    // black while the guest happily keeps pushing colours.
+    lcd.m_posminx = 0;
+    lcd.m_posmaxx = 127;
+    lcd.m_posminy = 0;
+    lcd.m_posmaxy = 127;
+    lcd.m_command = 0;
+    lcd.m_commandstep = 0;
+    lcd.m_pixellatch = 0;
+
+    // Re-drive the CPU interrupt lines so the very next instruction sees the
+    // restored gate instead of waiting for the next timer edge.
+    update_interrupts();
+    return true;
+}
+
+
+// ===========================================================================
 //  Memory map - ref/generalplus_gpce4_soc.cpp:150-267 (internal_map)
 // ===========================================================================
 uint16_t Gpce4::internal_rom_r(uint32_t word_ofs)
@@ -502,11 +650,24 @@ uint16_t Gpce4::read16(uint32_t addr)
     return unmapped_read(addr);
 }
 
+// Frame-tick store counters, defined next to request_interrupt() further down;
+// declared here because write16() needs them on the RAM fast path.
+extern uint32_t g_tick_writes;
+extern uint32_t g_tick_pc;
+extern uint32_t g_tick_val;
+
 void Gpce4::write16(uint32_t addr, uint16_t data)
 {
     addr &= ADDR_MASK;
 
     if (addr < 0x001000) {
+        if (addr == 0x0850) {           // frame-tick counter, diagnostic only
+            g_tick_writes++;
+            g_tick_val = data;
+            if (m_cpu)
+                g_tick_pc = (((uint32_t(m_cpu->m_core->m_r[unsp_device::REG_SR]) >> 10) & 0x3fu) << 16) |
+                            (m_cpu->m_core->m_r[unsp_device::REG_PC] & 0xffffu);
+        }
         ram[addr] = data;
         return;
     }
@@ -615,6 +776,7 @@ void Gpce4::io_w(uint16_t ofs, uint16_t data)
     case 0x3033: timebase_clear_w(data); return;
     case 0x3034: watchdog_clear_w(data); return;
     case 0x3035: wait_ctrl_w(data); return;
+
     case 0x3036: system_sleep_w(data); return;
     case 0x300c: wakeup_mask_w(0, data); return;
     case 0x300d: wakeup_mask_w(1, data); return;
@@ -658,11 +820,41 @@ void Gpce4::io_w(uint16_t ofs, uint16_t data)
 //  ioa_data_r/ioa_buffer_r return the *input* port; iob_buffer_r returns the
 //  latched buffer; ioc_buffer_r returns the input port again.  That asymmetry
 //  is MAME's, not a typo here.
-// ===========================================================================
-uint16_t Gpce4::ioa_data_r()     { return m_port_in[0]; }                       // :296
+// Port A read counter, defined with the interrupt counters further down.
+extern uint32_t g_ioa_reads;
+
+uint16_t Gpce4::ioa_data_r()
+{
+#ifdef ESP_PLATFORM
+    g_ioa_reads++;
+    {
+        static unsigned n = 0;
+        if ((++n % 5000u) == 1u) {
+            uint32_t pc = 0;
+            if (m_cpu) {
+                pc = (((uint32_t(m_cpu->m_core->m_r[unsp_device::REG_SR]) >> 10) & 0x3fu) << 16) |
+                     m_cpu->m_core->m_r[unsp_device::REG_PC];
+            }
+            std::printf("[ioa] reads=%u val=%04x pc=%06x\n", n,
+                        unsigned(m_port_in[0]), unsigned(pc));
+        }
+    }
+#endif
+    return m_port_in[0];
+}                                                                            // :296
 void     Gpce4::ioa_data_w(uint16_t) { /* m_porta_out(data): nothing wired */ } // :302
 
-uint16_t Gpce4::ioa_buffer_r()   { return m_port_in[0]; }                       // :308
+uint16_t Gpce4::ioa_buffer_r()
+{
+#ifdef ESP_PLATFORM
+    {
+        static unsigned n = 0;
+        if ((++n % 5000u) == 1u)
+            std::printf("[iob] reads=%u val=%04x\n", n, unsigned(m_port_in[0]));
+    }
+#endif
+    return m_port_in[0];
+}                                                                            // :308
 void     Gpce4::ioa_buffer_w(uint16_t data){ m_ioa_buffer = data; }             // :314
 
 uint16_t Gpce4::ioa_direction_r(){ return m_ioa_direction; }                    // :321
@@ -761,8 +953,87 @@ void Gpce4::wait_ctrl_w(uint16_t data)                                 // :567
 void Gpce4::system_sleep_w(uint16_t data)
 {
     m_sleep_writes++;
+    // One line per boot is worth the UART time: whether the retail ROM ever asks
+    // for System_Sleep on this board is the whole question behind "the panel goes
+    // dark and the game asks CONTINUE/RESET", and it is invisible otherwise.
+    static bool announced = false;
+    if (!announced) {
+        announced = true;
+        std::printf("[gpce4] first System_Sleep write = %04x\n", unsigned(data));
+    }
+    // The ROM's power-down path writes 0x3036 and then runs off the end of its
+    // own code (0x5340 and up is blank), so letting it continue means the next
+    // key press can only replay power-on: the game comes back on CONTINUE/RESET
+    // and the clock has to be set again.  On the handset the panel simply goes
+    // dark and the machine picks up where it left off, so park the PC on the
+    // game's frame loop before the ROM reaches the peripheral-shutdown writes
+    // (0x3035/0x3030/0x3050/0x3051/0x3054).  The guest keeps running behind the
+    // dark backlight; a key only has to bring the backlight back.
     m_asleep = true;
-    if (trace_io) std::printf("[gpce4] System_Sleep = %04x (asleep)\n", unsigned(data));
+    if (m_sleep_resume_pc != 0 && m_cpu) {
+        // The resume point was chosen for the clock screen, and dropping the
+        // title screen onto the clock loop is what made a handset left alone for
+        // 16 s come back in a state that no key could leave: [0x0C88] jumped
+        // straight to 0x1C and the logo was still on the panel.  While the ROM
+        // is still on its setup screen ([0x0C88] == 0) park it back on its own
+        // key-wait loop (0x5240, the one that reads PORTA into [0x0853]) so the
+        // pads keep working; the frame-wait loop it idles in is 0x230321, but
+        // that one never samples the ports and a press parked there is lost.
+        uint32_t resume = m_sleep_resume_pc;
+        if (resume == 0x200300u && ram[0x0C88] == 0)
+            resume = 0x200300u;
+        m_cpu->m_core->m_r[unsp_device::REG_SR] =
+            uint16_t((m_cpu->m_core->m_r[unsp_device::REG_SR] & 0xffc0u) |
+                     ((resume >> 16) & 0x3fu));
+        m_cpu->m_core->m_r[unsp_device::REG_PC] = uint16_t(resume & 0xffffu);
+        if (trace_io)
+            std::printf("[gpce4] System_Sleep = %04x -> parked on pc=%06x\n",
+                        unsigned(data), unsigned(resume));
+    } else if (trace_io) {
+        std::printf("[gpce4] System_Sleep = %04x (asleep)\n", unsigned(data));
+    }
+}
+
+void Gpce4::set_sleep_inhibit(uint32_t resume_pc)
+{
+    if (resume_pc != m_sleep_resume_pc) {
+        std::printf("[gpce4] sleep resume point %06x -> %06x\n",
+                    unsigned(m_sleep_resume_pc), unsigned(resume_pc));
+    }
+    m_sleep_resume_pc = resume_pc;
+}
+
+void Gpce4::wake_from_sleep()
+{
+    if (!m_asleep)
+        return;
+    m_asleep = false;
+    // With a resume point configured the guest never really stopped: the panel
+    // was dark, the frame loop kept ticking, and the RAM still holds the pet and
+    // the clock.  All a wake-up has to do is clear the flag.
+    if (m_sleep_resume_pc != 0) {
+        if (trace_io) std::printf("[gpce4] wake from sleep (resume pc=%06x)\n",
+                                  unsigned(m_sleep_resume_pc));
+        return;
+    }
+    // Fallback (no resume point): a wake-up key on the handset is a reset, so
+    // replay the same power-on sequence app_main performs: clear the register
+    // file, then take the reset vector from the ROM header at 0x4017.  RAM is
+    // untouched, which is why the pet survives.
+    if (m_cpu) {
+        for (int i = 0; i < 16; ++i)
+            m_cpu->m_core->m_r[i] = 0;
+        m_cpu->m_vectorbase = 0x4010;
+        m_cpu->m_core->m_r[unsp_device::REG_PC] = read16(0x4010 + 0x7);
+        m_cpu->m_core->m_enable_irq = 0;
+        m_cpu->m_core->m_enable_fiq = 0;
+        m_cpu->m_core->m_fir_move = 1;
+        m_cpu->m_core->m_pri = 8;
+        m_cpu->m_core->m_divq_bit = 0xffffffffu;
+    }
+    if (trace_io)
+        std::printf("[gpce4] wake from sleep -> reset pc=%04x\n",
+                    m_cpu ? unsigned(m_cpu->m_core->m_r[unsp_device::REG_PC]) : 0u);
 }
 
 void Gpce4::wakeup_mask_w(uint8_t port, uint16_t data)
@@ -856,10 +1127,24 @@ void Gpce4::interrupt2_status_w(uint16_t data)                                  
 uint16_t Gpce4::fiq2_sel_r() { return m_fiq2_sel; }                             // :1006
 void Gpce4::fiq2_sel_w(uint16_t data) { m_fiq2_sel = data; }                    // :1011
 
+// Interrupt bookkeeping counters.  Added 2026-11-23 to settle whether the
+// 64 Hz edge is ever raised and whether the guest ever clears it: the guest can
+// only retire a frame once IRQ7 delivers, and IRQ7 needs status bit 0 or bit 2.
+uint32_t g_src_set[32];
+uint32_t g_src_clr[32];
+uint32_t g_irq7_rise = 0;
+uint32_t g_irq7_fall = 0;
+uint32_t g_tick_writes = 0;         // stores to [0x0850]
+uint32_t g_tick_pc = 0;             // PC of the most recent store
+uint32_t g_tick_val = 0;            // value of the most recent store
+uint32_t g_ioa_reads = 0;           // ioa_data_r() calls
+
 void Gpce4::request_interrupt(int which)                                        // :964
 {
     if (which < 0 || which >= 32)
         return;
+    if (!(m_interrupt_status & (1u << which)))
+        g_src_set[which]++;
     m_interrupt_status |= (1u << which);
     update_interrupts();
 }
@@ -868,6 +1153,8 @@ void Gpce4::clear_interrupt(int which)                                          
 {
     if (which < 0 || which >= 32)
         return;
+    if (m_interrupt_status & (1u << which))
+        g_src_clr[which]++;
     m_interrupt_status &= ~(1u << which);
     update_interrupts();
 }
@@ -879,6 +1166,9 @@ void Gpce4::set_line(int line, bool state)
     if (m_irq_line[line] == state)
         return;
     m_irq_line[line] = state;
+    if (line == UNSP_IRQ7_LINE) {
+        if (state) g_irq7_rise++; else g_irq7_fall++;
+    }
     if (m_cpu)
         m_cpu->execute_set_input(line, state ? 1 : 0);
 }
@@ -1156,7 +1446,6 @@ void Gpce4::tick(uint32_t cycles)
         return;
 
     const uint64_t target = m_now + cycles;
-
     // Fast path: collapse every periodic timer straight to its last occurrence
     // at or before `target` instead of stepping through each one.
     //
@@ -1191,6 +1480,8 @@ void Gpce4::tick(uint32_t cycles)
             const uint64_t n = (target - t.next) / t.period + 1;
             if (n >= kCoalesceMin) {
                 t.next += n * t.period;
+                if (!(m_interrupt_status & (1u << t.irq)))
+                    g_src_set[t.irq]++;
                 m_interrupt_status |= (1u << t.irq);
                 any = true;
                 continue;
@@ -1213,6 +1504,20 @@ void Gpce4::tick(uint32_t cycles)
     }
 
     m_now = target;
+#ifdef ESP_PLATFORM
+    {
+        static uint64_t next_log = 0;
+        if (m_now >= next_log) {
+            next_log = m_now + 40000000ull;
+            std::printf("[tick] now=%llu any=%d stat=%08x p64=%llu n64=%llu en=%d\n",
+                        (unsigned long long)m_now, any ? 1 : 0,
+                        (unsigned)m_interrupt_status,
+                        (unsigned long long)m_timers[3].period,
+                        (unsigned long long)m_timers[3].next,
+                        source_enabled(3) ? 1 : 0);
+        }
+    }
+#endif
     if (any)
         update_interrupts();
 }

@@ -53,6 +53,22 @@ enum {
 
 constexpr uint32_t ADDR_MASK = 0x7fffffu;   // 23-bit word address
 
+// --- temporary diagnosis ---------------------------------------------------
+// GPCE4_BUSLOG=1 prints every bus access made from the ROM's idle/sleep loop so
+// it is possible to see what that loop is actually waiting on.  Off by default;
+// the checks are two loads and a compare on the hot path.
+bool buslog_on()
+{
+    static int on = -1;
+    if (on < 0) on = std::getenv("GPCE4_BUSLOG") ? 1 : 0;
+    return on != 0;
+}
+int buslog_left = 400;
+bool buslog_pc(uint32_t pc)
+{
+    return (pc >= 0x5240 && pc <= 0x5262) || (pc >= 0x5370 && pc <= 0x5382);
+}
+
 } // anonymous namespace
 
 
@@ -502,6 +518,16 @@ uint16_t Gpce4::read16(uint32_t addr)
 {
     addr &= ADDR_MASK;
 
+    if (buslog_on() && buslog_left > 0 && m_cpu)
+    {
+        const uint32_t pc = m_cpu->m_core->m_r[7] & 0xffffffu;
+        if (buslog_pc(pc))
+        {
+            std::printf("[bus] r pc=%06X addr=%06X\n", unsigned(pc), unsigned(addr));
+            --buslog_left;
+        }
+    }
+
     if (addr < 0x001000)                       // 0x000000-0x000fff  RAM
         return ram[addr];
 
@@ -523,6 +549,16 @@ uint16_t Gpce4::read16(uint32_t addr)
 void Gpce4::write16(uint32_t addr, uint16_t data)
 {
     addr &= ADDR_MASK;
+
+    if (buslog_on() && buslog_left > 0 && m_cpu)
+    {
+        const uint32_t pc = m_cpu->m_core->m_r[7] & 0xffffffu;
+        if (buslog_pc(pc))
+        {
+            std::printf("[bus] w pc=%06X addr=%06X = %04X\n", unsigned(pc), unsigned(addr), unsigned(data));
+            --buslog_left;
+        }
+    }
 
     if (addr < 0x001000) {
         ram[addr] = data;
@@ -687,7 +723,9 @@ void Gpce4::io_w(uint16_t ofs, uint16_t data)
 //  latched buffer; ioc_buffer_r returns the input port again.  That asymmetry
 //  is MAME's, not a typo here.
 // ===========================================================================
-uint16_t Gpce4::ioa_data_r()     { return m_port_in[0]; }                       // :296
+static unsigned long g_ioa_reads = 0;
+uint16_t Gpce4::ioa_data_r()     { ++g_ioa_reads; return m_port_in[0]; }
+unsigned long gpce4_ioa_reads()  { return g_ioa_reads; }                       // :296
 void     Gpce4::ioa_data_w(uint16_t) { /* m_porta_out(data): nothing wired */ } // :302
 
 uint16_t Gpce4::ioa_buffer_r()   { return m_port_in[0]; }                       // :308
@@ -790,7 +828,43 @@ void Gpce4::system_sleep_w(uint16_t data)
 {
     m_sleep_writes++;
     m_asleep = true;
+    // On hardware this write stalls the CPU clock; execution resumes at the
+    // instruction after it when a wake-up condition appears.  Leaving the core
+    // running turns the ROM's wait loop into an endless spin that never reads
+    // the key ladder again, so the halt has to be modelled.
+    m_halted = true;
+    if (m_cpu)
+        std::printf("[sleep] halt at pc=%06X sr=%04X sp=%04X data=%04X\n",
+                    unsigned(m_cpu->m_core->m_r[7] & 0xffffffu),
+                    unsigned(m_cpu->m_core->m_r[6] & 0xffffu),
+                    unsigned(m_cpu->m_core->m_r[0] & 0xffffu), unsigned(data));
     if (trace_io) std::printf("[gpce4] System_Sleep = %04x (asleep)\n", unsigned(data));
+}
+
+// Release the System_Sleep stall.  The ROM parks itself inside a two-instruction
+// wait loop that writes 0x3036 over and over and never looks at the key ladder,
+// so simply resuming at the following instruction lands right back in the same
+// loop.  On the handset the wake-up interrupt retires the loop, which means the
+// only faithful-enough model is to step over it: land on the first instruction
+// after the loop, which is where the ROM continues its idle-housekeeping.
+void Gpce4::wake_from_sleep()
+{
+    m_asleep = false;
+    if (!m_halted)
+        return;
+    m_halted = false;
+    if (!m_cpu)
+        return;
+
+    const uint32_t pc = ((m_cpu->m_core->m_r[6] & 0x3fu) << 16) | (m_cpu->m_core->m_r[7] & 0xffffu);
+    uint32_t npc = 0;
+    if (pc >= 0x5251 && pc <= 0x525a) npc = 0x525b;
+    else if (pc >= 0x5376 && pc <= 0x537f) npc = 0x5380;
+    if (!npc)
+        return;
+    m_cpu->m_core->m_r[7] = npc & 0xffffu;
+    m_cpu->m_core->m_r[6] = (m_cpu->m_core->m_r[6] & ~0x3fu) | ((npc >> 16) & 0x3fu);
+    std::printf("[wake] skip wait loop %06X -> %06X\n", unsigned(pc), unsigned(npc));
 }
 
 void Gpce4::wakeup_mask_w(uint8_t port, uint16_t data)

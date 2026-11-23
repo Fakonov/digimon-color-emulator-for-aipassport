@@ -33,10 +33,12 @@
 
 #include <cstdint>
 
-// Three 4 KiB erase sectors per record; the ring holds eight of them in the
-// first 96 KiB of the partition, leaving the last 32 KiB to saveimg.cpp.
+// Three 4 KiB erase sectors per record; the ring holds five of them in the
+// first 60 KiB of the partition.  fbsave.cpp takes the next 32 KiB for the
+// panel frame and saveimg.cpp keeps the last 32 KiB, so the 128 KiB partition
+// is fully spoken for: 60 + 32 + 32 = 124 KiB plus a 4 KiB tail.
 enum : int { GUESTSTATE_RECORD_SIZE = 0x3000 };
-enum : int { GUESTSTATE_RECORDS = 8 };
+enum : int { GUESTSTATE_RECORDS = 5 };
 enum : int { GUESTSTATE_HEADER_SIZE = 32 };
 enum : int { GUESTSTATE_MAX_PAYLOAD = GUESTSTATE_RECORD_SIZE - GUESTSTATE_HEADER_SIZE };
 
