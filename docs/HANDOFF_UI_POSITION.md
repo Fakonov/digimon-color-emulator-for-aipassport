@@ -777,3 +777,117 @@ DIGICORE: battery 92%
 
 `K 5 <n>`（注入 A+C）现在不会生效：`K` 注入走的是同一个 `mask` 表达式，A 的位被一并剥掉了，日志里只会看到 `ffdf`（只剩 C）。这不是 bug，是"A 一律不投递"的直接后果；要测组合键得另外加一条能绕过的命令。
 - **「偏左」的观感来源仍未定位到物证**：要么是旧固件，要么是外壳。下次让用户确认当时装没装外壳、看到的是哪个版本，别再从代码里找。`G 2`（四边白框 + 四角方块）就是为这个留的。
+
+---
+
+## 18. 2026-11-24 01:0x — 壳换成 RETAIL (style C)（v1.5.0）
+
+### 18.1 需求与参照
+
+用户给了 digimon-passport 的 `docs/ui-retail-blank.png`（RETAIL / style C 主画面规格底版）和它的生成器
+`tools/preview_retail_blank.py`，要求"**照那个项目的实现方法**做，砖块密度按原样抄，颜色选 A（DMC 红壳）"。
+
+那个生成器的做法值得照搬，因为它把"预览"变成了断言：
+
+```python
+# 读固件同一批烘焙头文件，按 build_ui()/render_lcd()/blit_slot() 的规则逐像素复现
+brick  = dg_brick.h                  # 128x128 A8
+# 层序：body fill → tiled A8 recolour → rim r8 + 1 px hi → well r4 → glass → HUD → 30 px mask
+```
+
+本机没有 LVGL、没有 canvas，所以"层序"改成逐像素解算后按带推面板，但几何常量和颜色仍然只写在一处。
+
+### 18.2 三处不能照抄，四处照抄
+
+| 项 | 参考图 | 本机 | 理由 |
+|---|---|---|---|
+| 玻璃 | 192×183 @ (64,22) | **192×192 @ (64,24)** | 183 = `28+15+96+16+28`，是 32×16 点阵按 pitch 6 算的。本机是 96×96 彩屏 ×2，183 意味着纵向 0.953 缩放 |
+| rim | 204×195 @ (58,16) | **204×204 @ (58,18)** | 跟着玻璃长 9 px；与 §10.5 早就算出的 204×204 对上 |
+| 玻璃里面 | backdrop + 6% 网格 + 8 槽图标 | **模拟器原画面** | 网格是给点阵 ROM 分格用的；DMC 是彩屏像素画，叠网格=毁画 |
+| 砖墙 | A8 平铺 + recolor | 照搬 | 同一块面板、同一张调好的 tile |
+| rim + well | r8 + 1 px 高光 / r4 | 照搬 | 三层结构 |
+| 30 px 遮罩 | BSP 显示层 | 照搬 | 本机以前没做，四角是砖 |
+| HUD | 右下、-16/-4、`#EDEDE6` | 照搬（只留电量） | 左下时间槽本机没有对应数据 |
+
+### 18.3 砖：照抄，不重算密度
+
+第一次尝试按 `zoom_device.png` 量真机砖块（约 40×18 px）另生成了一张 96×48 的 tile——**用户否决**：
+"砖块密度按 digimon 项目的原样抄过来，都是在 AI Passport 上运行，那个项目的最终呈现已经是最优了。"
+
+于是 `tools/gen_brick_a8.py` 把 `dg_brick.h` 的 **16384 字节像素数据原样** 抄成 `main/brick_a8.h`，
+只丢掉 LVGL 的 `lv_image_dsc_t`（本机没有 LVGL）。128×128、`ROWS=3`、石块 ~128×43、5 px 缝，一个像素没改，
+平铺原点 (0,0)。那个 tile 里 15% 是砖缝（2495 px），其余是砖面。
+
+左右墙各 58 px，与 digimon-passport 的 rim x=58 完全相同——**同一个壳、同一块屏，砖的落位本来就该一致**。
+
+### 18.4 浮雕由 painter 补，不加素材
+
+style C 那边砖面是平的（壳色可换，tile 只有 alpha）。DMC 是单一红壳，平面砖会读成印刷马赛克。所以
+`bezel.cpp` 的 `stone_px()` 查 A8 的上下邻居：
+
+```
+当前像素是缝            -> kMortar
+上一个像素是缝=砖块上缘 -> 亮 14%
+下一个像素是缝=砖块下缘 -> 暗 16%
+否则                    -> 砖面
+```
+
+两行判断，flash 零成本，`tmp/s33/style_c_preview.py` 里是同一段逻辑（预览才敢当断言用）。
+
+### 18.5 颜色（选 A：DMC 真机）
+
+| 用途 | 24-bit | RGB565 | 来源 |
+|---|---|---|---|
+| 砖面 | `#974E4A` | `0x9269` | `zoom_device.png` 采样 |
+| 砖面高光 | +14% | `0xAACA` | 计算 |
+| 砖面阴影 | −16% | `0x7A07` | 计算 |
+| 砖缝 | `#6B302C` | `0x6985` | 采样后加深一档（红底需要更多对比） |
+| 框体 | `#7A7470` | `0x7BAE` | 采样（金属中间调） |
+| 框高光 | `#B7B1AF` | `0xB595` | 采样（金属受光面） |
+| well | `#4A4341` | `0x4A08` | 采样（暗面） |
+| 电量墨色 | `#EDEDE6` | `0xEF7C` | 与 style C 的 HUD 同色 |
+
+灰壳（style C 原配色 `#3C4143` / `#808080`）也出了预览 `tmp/s33/B_greyfish_dg.png`，**用户选 A**。
+
+### 18.6 代码落点：新模块 bezel.cpp
+
+`app_main.cpp` 已经 2,700 行，这轮要加的是"另一个渲染器"，塞进去没法维护。新建：
+
+| 文件 | 内容 |
+|---|---|
+| `main/bezel.cpp` / `bezel.h` | `bezel_paint()` / `bezel_draw_battery()` / `bezel_visible()`，几何与颜色常量都在这里 |
+| `main/brick_a8.h` | 16,384 B A8 tile（从 dg 抄） |
+| `tools/gen_brick_a8.py` | 抄 tile 的可重生成入口 |
+
+`app_main.cpp` 删掉四段：`brick_px()`、`panel_brick_band()`、`panel_draw_battery()`、`panel_draw_bezel()`，
+四处调用点改调 `bezel_paint()` / `bezel_draw_battery()`；`s_batt_pct` / `s_batt_next_us` 留在 app_main（刷新循环在那儿）；
+加了两个 `static_assert` 把 `BEZEL_GLASS_*` 与 `kWinW/kScale/kLeftHome/kTopHome` 钉在一起。
+
+### 18.7 三个连带点（每个都会咬人）
+
+1. **关设置卡后的重画链**：`blit_frame()` 只推脏 tile，窗口外没人管。`bezel_paint()` 现在负责整个壳，
+   且**故意把玻璃写黑**——调用方必须同时置 `s_blit_repaint_all`，否则窗口黑着不动。四处调用点都带着这个标志。
+2. **`s_strip` 上限**：按 16 行一带渲染，最大 `320×16×2 = 10,240 B`，在 15,360 B 之内；rim 的圆角按行求 span，
+   不会一次要 204×204×2 = 78 KB。
+3. **`E` 挪窗口**：壳是固定的，玻璃洞口也在 (64,24)。`E` 之后画面会偏移到洞口外、盖在壳上——这是调试行为，
+   文档标注，不修。
+
+### 18.8 验证
+
+```
+VER ver=1.5.0 win=0,18 96x96 scale=2 left=64 top=24 off=0,0 home=64,24 fb=128 chunk=16
+batt: CW2017 v0F ready, 4103 mV, SOC 92%
+
+H 300 / K 1 60  -> menu: open / long A (345 ms) -> settings menu / pushed 10 band(s), render 78 ms
+K 4 6           -> menu: close，STAT errs=0，blits 10 -> 20，blitpx=5009（全窗重推）
+```
+
+壳和电量都直推面板，`T` 抓帧看不到；`tmp/s33/style_c_preview.py` 用同一批常量离线渲染，预览应与面板一致，
+**实际观感仍需目视**。
+
+### 18.9 没做
+
+- **钥匙孔造型**：真机屏幕右侧有一枚锁孔。本机右墙只有 64 px 宽，20×26 的锁会挤在框和砖之间；
+  而且 style C 的版式就是"整面墙 + 一圈框"，加锁孔就不属于这套了。要的话另起一条分支。
+- **左下 HUD**：参考图那里是游戏时长 `0:00`，本机没有对应数据；固件版本在设置卡 `VERSION` 行。
+

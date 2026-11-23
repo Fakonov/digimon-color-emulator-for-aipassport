@@ -1,0 +1,8 @@
+# v1.5.0 build fingerprints (2026-11-24)
+
+## In this directory (archived)
+5e6a51a98dac8de37efe7b3045568be2ac46c8e58ef1bed7b51c11b391cd4a13  digicore-c3-v1.5.0.bin      1,199,792 B   app partition image, no ROM
+
+## Rebuildable, not archived (see README)
+d44ff5f255dac59bcea8300dca14655e62eccb9f7b99a6ac47d5062b92835f25  digicore-c3-full.bin        4,677,888 B   merged image, CONTAINS the sparse ROM partition
+c6fcaa69329d682965dff82d0b186bd34a28ba6d0da6973c50ba8bb59f749a6f  sparse/digicore-sparse.bin   2,515,200 B   deterministic, built from roms/dmc_v1_base.bin

@@ -12,6 +12,7 @@ idf_component_register(
          "gueststate.cpp"
          "fbsave.cpp"
          "menu.cpp"
+         "bezel.cpp"
          "buttons.c"
          "audio.c"
          "battery.c"
