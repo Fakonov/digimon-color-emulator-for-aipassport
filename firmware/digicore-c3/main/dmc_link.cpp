@@ -44,6 +44,7 @@ constexpr uint32_t kMaxPages = 2048;          // the index is sized for 8 MiB
 constexpr uint32_t kBitmapOffset = 0x1000;
 constexpr uint32_t kIndexOffset = 0x1100;
 constexpr uint32_t kDataOffset = 0x3100;
+constexpr uint32_t kCartridgeSize = 8u * 1024u * 1024u;   // the retail SPI flash
 constexpr uint32_t kEraseBlock = 64 * 1024;
 // header + bitmap + index rounded up to a flash sector: 0x3100 is 12544 bytes,
 // which esp_partition_erase_range rejects because the length has to be a
@@ -192,8 +193,13 @@ void rom_begin(uint32_t image_size, uint32_t pages, const char *sha1_hex)
         fail("no roms partition");
         return;
     }
-    if (image_size == 0 || image_size % kPageSize || image_size > kMaxPages * kPageSize) {
-        fail("bad image size");
+    // Exactly 8 MiB, not "up to".  A truncated image mounts happily - magic
+    // matches, page_count agrees with image_size - and then the guest reads past
+    // the end of the cartridge and runs off into 0x00.  The 64 KiB internal mask
+    // ROM that sits next to a dump in most ROM folders is 4 KiB aligned and would
+    // otherwise pass every other check.
+    if (image_size != kCartridgeSize) {
+        fail("image must be 8388608 bytes");
         return;
     }
     const uint32_t count = (image_size + kPageSize - 1) / kPageSize;
