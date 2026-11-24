@@ -291,9 +291,16 @@ function showStatus(line) {
 document.getElementById("rom-upload").onclick = () => perform(async () => {
   const file = document.getElementById("rom-file").files[0];
   if (!file) throw new Error("请先选择 ROM 文件");
-  if (file.size !== 8388608 && file.size % PAGE !== 0)
-    throw new Error("ROM 长度不是 4096 的整数倍");
-  if (file.size > 8388608) throw new Error("ROM 超过 8 MiB");
+  // Must be the whole 8 MiB cartridge image.  The old check was
+  // `size !== 8388608 && size % 4096 !== 0`, which let any 4 KiB multiple
+  // through - including the 64 KiB SoC internal ROM that sits next to the
+  // cartridge dump in most ROM folders.  Writing that one would overwrite the
+  // `roms` partition with a 64 KiB "cartridge" and the console would boot into
+  // nothing.
+  if (file.size !== 8388608)
+    throw new Error("ROM 必须是 8,388,608 字节（8 MiB）的整片卡带镜像；" +
+                    "当前文件是 " + file.size.toLocaleString() + " 字节。"
+                    + "（64 KiB 的 internal_rom 已编进固件，不用传）");
 
   say("正在读取文件…");
   const bytes = new Uint8Array(await file.arrayBuffer());

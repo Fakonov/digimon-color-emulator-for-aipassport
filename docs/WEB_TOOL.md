@@ -86,8 +86,10 @@ save round trip identical: True
 
 ## 7. 局限
 
-- **ROM 版本**：网页不校验具体是 V1/V2/V3 还是 20th，只要求 8 MiB、4 KiB 对齐。
-  非零页超过 637 页会被拒绝（分区容量）。
+- **ROM 版本**：不校验具体是 V1/V2/V3 还是 20th，但要求**正好 8,388,608 字节**——
+  网页和固件各有一道闸（v1.6.1 起）。放宽成"≤ 8 MiB"会让 64 KiB 的 SoC 内部 ROM 一类文件
+  通过：它会以 16 页的"卡带"写进分区，`romstore` 照常挂载，然后 guest 读到卡带末尾之外。
+  非零页超过 637 页同样会被拒绝（分区容量）。
 - **网页未做固件烧写**：烧 app 仍用 esptool / ESP-IDF。要做一键烧写得在网页里实现
   esptool 的 stub + flash 协议，不在这一版。
 - **传输期间画面冻结**：`hardware` 上 SPI flash 擦写会禁 cache，guest 抖一帧就可能跑飞，
