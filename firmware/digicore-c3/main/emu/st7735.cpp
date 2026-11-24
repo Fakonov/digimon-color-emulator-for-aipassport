@@ -36,6 +36,7 @@ constexpr int PANEL     = 128;
 void St7735::reset()
 {
     std::fill(fb, fb + PANEL * PANEL, uint16_t(0));
+    dirty_clear();
 
     m_posx = m_posy = 0;
     m_posminx = m_posmaxx = m_posminy = m_posmaxy = 0;
@@ -94,7 +95,10 @@ void St7735::store_pixel(uint16_t pixel)
     const unsigned ry = unsigned(idx) >> 9;
     const unsigned rx = unsigned(idx) & 0x1ffu;
     if (rx < unsigned(PANEL) && ry < unsigned(PANEL))
+    {
         fb[ry * PANEL + rx] = pixel;
+        m_dirty[ry >> 4] |= uint8_t(1u << (rx >> 4));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +294,10 @@ void St7735::fill_run(uint16_t pixel, uint32_t count)
         const unsigned ry = unsigned(idx) >> 9;
         const unsigned rx = unsigned(idx) & 0x1ffu;
         if (rx < unsigned(PANEL) && ry < unsigned(PANEL))
+        {
             fb[ry * PANEL + rx] = pixel;
+            m_dirty[ry >> 4] |= uint8_t(1u << (rx >> 4));
+        }
 
         m_posx++;
         if (m_posx > m_posmaxx)

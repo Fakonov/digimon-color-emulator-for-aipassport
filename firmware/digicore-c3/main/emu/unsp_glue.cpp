@@ -11,6 +11,28 @@
 #include <cstdio>
 #include <utility>
 
+// spin_collapse probe counters (defined here so the console can print them).
+// C3_SPIN_DIAG=0 compiles the increments out: they are several DRAM
+// read-modify-writes per dispatch, and they have already answered their
+// question (the collapse at 0x5251 is taken roughly half the times it is
+// offered).  With the counters off the STAT fields just read zero.
+uint32_t g_spin_calls = 0;
+uint32_t g_spin_seen = 0;
+uint32_t g_spin_big = 0;
+uint32_t g_spin_short = 0;
+uint32_t g_spin_val = 0;      // last [bp+0] read at 0x5251/0x5376
+uint32_t g_spin_bp = 0;       // last BP
+int32_t g_spin_ic = 0;        // last icount on entry
+uint32_t g_spin_ok = 0;       // collapses actually taken
+#ifndef C3_SPIN_DIAG
+#define C3_SPIN_DIAG 0
+#endif
+#if C3_SPIN_DIAG
+#define SPIN_PROBE(expr) (void)(expr)
+#else
+#define SPIN_PROBE(expr) ((void)0)
+#endif
+
 // The C3 executes this file from flash through a 16 KiB icache, and the whole
 // dispatch path - execute_run, aot_step, the inline aot_lookup - misses on
 // almost every block.  The recompiled blocks themselves already sit in IRAM
@@ -18,6 +40,7 @@
 // ~260 cycles per guest instruction.  Keep the dispatcher in IRAM too.
 #ifdef ESP_PLATFORM
 #include "esp_attr.h"
+#include "esp_log.h"
 #include "esp_cpu.h"
 #define UNSP_HOT IRAM_ATTR
 #else
@@ -57,6 +80,24 @@
 #endif
 #ifndef C3_REGION_STAT
 #define C3_REGION_STAT 0
+#endif
+// wait_loop_collapse() has been permanently disabled since the 2026-11-23 probe
+// ("TEMP PROBE: ... Disable the collapse to test that theory", left as
+// `if (true) return false;`).  The probe answered its question, so the body is
+// behind a compile switch instead of being called once per dispatch and
+// returning false.  Re-enable with -DC3_WAIT_COLLAPSE=1 (docs/C3_PORT.md 8.2.1).
+#ifndef C3_WAIT_COLLAPSE
+#define C3_WAIT_COLLAPSE 0
+#endif
+// fast_step() is off (m_fastops defaults to false and measured slower on RV32).
+// The fastops body and its counters are only worth compiling for an experiment.
+#ifndef C3_FASTOPS
+#define C3_FASTOPS 0
+#endif
+// Shadow-execution check of fast_step against the interpreter.  Off everywhere:
+// it doubles the work of every interpreted instruction.
+#ifndef C3_VERIFY
+#define C3_VERIFY 0
 #endif
 
 #if C3_SPLIT && defined(ESP_PLATFORM)
@@ -306,6 +347,12 @@ void unsp_device::execute_one(const uint16_t op)
 
 UNSP_HOT bool unsp_device::spin_collapse(const uint32_t lpc)
 {
+	// Probe counters.  The collapse had never fired on the handset (colltot stayed
+	// 0 while pc sat on 0x5251), and the three ways it can decline are
+	// indistinguishable from the outside.  g_spin_calls counts entries,
+	// g_spin_seen counts entries whose PC matched a loop, and the two reject
+	// counters name the test that turned it down.
+	SPIN_PROBE(g_spin_calls++);
 	// The game spends most of its time in three countdown loops whose only
 	// observable effect is that time passes:
 	//
@@ -325,17 +372,23 @@ UNSP_HOT bool unsp_device::spin_collapse(const uint32_t lpc)
 
 	if (lpc == 0x005F35)
 	{
+		SPIN_PROBE(g_spin_seen++);
 		per_pass = 8;
 		passes = core->m_r[1];                     // r1 counts down to zero
 		counter = &core->m_r[1];
 	}
 	else if (lpc == 0x005251 || lpc == 0x005376)
 	{
+		SPIN_PROBE(g_spin_seen++);
 		per_pass = 33;
 		const uint32_t addr = (uint16_t)(core->m_r[REG_BP] + 0);
 		const uint16_t value = read16(addr);        // [bp+0]
+		SPIN_PROBE((g_spin_val = value, g_spin_bp = addr, g_spin_ic = core->m_icount));
 		if (value > 0x03e7)
+		{
+			SPIN_PROBE(g_spin_big++);
 			return false;                       // loop already finished
+		}
 		passes = 0x03e7 - value;                    // last pass stays interpreted
 		counter = nullptr;
 		if (passes > 0 && core->m_icount >= per_pass)
@@ -346,9 +399,11 @@ UNSP_HOT bool unsp_device::spin_collapse(const uint32_t lpc)
 			{
 				write16(addr, (uint16_t)(value + k));
 				core->m_icount -= (int)(k * per_pass);
+				SPIN_PROBE(g_spin_ok++);
 				return true;
 			}
 		}
+		SPIN_PROBE(g_spin_short++);
 		return false;
 	}
 	else
@@ -385,6 +440,10 @@ int g_verify_fail = 0;
 
 bool unsp_device::fast_step(uint16_t op)
 {
+#if !C3_FASTOPS
+	(void)op;
+	return false;
+#else
 	++g_fast_calls;
 	internal_unsp_state *const core = m_core;
 	const uint16_t op0 = (op >> 12) & 15;
@@ -518,6 +577,7 @@ bool unsp_device::fast_step(uint16_t op)
 	}
 
 	return false;
+#endif // C3_FASTOPS
 }
 
 // Collapse the "wait for the next 64 Hz tick" busy-wait at 0x230321.
@@ -632,13 +692,11 @@ static inline void hot_prng_n(HotState *s, uint32_t n, uint16_t tick)
 
 UNSP_HOT bool unsp_device::wait_loop_collapse(uint32_t lpc)
 {
+#if !C3_WAIT_COLLAPSE
+	(void)lpc;
+	return false;
+#else
 	if (!m_fastwait)
-		return false;
-	// TEMP PROBE: the device never reads PORTA and INT2_Status stays 0, which is
-	// what a starved 64 Hz handler looks like.  Collapsing the whole slice here
-	// leaves execute_run() nothing to retire, so check_irqs() never runs and the
-	// pending IRQ7 is never taken.  Disable the collapse to test that theory.
-	if (true)
 		return false;
 	// The wait loop exists twice: once in flash at 0x230321 and once as a RAM
 	// copy the game runs from 0x000321 (it relocates the block before entering
@@ -723,6 +781,7 @@ UNSP_HOT bool unsp_device::wait_loop_collapse(uint32_t lpc)
 	m_collapse_passes += done;
 	m_collapse_calls++;
 	return true;
+#endif // C3_WAIT_COLLAPSE
 }
 
 // ---- AOT blocks (emu/aot_blocks.c, generated by tools/aot.py) ----------------
@@ -851,7 +910,9 @@ void aot_dump_blocks(void)
 	// of occupied slots silently skipped every entry whose hash landed past
 	// that count, which is why a dump could print a full BLKHEAD and no rows.
 	const unsigned n = 1024u;
-	std::printf("BLKHEAD %u\n", g_blk_used);
+	// ESP_LOG, not printf: this is a diagnostic that has to survive a cold UART
+	// buffer, and the log path flushes each line.
+	ESP_LOGI("aotc", "BLKHEAD %u", unsigned(g_blk_used));
 	for (unsigned k = 0; k < 200u; k++)
 	{
 		unsigned best = 0;
@@ -860,10 +921,10 @@ void aot_dump_blocks(void)
 				best = i;
 		if (g_blk_cnt[best] == 0)
 			break;
-		std::printf("BLK %06X %u\n", unsigned(g_blk_pc[best]), unsigned(g_blk_cnt[best]));
+		ESP_LOGI("aotc", "BLK %06X %u", unsigned(g_blk_pc[best]), unsigned(g_blk_cnt[best]));
 		g_blk_cnt[best] = 0;
 	}
-	std::printf("BLKEND\n");
+	ESP_LOGI("aotc", "BLKEND");
 }
 #else
 static void aot_note_block(uint32_t) {}
@@ -1332,7 +1393,7 @@ static bool hle_push_pixels(unsp_device *const d)
 bool g_hle_fill_px = true;
 
 // Stall post-mortem: the game leaves the flash main loop at ~18 s and never
-// comes back (see docs/DELIVERY_2026-11-22.md §3.5).  Keeping the last few
+// comes back (see docs/DELIVERY_2026-11-22.md 鎼?.5).  Keeping the last few
 // distinct internal-ROM block entries is enough to see which call walked into
 // the waiter.  Only internal-ROM entries are recorded, so the hot flash loop
 // pays a single compare-and-branch per block.
@@ -1737,13 +1798,22 @@ UNSP_HOT void unsp_device::execute_run()
 					check_irqs();
 				continue;
 			}
+#if C3_WAIT_COLLAPSE
 			if (wait_loop_collapse(lpc))
 			{
 				if (core->m_sirq)
 					check_irqs();
 				continue;
 			}
-			if (m_fastspin && spin_collapse(lpc))
+#endif
+			// Three compares inline, and the call only for the three PCs the
+			// collapse handles.  Calling it unconditionally spent a cross-TU
+			// function call on every dispatch to answer "is this one of three
+			// addresses", so ~97% of dispatches paid for a lookup that was going
+			// to return false.
+			if (m_fastspin &&
+				(lpc == 0x005251u || lpc == 0x005376u || lpc == 0x005F35u) &&
+				spin_collapse(lpc))
 			{
 				if (core->m_sirq)
 					check_irqs();
@@ -1787,9 +1857,12 @@ UNSP_HOT void unsp_device::execute_run()
 					continue;
 				}
 			}
+#if C3_SPLIT && defined(ESP_PLATFORM)
 			const uint32_t t_inf = esp_cpu_get_cycle_count();
+#endif
 			const uint16_t op = fetch16(lpc);
 			add_lpc(1);
+#if C3_VERIFY
 			if (g_verify)
 			{
 				internal_unsp_state save = *core;
@@ -1817,6 +1890,8 @@ UNSP_HOT void unsp_device::execute_run()
 					continue;
 				}
 			}
+#endif
+#if C3_FASTOPS
 			if (m_fastops && (fast_step(op) ? (++g_fast_hits, true) : false))
 			{
 				m_insn_count++;
@@ -1828,6 +1903,7 @@ UNSP_HOT void unsp_device::execute_run()
 					check_irqs();
 				continue;
 			}
+#endif
 			execute_one(op);
 			m_insn_count++;
 #if C3_SPLIT && defined(ESP_PLATFORM)
@@ -1875,3 +1951,4 @@ UNSP_HOT void unsp_device::execute_run()
 			check_irqs();
 	}
 }
+

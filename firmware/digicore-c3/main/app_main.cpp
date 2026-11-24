@@ -135,7 +135,8 @@ static int top_px(void)
 {
     return clamp_axis(kTopHome + s_off_y, kMaxOffY);
 }
-static constexpr int kBlitEvery = 2;   // 1 = every frame, 2 = 30 Hz for moving content
+static constexpr int kBlitEvery = 1;   // default divider; runtime `k <n>` changes it
+static int s_blit_every = kBlitEvery;
 static constexpr int kChunkRows = 16;                        // <= display max 80; 12 keeps the double buffer inside DRAM
 static constexpr int kGuardRows = 6;                        // idle repair band
 static constexpr int kFbPanel = 128;
@@ -251,6 +252,14 @@ extern uint32_t g_tick_writes;
 extern uint32_t g_tick_pc;
 extern uint32_t g_tick_val;
 extern uint32_t g_ioa_reads;
+extern uint32_t g_spin_calls;
+extern uint32_t g_spin_seen;
+extern uint32_t g_spin_big;
+extern uint32_t g_spin_short;
+extern uint32_t g_spin_val;
+extern uint32_t g_spin_bp;
+extern int32_t g_spin_ic;
+extern uint32_t g_spin_ok;
 extern uint32_t g_wait_top;
 extern uint32_t g_wait_exit;
 extern uint32_t g_frame_body;
@@ -297,9 +306,6 @@ extern uint32_t g_aot_pg_switch;
 void aot_dump_census(void);
 void aot_dump_blocks(void);
 void aot_dump_miss(void);
-#if C3_BLOCK_CENSUS
-static bool s_blk_dumped = false;
-#endif
 void aot_dump_miss(void);
 static unsp_20_device s_cpu;
 // AOT is a size-vs-speed trade on this part: the generated blocks live in flash
@@ -697,7 +703,6 @@ static void blit_frame(void)
     static constexpr int kTile = 16;
     static constexpr int kTilesX = kWinW / kTile;
     static constexpr int kTilesY = kWinH / kTile;
-    static uint32_t s_tile_hash[kTilesY][kTilesX];
     static bool s_have_prev = false;
     static uint32_t s_idle_frames = 0;
     static uint32_t s_phase = 0;
@@ -707,25 +712,35 @@ static void blit_frame(void)
         s_have_prev = false;
     }
 
-    bool dirty[kTilesY][kTilesX];
-    uint32_t cur[kTilesY][kTilesX];
+    // Which tiles changed is recorded by the LCD model, not rediscovered here.
+    // Every pixel the guest pushes lands in fb[] through St7735::store_pixel or
+    // fill_run, and those two mark a bit for the 16x16 tile they touched.  The
+    // scan that used to live here hashed all 9,216 visible pixels per host frame
+    // (36 tiles x 256 px of FNV) - about 50k host cycles whether or not the
+    // picture moved, which on a parked handset was pure heat.
+    //
+    // Window tile (ty,tx) covers GRAM rows kWinY+ty*16 .. +15 and columns
+    // tx*16..+15.  kWinY is 18, so a window tile straddles GRAM tile rows ty+1
+    // and ty+2, and column tx maps straight through.  96/16 = 6 tiles wide, and
+    // the 128-wide GRAM tile row is masked down to those six columns.
+    uint8_t rowmask[kTilesY];
     bool any = false;
     for (int ty = 0; ty < kTilesY; ty++) {
-        for (int tx = 0; tx < kTilesX; tx++) {
-            uint32_t h = 2166136261u;
-            const uint16_t *p = fb + (kWinY + ty * kTile) * kFbPanel + kWinX + tx * kTile;
-            for (int y = 0; y < kTile; y++) {
-                for (int x = 0; x < kTile; x++) {
-                    h ^= p[y * kFbPanel + x];
-                    h *= 16777619u;
-                }
-            }
-            cur[ty][tx] = h;
-            dirty[ty][tx] = (!s_have_prev || h != s_tile_hash[ty][tx]);
-            if (dirty[ty][tx])
-                any = true;
-        }
+        const uint8_t m = uint8_t(s_soc.lcd.m_dirty[ty + 1] | s_soc.lcd.m_dirty[ty + 2]);
+        rowmask[ty] = uint8_t(m & ((1u << kTilesX) - 1u));
+        if (rowmask[ty])
+            any = true;
     }
+    if (!s_have_prev) {
+        for (int ty = 0; ty < kTilesY; ty++)
+            rowmask[ty] = uint8_t((1u << kTilesX) - 1u);
+        any = true;
+    }
+
+    bool dirty[kTilesY][kTilesX];
+    for (int ty = 0; ty < kTilesY; ty++)
+        for (int tx = 0; tx < kTilesX; tx++)
+            dirty[ty][tx] = (rowmask[ty] >> tx) & 1u;
 
     if (!any) {
         if (++s_idle_frames < 120) return;
@@ -736,11 +751,10 @@ static void blit_frame(void)
                 dirty[ty][tx] = true;
     } else {
         s_idle_frames = 0;
-        // Throttled frame: leave s_tile_hash untouched so the same tiles are
-        // still dirty next frame, and the picture on the panel simply keeps the
-        // previous band until its turn comes.
-        if (kBlitEvery > 1 && (++s_phase % (uint32_t)kBlitEvery) != 0)
-            return;
+        // Throttled frame: leave the dirty bits alone so the same tiles are
+        // still dirty next frame; St7735::dirty_clear() only runs after a band
+        // actually reached the panel.
+        if (s_blit_every > 1 && (++s_phase % (uint32_t)s_blit_every) != 0) return;
     }
 
     esp_err_t err = ESP_OK;
@@ -791,10 +805,10 @@ static void blit_frame(void)
     }
     if (err == ESP_OK) {
         s_have_prev = true;
-        for (int ty = 0; ty < kTilesY; ty++)
-            for (int tx = 0; tx < kTilesX; tx++)
-                if (dirty[ty][tx])
-                    s_tile_hash[ty][tx] = cur[ty][tx];
+        // Everything marked dirty has now been pushed (the bands above cover
+        // every set bit), so the map restarts empty.  A failed transfer leaves
+        // the bits set and the next frame retries the same tiles.
+        s_soc.lcd.dirty_clear();
     } else {
         s_have_prev = false;
         s_blit_errs++;
@@ -887,6 +901,22 @@ static void console_exec(char *line)
             std::printf("ACK K %x %d\n", s_inject_mask, s_inject_left);
         } else {
             std::printf("NAK K\n");
+        }
+        break;
+    }
+    case 'k': {                    // k <n>: panel refresh divider, 1 = every frame
+        // kBlitEvery was a compile-time 2, i.e. the panel could never show more
+        // than 30 Hz however fast the guest ran.  It is a runtime knob now so the
+        // same image can be compared at both settings without a reflash; 1 makes
+        // the panel follow the guest frame for frame (the picture on a moving
+        // screen is exactly the guest frame either way, the divider only decides
+        // how many of those frames ever reach the glass).
+        int v = -1;
+        if (sscanf(line + 1, "%d", &v) == 1 && v >= 1 && v <= 8) {
+            s_blit_every = v;
+            std::printf("ACK k %d\n", v);
+        } else {
+            std::printf("NAK k\n");
         }
         break;
     }
@@ -1296,6 +1326,9 @@ static void paint_pattern(void)
             fb[(kWinY + y) * kFbPanel + kWinX + x] =
                 border ? 0xF800 : (cross ? (tick ? 0x001F : 0xFFFF) : 0x0000);
         }
+    // Painter writes fb[] directly: tell the dirty map, or the blitter would
+    // think nothing changed and leave the panel on the old picture.
+    s_soc.lcd.dirty_all();
 }
 
 // Panel-level geometry test (G 2).  G 1 paints into fb[], so the photograph can
@@ -1907,7 +1940,11 @@ static uint32_t save_panel_frame(void)
 
 static bool load_panel_frame(void)
 {
-    return fbsave_load(panel_window(), kPanelWindowBytes);
+    if (!fbsave_load(panel_window(), kPanelWindowBytes))
+        return false;
+    // The restore memcpy'd straight into fb[], bypassing store_pixel().
+    s_soc.lcd.dirty_all();
+    return true;
 }
 
 static int64_t s_snap_last_us = 0;
@@ -2511,6 +2548,12 @@ extern "C" void app_main(void)
         }
         persist_save_image();
         maybe_snapshot_machine_state();        update_sleep_backlight();
+        // Shut the codec and its MCLK down when nothing has made a sound for a
+        // while.  Nothing on this board emits audio except the key beep, so the
+        // 12.288 MHz codec clock and the ES8311 analog rails would otherwise
+        // draw current from boot to switch-off for no reason (AUDIT_PERF_2026-11
+        // section 5 item 4: the largest switchable standing load on the board).
+        audio_idle_poll();
         // The top margin belongs to us, not to the guest: pushing the banner
         // once is enough because nothing else ever draws there.
         if (s_banner_text != s_banner_shown) {
@@ -2575,8 +2618,11 @@ extern "C" void app_main(void)
 #endif
 #if C3_BLOCK_CENSUS
         // Block census: which generated blocks run on the moving screens, so IRAM
-        // can hold the ones that matter instead of the idle-scene winners.
-        if (!s_blk_dumped && s_frames >= 700) { s_blk_dumped = true; aot_dump_blocks(); }
+        // can hold the ones that matter instead of the idle-scene winners.  First
+        // sample at frame 1200 (the handset parks ~20 s in), then every 900 frames
+        // so a serial capture always catches one without having to be started at
+        // exactly the right moment.
+        if (s_frames >= 1200 && (s_frames - 1200) % 900 == 0) aot_dump_blocks();
 #endif
 #if C3_DEBUG_DUMP
         // One full frame at 60 frames (1 s of guest time): by then the boot logo is
@@ -2694,12 +2740,25 @@ extern "C" void app_main(void)
             const uint32_t pct_draw = window_cyc ? uint32_t(uint64_t(dcw) * 100ull / window_cyc) : 0;
             const uint32_t pct_push = window_cyc ? uint32_t(uint64_t(dcs) * 100ull / window_cyc) : 0;
 
-#if C3_AOTACC
+            // Guest load/store counters.  C3_AOTACC=0 compiles the increments out
+            // of aot_rd/aot_wr, so these read zero; they are still printed so the
+            // STAT field list does not change shape between builds.
             static uint32_t last_rdf = 0, last_rds = 0, last_wrf = 0, last_wrs = 0;
-            const uint32_t rdf = g_rd_fast - last_rdf, rds = g_rd_slow - last_rds;
-            const uint32_t wrf = g_wr_fast - last_wrf, wrs = g_wr_slow - last_wrs;
+            uint32_t rdf = 0, rds = 0, wrf = 0, wrs = 0;
+#if C3_AOTACC
+            rdf = g_rd_fast - last_rdf; rds = g_rd_slow - last_rds;
+            wrf = g_wr_fast - last_wrf; wrs = g_wr_slow - last_wrs;
             last_rdf = g_rd_fast; last_rds = g_rd_slow;
             last_wrf = g_wr_fast; last_wrs = g_wr_slow;
+#endif
+
+            // Slice/execute/tick profiler.  C3_PROF=0 compiles the counters out;
+            // the fields stay in the line (as zeros) so log parsers keep working.
+            uint32_t prof_slice = 0, prof_exec = 0, prof_tick = 0;
+#if C3_PROF
+            prof_slice = s_prof_slice / 1000u;
+            prof_exec = s_prof_exec / 1000u;
+            prof_tick = s_prof_tick / 1000u;
 #endif
 
             // fps_x100 is still computed because the STAT line reports it; the
@@ -2707,13 +2766,11 @@ extern "C" void app_main(void)
             ESP_LOGI(TAG, "frames=%u guest_fps=%u.%02u mi_s=%u.%02u host_fps=%u.%02u "
                           "pc=%06x sr=%04x sp=%04x insns=%u K cyc=%u K mv=%d btn=%d "
                           "int_ctrl=%04x int_stat=%08x guest_pct=%u blit_pct=%u blitmax=%u rows=%u hot=%u tick_pct=%u slices=%u aotb=%u aoti=%u aotfb=%u aotmiss=%u aotuniq=%u "
-                          "blits=%u collapse=%u collcalls=%u stage=%u/%u/%u gmax=%u smax=%u tmax=%u kmax=%u fd=%u "
+                          "blits=%u collapse=%u collcalls=%u colltot=%u spin=%u/%u/%u/%u spinv=%u/%04X/%d/%u stage=%u/%u/%u gmax=%u smax=%u tmax=%u kmax=%u fd=%u "
                           "blitpx=%u bpx=%u bcyc=%u pgsw=%u pushpx=%u tpushpx=%u fillpx=%u bandc=%u bandb=%u bandr=%u rband=%u "
                           "caot=%u cinf=%u cfast=%u daot=%u dinf=%u "
                           "cpa=%u cpi=%u clk=%u cfn=%u pd=%u pp=%u "
-#if C3_AOTACC
                           "rdf=%u rds=%u wrf=%u wrs=%u "
-#endif
 
                           "riram=%u rflash=%u rram=%u rpush=%u rdraw=%u "
                           "dac=%u pwm=%u spise=%u spipp=%u spiwren=%u spibyte=%u spiunk=%u pa=%04X d06=%04X d07=%04X r51=%04X r52=%04X r53=%04X",
@@ -2743,8 +2800,11 @@ extern "C" void app_main(void)
                      unsigned(s_blits),
                      unsigned(s_cpu.m_collapse_passes - coll_prev),
                      unsigned(s_cpu.m_collapse_calls - coll_calls_prev),
-                     unsigned(s_prof_slice / 1000u), unsigned(s_prof_exec / 1000u),
-                     unsigned(s_prof_tick / 1000u),
+                     unsigned(s_cpu.m_collapse_calls),
+                     unsigned(g_spin_calls), unsigned(g_spin_seen),
+                     unsigned(g_spin_big), unsigned(g_spin_short),
+                     unsigned(g_spin_val), unsigned(g_spin_bp), int(g_spin_ic), unsigned(g_spin_ok),
+                     unsigned(prof_slice), unsigned(prof_exec), unsigned(prof_tick),
                      unsigned(s_guest_max_us), unsigned(s_slices_max),
                      unsigned(s_slice_max_us), unsigned(s_tick_max_us), unsigned(s_frame_drops),
                      unsigned(g_blit_px_win), unsigned(g_blit_px_total),
@@ -2760,9 +2820,7 @@ extern "C" void app_main(void)
                      unsigned(cyc_per_aot), unsigned(cyc_per_inf),
                      unsigned(cyc_lk), unsigned(cyc_fn),
                      unsigned(pct_draw), unsigned(pct_push),
-#if C3_AOTACC
                      unsigned(rdf), unsigned(rds), unsigned(wrf), unsigned(wrs),
-#endif
                      unsigned(riram), unsigned(rflash), unsigned(rram),
                      unsigned(rpush), unsigned(rdraw),
                      unsigned(s_soc.audio_writes()), unsigned(s_soc.pwm_writes()),
@@ -2820,3 +2878,6 @@ extern "C" void app_main(void)
             vTaskDelay(1);
     }
 }
+
+
+

@@ -31,6 +31,16 @@ void audio_silence(int ms);
 // can survive.  Returned as void* to keep driver headers out of this one.
 void *audio_i2c_bus(void);
 
+// Idle power-down.  The codec and the I2S clock run from boot otherwise: MCLK
+// stays at 12.288 MHz, the ES8311 keeps its analog rails up and the I2S DMA
+// streams silence for as long as the handset is on, which is the largest
+// standing load the firmware can switch off without changing how the machine
+// plays.  A key press is the only thing that makes sound on this board, so the
+// caller polls this from the frame loop; after AUDIO_IDLE_OFF_US without a beep
+// the codec is powered down, and the next beep brings it back (the audio task
+// does that itself, off the main loop, in ~2 ms of I2C).
+void audio_idle_poll(void);
+
 #ifdef __cplusplus
 }
 #endif

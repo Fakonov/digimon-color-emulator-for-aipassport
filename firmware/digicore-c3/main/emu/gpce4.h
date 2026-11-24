@@ -68,6 +68,30 @@ struct St7735 {
     bool trace = false;                      // log every command (MAME logerror)
     uint8_t m_unknown_seen[32] = {};         // bitmap: unknown commands logged once
 
+    // --- write-side dirty map -------------------------------------------
+    // One bit per 16x16 tile of the 128x128 clip (8 rows x 8 columns).  Every
+    // pixel that reaches fb[] arrives through store_pixel()/fill_run(), so the
+    // tile can be marked exactly where the store happens.  blit_frame() used to
+    // FNV-hash all 9,216 visible pixels on every host frame to decide what to
+    // push: ~50k host cycles per frame on a still screen, i.e. pure heat for a
+    // picture that did not move.  Anything that writes fb[] directly has to call
+    // dirty_all() itself (paint_pattern, fbsave_load).
+    uint8_t m_dirty[8] = {};
+    void dirty_mark(int rx, int ry)
+    {
+        m_dirty[ry >> 4] |= uint8_t(1u << (rx >> 4));
+    }
+    void dirty_all()
+    {
+        for (int i = 0; i < 8; i++)
+            m_dirty[i] = 0xffu;
+    }
+    void dirty_clear()
+    {
+        for (int i = 0; i < 8; i++)
+            m_dirty[i] = 0;
+    }
+
     void store_pixel(uint16_t pixel);        // GRAM index -> fb[] clip
     void log_unknown(uint8_t cmd);
     void soft_reset_regs();                  // 0x01 SWRESET

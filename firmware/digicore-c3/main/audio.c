@@ -84,6 +84,15 @@ static void audio_task(void *arg)
 static volatile int s_volume_pct = 55;
 static bool s_wrote_ok;
 
+// Codec + I2S power gate.  s_codec_on tracks what the hardware is doing (not
+// what we would like it to do), so a failed power-up is retried on the next
+// beep rather than assumed.  s_last_beep_us is stamped on every request; the
+// frame loop calls audio_idle_poll() and that is the only place that powers the
+// codec down, so a beep can never race a power-down that started first.
+static bool s_codec_on;
+static volatile int64_t s_last_beep_us;
+static const int64_t kIdleOffUs = 15 * 1000000;   // 15 s without a beep
+
 // ---------------------------------------------------------------------------
 // ES8311
 // ---------------------------------------------------------------------------
@@ -160,8 +169,14 @@ static esp_err_t es8311_init(void)
 	reg_w(0x32, 0xBF);              // 0 dB
 
 	uint8_t id = 0;
-	if (reg_r(0xFD, &id) == ESP_OK)
+	// Logged once: this sequence runs again every time the codec is woken from
+	// the idle power-down, and a line per key press would be noise.
+	static bool id_logged = false;
+	if (!id_logged && reg_r(0xFD, &id) == ESP_OK)
+	{
+		id_logged = true;
 		ESP_LOGI(TAG, "ES8311 id=%02X at 0x%02X", id, AUDIO_ES8311_ADDR);
+	}
 	return ESP_OK;
 }
 
@@ -207,6 +222,52 @@ static esp_err_t i2s_start_output(void)
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+// Bring the codec and its clocks up.  The full register sequence is replayed
+// instead of a partial "resume": the ES8311 keeps most of its state while MCLK
+// is stopped, but which registers survive a deep power-down depends on the
+// depth, and guessing wrong means silence with no error anywhere.  Thirty I2C
+// writes at 100 kHz is ~2 ms, and it only happens on the first key press after
+// a quiet period.
+static esp_err_t codec_power_on(void)
+{
+	if (!s_tx || !s_codec)
+		return ESP_ERR_INVALID_STATE;
+	const esp_err_t en = i2s_channel_enable(s_tx);
+	if (en != ESP_OK && en != ESP_ERR_INVALID_STATE)
+		return en;
+	vTaskDelay(pdMS_TO_TICKS(2));       // MCLK must run before the codec PLL locks
+	const esp_err_t err = es8311_init();
+	if (err != ESP_OK)
+		return err;
+	s_codec_on = true;
+	return ESP_OK;
+}
+
+// Analog rails first, then the clock: cutting MCLK while the DAC still drives
+// the speaker is what produces the click this ordering avoids.
+static void codec_power_off(void)
+{
+	if (!s_codec_on)
+		return;
+	reg_w(0x12, 0x02);                  // DAC powered down
+	reg_w(0x0E, 0xFF);                  // analog PGA off
+	reg_w(0x0D, 0x00);                  // system power: both rails down
+	if (s_tx)
+		i2s_channel_disable(s_tx);      // stops MCLK/BCLK into the codec
+	s_codec_on = false;
+}
+
+void audio_idle_poll(void)
+{
+	if (!s_ready || !s_codec_on)
+		return;
+	if (esp_timer_get_time() - s_last_beep_us < kIdleOffUs)
+		return;
+	codec_power_off();
+	ESP_LOGI(TAG, "codec + I2S off after %d s without a beep",
+	         (int)(kIdleOffUs / 1000000));
+}
 
 bool audio_init(void)
 {
@@ -259,6 +320,8 @@ bool audio_init(void)
 		return false;
 	}
 	s_ready = true;
+	s_codec_on = true;
+	s_last_beep_us = esp_timer_get_time();
 	ESP_LOGI(TAG, "ready: ES8311 + I2S0 %d Hz, amp always on", AUDIO_RATE);
 	return true;
 }
@@ -285,6 +348,10 @@ void audio_set_volume(int pct)
 static void render_beep(int freq, int ms)
 {
 	if (!s_ready || freq <= 0 || ms <= 0)
+		return;
+	// Woken here, on the audio task, not in audio_beep(): this is the only
+	// path that may block for the ~2 ms of I2C a codec power-up costs.
+	if (!s_codec_on && codec_power_on() != ESP_OK)
 		return;
 
 	const int total = AUDIO_RATE * ms / 1000;
@@ -327,6 +394,9 @@ void audio_beep(int freq, int ms)
 {
 	if (!s_ready || !s_req || freq <= 0 || ms <= 0)
 		return;
+	// Stamped before the queue, not after: the idle gate must never power the
+	// codec down between "user pressed a key" and "the task renders it".
+	s_last_beep_us = esp_timer_get_time();
 	const beep_req_t r = { freq, ms };
 	// Drop when the queue is full: a backlog of clicks is worse than a missed one.
 	if (xQueueSend(s_req, &r, 0) != pdTRUE)
@@ -336,6 +406,8 @@ void audio_beep(int freq, int ms)
 void audio_silence(int ms)
 {
 	if (!s_ready || ms <= 0)
+		return;
+	if (!s_codec_on && codec_power_on() != ESP_OK)
 		return;
 	static int16_t zeros[256];
 	const int total = AUDIO_RATE * ms / 1000;
