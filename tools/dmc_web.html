@@ -36,8 +36,11 @@
   <p>把原机 ROM 写进 AI Passport，或者导出/导入宠物存档。固件本身不含 ROM，ROM 需自备。</p>
 
   <div class="note" id="guide">
-    需要电脑上的 <strong>Chrome / Edge</strong>（Web Serial），并且本页必须从 <strong>https</strong> 或
-    <code>localhost</code> 打开。用 USB-C 线连上设备，先点“连接设备”。
+    用电脑上的 <strong>Chrome / Edge</strong> 打开本文件，双击就行（也可以放到本地服务器上）。
+    用 USB-C 线连上设备，先点“连接设备”。<br>
+    如果提示 Web Serial 不可用：换 Chrome / Edge 重试，或用本地服务器方式打开
+    （在本文件所在文件夹运行 <code>python -m http.server 8000</code>，再访问
+    <code>http://127.0.0.1:8000/dmc_web.html</code>）。
   </div>
 
   <section class="item">
@@ -252,7 +255,7 @@ function nonZeroPages(bytes) {
 
 document.getElementById("connect").onclick = async () => {
   if (!navigator.serial || !window.isSecureContext) {
-    say("当前浏览器不支持 Web Serial，或页面不是 https / localhost", true);
+    say("当前浏览器不支持 Web Serial（请用 Chrome 或 Edge 打开本文件）", true);
     return;
   }
   let port;
@@ -365,7 +368,7 @@ document.getElementById("save-import").onclick = () => perform(async () => {
 });
 
 if (!navigator.serial || !window.isSecureContext) {
-  say("当前浏览器不支持 Web Serial，或页面不是 https / localhost", true);
+  say("当前浏览器不支持 Web Serial（请用 Chrome 或 Edge 打开本文件）", true);
   document.getElementById("connect").disabled = true;
 }
 if (navigator.serial) {
