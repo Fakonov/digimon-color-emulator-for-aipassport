@@ -20,6 +20,20 @@ void audio_set_volume(int pct);
 // Blocking square wave, then nothing.  Feed it short effects only.
 void audio_beep(int freq, int ms);
 
+// ROM buzzer (GPCE4 TimerB pitch + PWM0 gate, mask ROM 0x55A9).
+//
+// The emulator does not produce a DAC stream: the cartridge drives IOA0 through
+// the SoC's IO_PWM block, with TimerB setting the pitch.  The frame loop calls
+// this once per frame with the current note; 0 means silent.  The audio task
+// synthesises a 50 % square wave at that frequency and streams it to the codec,
+// so what comes out of the speaker is the game's own tone, not a canned beep.
+void audio_set_buzzer(int hz);
+bool audio_buzzer_active(void);
+
+// Diagnostics for the console `p` command: current note, how many I2S blocks the
+// buzzer wrote, codec power state and the software volume.
+void audio_debug(int *hz, unsigned *blocks, int *codec_on, int *volume);
+
 // Blocking silence, used to flush the DMA queue so the next beep starts clean.
 void audio_silence(int ms);
 

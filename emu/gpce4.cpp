@@ -376,6 +376,9 @@ void Gpce4::reset()
     m_cache_ctrl = 0;
     m_wait_ctrl = 0;
     m_dac_cha1 = 0;
+    m_pwm0_ctrl = 0;
+    m_timerb_raw = 0;
+    m_pwm_phase = 0;
     m_spi_auto_ctrl = 0;
     m_spi_bank = 0;
     m_spi_ctrl = 0;
@@ -770,7 +773,7 @@ void     Gpce4::io_ctrl_w(uint16_t data){ m_io_ctrl = data; }                   
 // ===========================================================================
 void Gpce4::timera_data_w(uint16_t)     { }                                     // :473  log only
 void Gpce4::timera_counter_w(uint16_t)  { }                                     // :478  log only
-void Gpce4::timerb_data_w(uint16_t)     { }                                     // :483  log only
+void Gpce4::timerb_data_w(uint16_t data)     { m_timerb_raw = data; }            // :483  pitch reload
 void Gpce4::timerb_counter_w(uint16_t)  { }                                     // :488  log only
 void Gpce4::timerc_data_w(uint16_t)     { }                                     // :493  log only
 void Gpce4::timerc_counter_w(uint16_t)  { }                                     // :498  log only
@@ -778,11 +781,11 @@ uint16_t Gpce4::timer_ctrl_r()          { return m_timer_ctrl; }                
 void Gpce4::timer_ctrl_w(uint16_t data) { m_timer_ctrl = data; }                // :467
 
 // PWM: MAME only logs the write and never stores it, so reads stay 0.
-uint16_t Gpce4::pwm0_ctrl_r() { return 0; }                                     // :505
+uint16_t Gpce4::pwm0_ctrl_r() { return m_pwm0_ctrl; }                            // :505
 uint16_t Gpce4::pwm1_ctrl_r() { return 0; }                                     // :511
 uint16_t Gpce4::pwm2_ctrl_r() { return 0; }                                     // :517
 uint16_t Gpce4::pwm3_ctrl_r() { return 0; }                                     // :523
-void Gpce4::pwm0_ctrl_w(uint16_t) { }                                           // :529
+void Gpce4::pwm0_ctrl_w(uint16_t data) { m_pwm0_ctrl = data; }                   // :529  buzzer gate
 void Gpce4::pwm1_ctrl_w(uint16_t) { }                                           // :534
 void Gpce4::pwm2_ctrl_w(uint16_t) { }                                           // :539
 void Gpce4::pwm3_ctrl_w(uint16_t) { }                                           // :544
@@ -1444,6 +1447,33 @@ void Gpce4::audio_advance(uint64_t from, uint64_t to)
             int32_t v = m_audio_acc_cycles
                       ? m_audio_acc / int32_t(m_audio_acc_cycles)
                       : m_audio_level;
+
+            // IO_PWM buzzer: the DMC ROM drives its piezo through TimerB
+            // (0x3012 reload = pitch) + PWM0_Ctrl (0x3020, 0 = off) + IOA0 as
+            // IO_PWM (0x300F bit 3).  When that path is live it overrides the
+            // DAC, which this ROM never writes.
+            if (pwm_buzzer && m_pwm0_ctrl != 0 && (m_io_ctrl & 0x0008) && m_timerb_raw != 0)
+            {
+                const int ticks = int(m_timerb_raw & 0x8000 ? -int16_t(m_timerb_raw)
+                                                            :  int16_t(m_timerb_raw));
+                if (ticks > 0)
+                {
+                    static const int clock_hz = [] {
+                        const char *e = std::getenv("GPCE4_PWM_CLOCK");
+                        return (e && *e) ? std::atoi(e) : 6000000;   // 96 MHz / 16
+                    }();
+                    const double hz = double(clock_hz) / double(ticks);
+                    const uint64_t inc =
+                        uint64_t(hz / double(AUDIO_RATE) * 4294967296.0);
+                    m_pwm_phase += inc;
+                    v = (m_pwm_phase & 0x80000000ull) ? pwm_gain : -pwm_gain;
+                }
+            }
+            else
+            {
+                m_pwm_phase = 0;
+            }
+
             if (v > 32767)  v = 32767;
             if (v < -32768) v = -32768;
             audio_push(int16_t(v));

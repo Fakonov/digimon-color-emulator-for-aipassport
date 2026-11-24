@@ -70,18 +70,76 @@ static QueueHandle_t s_req;
 
 static void render_beep(int freq, int ms);
 
+// ---- ROM buzzer state -----------------------------------------------------
+// s_buz_hz is written by the frame loop (audio_set_buzzer) and read by the
+// audio task.  32-bit aligned ints are atomic on this core, so no lock.
+static volatile int s_buz_hz;
+static uint32_t s_phase;                 // Q32 phase of the square wave
+static bool s_codec_on;
+static volatile int s_volume_pct = 55;
+static uint32_t s_buz_blocks;            // I2S blocks written by the buzzer
+
+static esp_err_t codec_power_on(void);   // defined with the power gate below
+
 static void audio_task(void *arg)
 {
+	static int16_t buf[1024];            // 512 stereo frames = 10.7 ms at 48 kHz
 	beep_req_t r;
 	for (;;)
 	{
-		if (xQueueReceive(s_req, &r, portMAX_DELAY) != pdTRUE)
+		// A queued beep (boot chime / UI click) takes priority and blocks
+		// until it has been written out.
+		if (xQueueReceive(s_req, &r, 0) == pdTRUE)
+		{
+			render_beep(r.freq, r.ms);
 			continue;
-		render_beep(r.freq, r.ms);
+		}
+
+		const int hz = s_buz_hz;
+		if (hz <= 0)
+		{
+			vTaskDelay(pdMS_TO_TICKS(8));
+			continue;
+		}
+		// audio_idle_poll() powers the codec down after 15 s of silence; a note
+		// arriving later has to bring it back, otherwise the first press after
+		// an idle period is swallowed (observed on hardware 2026-11-24).
+		if (!s_codec_on)
+		{
+			const esp_err_t perr = codec_power_on();
+			ESP_LOGI(TAG, "buzzer: codec wake -> %d", (int)perr);
+			if (perr != ESP_OK)
+			{
+				vTaskDelay(pdMS_TO_TICKS(2));
+				continue;
+			}
+		}
+
+		const uint32_t inc = (uint32_t)(((uint64_t)hz << 32) / AUDIO_RATE);
+		// 1250: fourth calibration pass on hardware (2026-11-24).  Each round
+		// the user asked for "this loudness should be the next step up", so the
+		// base has gone 20000 -> 10000 -> 5000 -> 2500 -> 1250.  Now vol=20 is
+		// 250 counts (0.8 % FS) and vol=40 is 500 (the previous 20 % level).
+		// `a <n>` retunes it live if this overshoots in the quiet direction.
+		const int16_t amp = (int16_t)(1250 * s_volume_pct / 100);
+		for (int i = 0; i < 512; i++)
+		{
+			s_phase += inc;
+			const int16_t v = (s_phase & 0x80000000u) ? amp : (int16_t)-amp;
+			buf[i * 2 + 0] = v;
+			buf[i * 2 + 1] = v;
+		}
+		size_t sent = 0;
+		if (i2s_channel_write(s_tx, buf, sizeof(buf), &sent, 100) != ESP_OK)
+			vTaskDelay(pdMS_TO_TICKS(2));
+		// One line per second of tone: proves the samples really reach the
+		// codec when nobody is sure whether the speaker is dead or silent.
+		if ((++s_buz_blocks % 95u) == 1u)
+			ESP_LOGI(TAG, "buzzer hz=%d blocks=%u codec=%d", hz,
+			         (unsigned)s_buz_blocks, (int)s_codec_on);
 	}
 }
 
-static volatile int s_volume_pct = 55;
 static bool s_wrote_ok;
 
 // Codec + I2S power gate.  s_codec_on tracks what the hardware is doing (not
@@ -89,7 +147,7 @@ static bool s_wrote_ok;
 // beep rather than assumed.  s_last_beep_us is stamped on every request; the
 // frame loop calls audio_idle_poll() and that is the only place that powers the
 // codec down, so a beep can never race a power-down that started first.
-static bool s_codec_on;
+// (s_codec_on is declared above the audio task, which reads it.)
 static volatile int64_t s_last_beep_us;
 static const int64_t kIdleOffUs = 15 * 1000000;   // 15 s without a beep
 
@@ -258,9 +316,33 @@ static void codec_power_off(void)
 	s_codec_on = false;
 }
 
+// ROM buzzer: the frame loop publishes the current note; the audio task turns
+// it into a square wave.  Calling this every frame also keeps the codec awake.
+void audio_set_buzzer(int hz)
+{
+	s_buz_hz = (hz > 0) ? hz : 0;
+	if (s_buz_hz > 0)
+		s_last_beep_us = esp_timer_get_time();
+}
+
+bool audio_buzzer_active(void)
+{
+	return s_buz_hz > 0;
+}
+
+void audio_debug(int *hz, unsigned *blocks, int *codec_on, int *volume)
+{
+	if (hz) *hz = s_buz_hz;
+	if (blocks) *blocks = s_buz_blocks;
+	if (codec_on) *codec_on = s_codec_on ? 1 : 0;
+	if (volume) *volume = s_volume_pct;
+}
+
 void audio_idle_poll(void)
 {
 	if (!s_ready || !s_codec_on)
+		return;
+	if (s_buz_hz > 0)                    // a note is playing: never power down
 		return;
 	if (esp_timer_get_time() - s_last_beep_us < kIdleOffUs)
 		return;
@@ -310,11 +392,14 @@ bool audio_init(void)
 		ESP_LOGW(TAG, "beep queue alloc failed");
 		return false;
 	}
-	// Same priority as the emulator loop (app_main runs at 1).  Anything higher
-	// would preempt the guest for the 10-18 ms an I2S write takes; at equal
-	// priority the round robin still lets the loop run, and the task is blocked
-	// on the queue the rest of the time anyway.
-	if (xTaskCreate(audio_task, "audio", 3072, NULL, 1, NULL) != pdPASS)
+	// Priority 3, above the emulator loop (app_main runs at 1).  Equal priority
+	// meant the round-robin only scheduled this task every ~10 ms tick, so a
+	// 5.3 ms block was written every 16.8 ms and the DAC starved: measured on
+	// hardware 2026-11-24 as "buzzer hz=830 blocks=191" over 3.2 s, i.e. a third
+	// of the required rate and no audible tone.  The write itself blocks on the
+	// I2S DMA semaphore, so a higher priority does not burn CPU - it only lets
+	// the task wake when the DMA actually has room.
+	if (xTaskCreate(audio_task, "audio", 3072, NULL, 3, NULL) != pdPASS)
 	{
 		ESP_LOGW(TAG, "audio task spawn failed");
 		return false;

@@ -16,6 +16,7 @@
 // ---------------------------------------------------------------------------
 
 #include "gpce4.h"
+#include "audio.h"           // audio_set_buzzer(): event-driven buzzer pitch
 
 #include <algorithm>
 #include <cstdio>
@@ -928,19 +929,39 @@ void     Gpce4::io_ctrl_w(uint16_t data){ m_io_ctrl = data; }                   
 // ===========================================================================
 void Gpce4::timera_data_w(uint16_t)     { }                                     // :473  log only
 void Gpce4::timera_counter_w(uint16_t)  { }                                     // :478  log only
-void Gpce4::timerb_data_w(uint16_t)     { }                                     // :483  log only
+void Gpce4::timerb_data_w(uint16_t data)
+{
+    m_timerb_raw = data;                                                          // :483
+    audio_set_buzzer(buzzer_hz());   // pitch change while the gate is already open
+}
 void Gpce4::timerb_counter_w(uint16_t)  { }                                     // :488  log only
 void Gpce4::timerc_data_w(uint16_t)     { }                                     // :493  log only
 void Gpce4::timerc_counter_w(uint16_t)  { }                                     // :498  log only
 uint16_t Gpce4::timer_ctrl_r()          { return m_timer_ctrl; }                // :461
 void Gpce4::timer_ctrl_w(uint16_t data) { m_timer_ctrl = data; }                // :467
 
-// PWM: MAME only logs the write and never stores it, so reads stay 0.
-uint16_t Gpce4::pwm0_ctrl_r() { return 0; }                                     // :505
+// PWM: MAME only logs the write and never stores it.  The buzzer model needs
+// the last value, and a short ring of PWM0 writes so the console can print a
+// real note list (see the `W` command in app_main.cpp).
+uint16_t Gpce4::pwm0_ctrl_r() { return m_pwm0_ctrl; }                           // :505
 uint16_t Gpce4::pwm1_ctrl_r() { return 0; }                                     // :511
 uint16_t Gpce4::pwm2_ctrl_r() { return 0; }                                     // :517
 uint16_t Gpce4::pwm3_ctrl_r() { return 0; }                                     // :523
-void Gpce4::pwm0_ctrl_w(uint16_t) { m_pwm_writes++; }                         // :529
+void Gpce4::pwm0_ctrl_w(uint16_t data)                                          // :529
+{
+    m_pwm_writes++;
+    m_pwm0_ctrl = data;
+    PwmEvent &e = m_pwm_ev[m_pwm_ev_n % PWM_TRACE];
+    e.cyc = uint32_t(m_now);
+    e.pwm = data;
+    e.tb = m_timerb_raw;
+    e.io = m_io_ctrl;
+    m_pwm_ev_n++;
+    // Push the new state to the audio task immediately.  The frame loop polls
+    // at 15-18 fps (60 ms) while a note lasts 52 ms, so polling alone misses
+    // every note; the write path is the only place fast enough.
+    audio_set_buzzer(buzzer_hz());
+}
 void Gpce4::pwm1_ctrl_w(uint16_t) { m_pwm_writes++; }                         // :534
 void Gpce4::pwm2_ctrl_w(uint16_t) { m_pwm_writes++; }                         // :539
 void Gpce4::pwm3_ctrl_w(uint16_t) { m_pwm_writes++; }                         // :544

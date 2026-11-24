@@ -978,10 +978,43 @@ static void console_exec(char *line)
     case 'Z': {                    // Z <addr hex>: read guest RAM / IO / flash
         unsigned a = 0;
         if (sscanf(line + 1, "%x", &a) == 1) {
-            const unsigned v = (a <= 0x0FFFu) ? s_soc.ram[a] : s_soc.read16((uint32_t)a);
+            // 0x3012 is write-only on the real chip (and in MAME), but the
+            // buzzer probe keeps it, so expose that copy instead of 0xFFFF.
+            const unsigned v = (a == 0x3012u) ? unsigned(s_soc.timerb_value())
+                              : (a <= 0x0FFFu) ? unsigned(s_soc.ram[a])
+                              : unsigned(s_soc.read16((uint32_t)a));
             std::printf("ACK Z [%06X] = %04X\n", a, v);
         } else {
             std::printf("NAK Z\n");
+        }
+        break;
+    }
+    case 'a': {                    // a <0-100>: software volume, live (no save)
+        int v = -1;
+        if (sscanf(line + 1, "%d", &v) == 1 && v >= 0 && v <= 100) {
+            audio_set_volume(v);
+            std::printf("ACK a vol=%d\n", v);
+        } else {
+            std::printf("NAK a\n");
+        }
+        break;
+    }
+    case 'p': {                    // p: buzzer trace (TimerB pitch + PWM0 gate)
+        const uint32_t n = s_soc.pwm_events();
+        int ahz = 0, acodec = 0, avol = 0;
+        unsigned ablocks = 0;
+        audio_debug(&ahz, &ablocks, &acodec, &avol);
+        std::printf("AUDIO hz=%d blocks=%u codec=%d vol=%d buzzer_hz_now=%d\n",
+                    ahz, ablocks, acodec, avol, s_soc.buzzer_hz());
+        std::printf("PWM events=%u last pwm=%04X tb=%04X io=%04X\n",
+                    unsigned(n), unsigned(s_soc.pwm0_value()),
+                    unsigned(s_soc.timerb_value()), unsigned(s_soc.m_io_ctrl));
+        const uint32_t lim = n < uint32_t(Gpce4::PWM_TRACE) ? n : uint32_t(Gpce4::PWM_TRACE);
+        for (uint32_t i = 0; i < lim; i++) {
+            const Gpce4::PwmEvent &e = s_soc.pwm_event(i);
+            std::printf("  #%u t=%u pwm=%04X tb=%04X io=%04X\n",
+                        unsigned(n - 1u - i), unsigned(e.cyc),
+                        unsigned(e.pwm), unsigned(e.tb), unsigned(e.io));
         }
         break;
     }
@@ -1749,10 +1782,11 @@ static void update_buttons(void)
         // again, so without this the screen stays dark until the battery dies.
         if (bits != 0xffff && s_soc.asleep())
             s_soc.wake_from_sleep();
-        // A short click on every fresh press.  This is the only sound the
-        // device can make: the cartridge has no audio source to emulate.
-        if (bits != 0xffff)
-            audio_beep(1760, 18);
+        // No synthetic click any more: the cartridge drives its own buzzer on
+        // the same presses (TimerB + PWM0 -> audio_set_buzzer), and a 1760 Hz
+        // click landing 16 ms before the ROM's note just sounds like a fault.
+        // The boot chime in app_main() stays: it plays before the guest runs.
+        (void)bits;
     }
 }
 
@@ -2510,6 +2544,10 @@ extern "C" void app_main(void)
             }
             run_guest_frame();
         }
+        // The cartridge's buzzer: TimerB sets the pitch, PWM0 gates IOA0.  This
+        // publishes the current note to the audio task once per frame; 0 = off.
+        audio_set_buzzer(s_soc.buzzer_hz());
+
         const uint32_t frame_us = uint32_t(esp_timer_get_time() - t_guest0);
         s_guest_us += frame_us;
         if (frame_us > s_guest_max_us) s_guest_max_us = frame_us;

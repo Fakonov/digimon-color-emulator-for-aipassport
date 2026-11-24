@@ -343,6 +343,17 @@ struct Gpce4 : public UnspBus {
     bool     m_audio_stats_on = false;       // GPCE4_AUDIO_STATS is set
     char     m_audio_stats_path[512] = {};
 
+    // ---- IO_PWM buzzer (TimerB pitch + PWM0 gate) ------------------------
+    // This is the path the DMC ROM actually uses (mask ROM 0x55A9): TimerB
+    // reload sets the pitch, IOA0 is switched to IO_PWM, PWM0_Ctrl(0x3020)
+    // enables the output.  The DAC at 0x3041 is never written by this ROM.
+    // GPCE4_PWM_CLOCK overrides the TimerB clock (default 96 MHz / 16).
+    bool     pwm_buzzer = true;              // model on/off
+    uint16_t m_pwm0_ctrl = 0;                // 0x3020 last value (0 = off)
+    uint16_t m_timerb_raw = 0;               // 0x3012 reload, signed
+    uint64_t m_pwm_phase = 0;                // Q32 phase accumulator
+    int16_t  pwm_gain = 9000;                // square wave amplitude
+
     // ---- unmapped access log --------------------------------------------
     enum { UNMAPPED_LOG_MAX = 64 };
     uint32_t m_unmapped_read_log[UNMAPPED_LOG_MAX] = {};

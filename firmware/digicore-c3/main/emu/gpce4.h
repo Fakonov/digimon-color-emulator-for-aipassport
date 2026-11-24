@@ -312,6 +312,47 @@ struct Gpce4 : public UnspBus {
     uint32_t audio_writes() const { return m_dac_writes; }
     uint32_t pwm_writes() const { return m_pwm_writes; }
 
+    // ---- buzzer trace (TimerB pitch + PWM0 gate) -------------------------
+    // 2026-11-24: the ROM does NOT use the DAC.  Mask ROM 0x55A9 writes the
+    // pitch into TimerB (0x3012/0x3013), switches IOA0 to IO_PWM and sets
+    // PWM0_Ctrl(0x3020) = 0x02FF; 0x561F turns it off.  Keep the last value of
+    // each register plus a ring of the most recent PWM0 writes so the console
+    // can print a real note list (`W` command in app_main.cpp).
+    struct PwmEvent
+    {
+        uint32_t cyc;      // m_now low 32 bits at the write
+        uint16_t pwm;      // 0x3020 value just written
+        uint16_t tb;       // 0x3012 value at that moment
+        uint16_t io;       // 0x300F (IO_PWM enable is bit 3)
+    };
+    static constexpr int PWM_TRACE = 24;
+    PwmEvent m_pwm_ev[PWM_TRACE] = {};
+    uint32_t m_pwm_ev_n = 0;
+    uint16_t m_pwm0_ctrl = 0;
+    uint16_t m_timerb_raw = 0;
+    uint16_t pwm0_value() const { return m_pwm0_ctrl; }
+    uint16_t timerb_value() const { return m_timerb_raw; }
+    uint32_t pwm_events() const { return m_pwm_ev_n; }
+    // Current buzzer note in Hz, 0 when silent.  TimerB reload is a signed
+    // count of TimerB clock ticks; the clock is 96 MHz / 16 = 6 MHz (verified
+    // against the note names: 6075 -> 987.7 Hz = B5, 8591 -> 698.4 Hz = F5,
+    // 7224 -> 830.6 Hz = G#5).
+    int buzzer_hz() const
+    {
+        if (m_pwm0_ctrl == 0 || (m_io_ctrl & 0x0008) == 0 || m_timerb_raw == 0)
+            return 0;
+        const int s = int(int16_t(m_timerb_raw));
+        const int ticks = s < 0 ? -s : s;
+        if (ticks < 16)
+            return 0;
+        return 6000000 / ticks;
+    }
+    const PwmEvent &pwm_event(uint32_t i) const  // i = 0 is the newest
+    {
+        return m_pwm_ev[(m_pwm_ev_n - 1 - i) % PWM_TRACE];
+    }
+
+
     // ---- images / cpu ----------------------------------------------------
     const uint8_t *m_irom = nullptr;
     size_t m_irom_size = 0;
