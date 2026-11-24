@@ -21,6 +21,10 @@
 #include <cstdint>
 #include <cstring>
 
+#ifdef ESP_PLATFORM
+#include "esp_heap_caps.h"
+#endif
+
 class SparseRom
 {
 public:
@@ -49,7 +53,37 @@ public:
 	{
 		m_base = base;
 		m_index = index;
+#ifdef ESP_PLATFORM
+		// The mapped path never looks at the page cache again, and it is the
+		// single largest allocation in the firmware (64 KiB).  Give it back.
+		release_cache();
+#endif
 	}
+
+#ifdef ESP_PLATFORM
+	// Device only.  The page cache is heap backed so a mapped build never
+	// reserves 64 KiB of a 320 KiB DRAM budget (rom_esp.cpp: mounted first,
+	// cache only if esp_partition_mmap() failed).  Returns false when the
+	// heap cannot serve it, in which case the caller must treat the store as
+	// unusable rather than run with a null cache.
+	bool alloc_cache()
+	{
+		if (m_cache)
+			return true;
+		m_cache = static_cast<uint16_t *>(
+			heap_caps_malloc(size_t(SLOTS) * PAGE_WORDS * 2u,
+			                 MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+		return m_cache != nullptr;
+	}
+	void release_cache()
+	{
+		if (m_cache)
+		{
+			heap_caps_free(m_cache);
+			m_cache = nullptr;
+		}
+	}
+#endif
 
 	void begin(uint32_t image_size, Loader loader, void *ctx);
 	void clear();
@@ -63,7 +97,14 @@ public:
 		const uint32_t page = off >> PAGE_BITS;
 		// Overlay pages are rare (the game writes 8 bytes at 0x7FD000/0x7FE000)
 		// so a range test keeps the common case to two compares.
-		if (page - m_ov_lo <= m_ov_hi - m_ov_lo)
+		//
+		// This used to be `page - m_ov_lo <= m_ov_hi - m_ov_lo` with m_ov_lo = 1
+		// and m_ov_hi = 0 meaning "empty".  That subtraction wraps to 0xFFFFFFFF,
+		// so the test was true for *every* page: the hot path called
+		// read16_overlay() on every flash word and page_window() answered null,
+		// which also cost the interpreter its 4 KiB opcode window.  Explicit
+		// bounds with lo > hi as the empty range fix both.
+		if (page >= m_ov_lo && page <= m_ov_hi)
 			return read16_overlay(off, page);
 		if (m_base)
 		{
@@ -75,6 +116,8 @@ public:
 			return w;
 		}
 		const uint32_t h = (page ^ (page >> 4)) & uint32_t(SLOTS - 1);
+		if (!m_cache)
+			return 0xffffu;         // no mmap and no cache: nothing to read
 		if (m_tag[h] != page)
 			return read16_miss(off, page, h);
 		return m_cache[h * PAGE_WORDS + ((off >> 1) & (PAGE_WORDS - 1))];
@@ -85,7 +128,7 @@ public:
 	const uint16_t *page_window(uint32_t off)
 	{
 		const uint32_t page = off >> PAGE_BITS;
-		if (page - m_ov_lo <= m_ov_hi - m_ov_lo)
+		if (page >= m_ov_lo && page <= m_ov_hi)
 			return nullptr;                 // overlay pages are patched copies
 		if (!m_base)
 			return nullptr;
@@ -134,7 +177,9 @@ private:
 	// memory mapped sparse store (see set_mapped)
 	const uint8_t *m_base = nullptr;
 	const uint32_t *m_index = nullptr;
-	uint32_t m_ov_lo = 1;
+	// Empty range is lo > hi (0xFFFFFFFF / 0 is the "nothing in the overlay"
+	// state).  overlay_page() widens it as pages are created.
+	uint32_t m_ov_lo = 0xffffffffu;
 	uint32_t m_ov_hi = 0;
 
 	uint32_t m_tag[SLOTS];
@@ -145,6 +190,12 @@ private:
 	uint32_t m_overlay_hits = 0;
 	uint32_t m_writes = 0;
 
+#ifdef ESP_PLATFORM
+	// Heap backed on the device: allocated only when the partition cannot be
+	// mapped (see alloc_cache), released the moment it can be.
+	uint16_t *m_cache = nullptr;
+#else
 	alignas(4) uint16_t m_cache[SLOTS * PAGE_WORDS];
+#endif
 	alignas(4) uint16_t m_overlay[DIRTY_SLOTS * PAGE_WORDS];
 };

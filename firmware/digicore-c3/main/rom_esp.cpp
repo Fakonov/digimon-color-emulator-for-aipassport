@@ -120,17 +120,30 @@ bool mount(Info *out)
 	// flash-mapped window: no page cache misses, no esp_partition_read() on the
 	// hot path.  Without this the 193 KiB of guest code thrash the 16 entry
 	// (64 KiB) page cache and the interpreter drops to ~0.7 M instr/s.
+	//
+	// Order matters for DRAM.  A mapped store never reads the page cache, so the
+	// cache is only allocated when the mapping is refused: on a 320 KiB budget
+	// already at 99.6% that is a 64 KiB difference, and it is the same 64 KiB
+	// that later buys the decoder/hot-region work some room.
 	const void *mapped = nullptr;
 	esp_partition_mmap_handle_t handle = 0;
 	const esp_err_t err = esp_partition_mmap(s_part, 0, s_part->size,
 	                                         ESP_PARTITION_MMAP_DATA, &mapped, &handle);
 	if (err == ESP_OK) {
+		s_rom.begin(hdr.image_size, load_page, nullptr);
 		s_rom.set_mapped(static_cast<const uint8_t *>(mapped), s_index);
-		ESP_LOGI(TAG, "sparse store mapped at %p (%u KiB), direct read path on",
+		ESP_LOGI(TAG, "sparse store mapped at %p (%u KiB), direct read path on, "
+		              "no page cache allocated",
 		         mapped, unsigned(s_part->size / 1024));
 	} else {
-		ESP_LOGW(TAG, "esp_partition_mmap failed (%s), falling back to the page cache",
-		         esp_err_to_name(err));
+		if (!s_rom.alloc_cache()) {
+			ESP_LOGE(TAG, "esp_partition_mmap failed (%s) and the 64 KiB page "
+			              "cache cannot be allocated", esp_err_to_name(err));
+			return false;
+		}
+		s_rom.begin(hdr.image_size, load_page, nullptr);
+		ESP_LOGW(TAG, "esp_partition_mmap failed (%s), falling back to the "
+		              "64 KiB page cache", esp_err_to_name(err));
 	}
 
 	char sha1[41];

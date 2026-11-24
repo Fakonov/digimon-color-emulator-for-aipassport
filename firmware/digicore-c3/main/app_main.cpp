@@ -401,6 +401,14 @@ static int64_t s_notice_until_us = 0;
 // pushed when it changes.
 static const char *s_banner_text = "";
 static const char *s_banner_shown = nullptr;
+// Seconds between the periodic STAT line.  It was once per second, and that one
+// line is ~900 bytes of formatted text pushed down a 115200 baud UART, i.e.
+// roughly 78 ms of console time in every second - 7-8% of the wall clock burnt
+// on telemetry that nobody reads while playing, on a battery-powered device.
+// Five seconds keeps the trend visible and costs 1.5%; `J 0` turns it off
+// entirely and `J <sec>` sets any period the operator wants (1 = the old
+// behaviour, for a bench run).
+static int s_stat_period_s = 5;
 static uint32_t s_hot_calls = 0;   // PRNG block executions since log
 static uint32_t s_tick_us = 0;    // microseconds inside SoC tick() since log
 static uint32_t s_slices = 0;     // scheduler slices since log
@@ -459,6 +467,13 @@ static bool s_boot_ok = false;
 #endif
 #ifndef C3_MISS_CENSUS
 #define C3_MISS_CENSUS 0
+#endif
+// The two boot-time microbenchmarks (PRNG block cost, fetch vs dispatch cost).
+// They answered their question in PERF_2026-11-22 and then kept a ~24 KiB of
+// static scratch + a whole m_ram image alive in DRAM, plus a few tens of ms of
+// CPU one second after boot.  Off by default; -DC3_BENCH=1 brings them back.
+#ifndef C3_BENCH
+#define C3_BENCH 0
 #endif
 
 static bool s_clock_seeded = false;
@@ -621,12 +636,17 @@ static bool window_has_content(void)
 // so the surround has to be painted once or the panel shows its power-on GRAM.
 static void panel_fill_black(void)
 {
-    // 320 pixels wide * kChunkRows rows * 2 bytes: the fill must own a buffer of
-    // exactly this size, it is wider than the window strip below.
-    static uint8_t fill[320 * kChunkRows * 2];
+    // 320 pixels wide * kChunkRows rows * 2 bytes.  This used to be its own
+    // static 10 KiB buffer; s_strip is the larger 15 KiB scratch every other
+    // panel painter already shares, and the fill only runs once at boot before
+    // anything else has touched it, so it borrows that instead of holding a
+    // second full-panel buffer in DRAM for the life of the firmware.
+    static_assert(kStripBytes >= 320 * kChunkRows * 2,
+                  "s_strip must hold one full-width fill chunk");
+    uint8_t *fill = s_strip;
     if (!s_display_ok)
         return;
-    memset(fill, 0, sizeof(fill));
+    memset(fill, 0, 320 * kChunkRows * 2);
     for (int y = 0; y < 240; y += kChunkRows) {
         const int rows = (y + kChunkRows <= 240) ? kChunkRows : (240 - y);
         if (display_draw_bitmap(0, y, 320, rows, fill) != ESP_OK) {
@@ -870,6 +890,19 @@ static void console_exec(char *line)
         }
         break;
     }
+    case 'J': {                    // J <sec>: STAT line period, 0 = off
+        // The periodic telemetry is the single largest console cost in the
+        // firmware.  This knob exists so a bench run can put it back to 1 s
+        // without a reflash, and so a shipped unit can silence it entirely.
+        int v = -1;
+        if (sscanf(line + 1, "%d", &v) == 1 && v >= 0 && v <= 60) {
+            s_stat_period_s = v;
+            std::printf("ACK J %d s\n", v);
+        } else {
+            std::printf("NAK J\n");
+        }
+        break;
+    }
     case 'N': {                    // N <frames>: dump the next menu pushes
         // The menu paints straight to the panel, so fb[] never sees it.  This
         // replays the panel payload back over the console for inspection.
@@ -1092,7 +1125,10 @@ static void console_exec(char *line)
         // pushes a known pattern through the same SparseRom overlay entry the
         // guest would use; persist_save_image() then stores it one second
         // later, and a plain reset must read it back.
-        static uint8_t probe[4096];
+        // Borrows s_strip (15 KiB) instead of holding a private 4 KiB buffer for
+        // the life of the firmware: W is a one-shot console exercise and nothing
+        // else is painting while it runs.
+        uint8_t *probe = s_strip;
         for (int i = 0; i < 4096; i++)
             probe[i] = uint8_t(i * 7 + 0x5A);
         SparseRom *rom = const_cast<SparseRom *>(romstore::image());
@@ -2199,6 +2235,7 @@ static void run_guest_frame(void)
 // One-off microbenchmark: how long does the statically recompiled PRNG block
 // actually take on this core?  Printed once at boot so the per-call cost in the
 // frame loop can be attributed instead of guessed.
+#if C3_BENCH
 static void bench_hotblock(void)
 {
     HotState hs;
@@ -2269,6 +2306,7 @@ static void bench_exec(void)
     ESP_LOGI(TAG, "bench split: fetch %d cycles, dispatch %d cycles (sink %u)",
              int(dt_fetch * 160 / kIters), int(dt_dispatch * 160 / kIters), unsigned(sink));
 }
+#endif   // C3_BENCH
 
 extern "C" void app_main(void)
 {
@@ -2440,7 +2478,12 @@ extern "C" void app_main(void)
         if (frame_us > s_guest_max_us) s_guest_max_us = frame_us;
         if (s_slices_frame > s_slices_max) s_slices_max = s_slices_frame;
 
-        const bool content = window_has_content();
+        // Scanned once, not once per frame: the answer can only go false -> true
+        // (the guest never clears the whole window back to black and then
+        // repaints it on a later frame in a way that matters here), and the scan
+        // is 9,216 framebuffer reads on a 160 MHz part.  s_boot_ok latches the
+        // first true, so every later frame short-circuits.
+        const bool content = s_boot_ok || window_has_content();
         if (s_display_ok && !menu_is_open() && !menu_confirm_is_open()) {
             const int64_t t_blit0 = esp_timer_get_time();
             blit_frame();
@@ -2492,17 +2535,18 @@ extern "C" void app_main(void)
                     s_deadline_us = now_us;  // fell behind: resynchronise
                 }
             }
-            // Spin the last 3 ms instead of 2: vTaskDelay rounds down to whole
-            // ticks, and a 1 ms shortfall here costs a frame every few seconds.
-            // An esp_timer one-shot was tried and measured slower (the task
-            // dispatch costs ~0.4 ms of extra wake-up latency), so the tick
-            // delay plus a spin stays.
-            // Only hand the CPU back when the wait is long enough that one
-            // tick of over-sleep cannot push us past the deadline.  Under 5 ms
-            // the spin is cheaper than a tick round-off.
+            // One tick of round-off is 1 ms at CONFIG_FREERTOS_HZ=1000, so the
+            // spin only has to cover that plus scheduling jitter; everything
+            // above it goes to vTaskDelay and therefore to WFI.  An esp_timer
+            // one-shot was tried and measured slower (task dispatch costs
+            // ~0.4 ms of extra wake-up latency), which is why the tick delay
+            // plus a short spin is still the shape of this.
+            // Spin the last 1.5 ms, not the last 5.5: a spun wait is the CPU
+            // burning at 160 MHz for nothing.  5.5 ms of spin per frame at 58 fps
+            // was a third of the wall clock idling in a busy loop.
             const int64_t wait = s_deadline_us - esp_timer_get_time();
-            if (wait > 5500) {
-                vTaskDelay(pdMS_TO_TICKS((wait - 5500) / 1000));
+            if (wait > 1500) {
+                vTaskDelay(pdMS_TO_TICKS((wait - 1500) / 1000));
             }
             while (esp_timer_get_time() < s_deadline_us) {
             }
@@ -2558,7 +2602,29 @@ extern "C" void app_main(void)
 #endif
 
         const int64_t now = esp_timer_get_time();
-        if (now - last_log >= 1000000) {
+        // The panel readout is a 24x12 px burst (one SPI transaction, ~0.06 ms)
+        // and it is the number a human actually watches, so it keeps its own
+        // 1 Hz window and does not follow the console telemetry period.
+        {
+            static int64_t s_fps_win_us = 0;
+            static uint32_t s_fps_win_frames = 0;
+            if (s_fps_win_us == 0) {
+                s_fps_win_us = now;
+                s_fps_win_frames = s_frames;
+            } else if (now - s_fps_win_us >= 1000000) {
+                const uint32_t dt = uint32_t(now - s_fps_win_us);
+                const uint32_t df = s_frames - s_fps_win_frames;
+                s_fps_win_us = now;
+                s_fps_win_frames = s_frames;
+                if (dt)
+                    draw_fps_overlay(int((uint64_t(df) * 100000000ull / dt) / 100));
+            }
+        }
+        if (s_stat_period_s <= 0) {
+            // Telemetry off: keep the window parked on "now" so `J <n>` starts a
+            // clean interval instead of reporting one giant delta.
+            last_log = now;
+        } else if (now - last_log >= int64_t(s_stat_period_s) * 1000000) {
             const uint32_t dt_us = uint32_t(now - last_log);
             const uint32_t dframes = s_frames - last_frames;
             const uint32_t dhost = s_host_frames - last_host;
@@ -2636,7 +2702,8 @@ extern "C" void app_main(void)
             last_wrf = g_wr_fast; last_wrs = g_wr_slow;
 #endif
 
-            draw_fps_overlay(int(fps_x100 / 100));
+            // fps_x100 is still computed because the STAT line reports it; the
+            // panel overlay runs on its own 1 Hz window above.
             ESP_LOGI(TAG, "frames=%u guest_fps=%u.%02u mi_s=%u.%02u host_fps=%u.%02u "
                           "pc=%06x sr=%04x sp=%04x insns=%u K cyc=%u K mv=%d btn=%d "
                           "int_ctrl=%04x int_stat=%08x guest_pct=%u blit_pct=%u blitmax=%u rows=%u hot=%u tick_pct=%u slices=%u aotb=%u aoti=%u aotfb=%u aotmiss=%u aotuniq=%u "
@@ -2737,12 +2804,14 @@ extern "C" void app_main(void)
             s_blit_max_us = 0;
             s_rows_sent = 0;
             s_blits = 0;
+#if C3_BENCH
             static bool s_benched = false;
             if (!s_benched) {
                 s_benched = true;
                 bench_hotblock();
                 bench_exec();
             }
+#endif
         }
 
         // Blits already yield on the SPI completion semaphore; this keeps the

@@ -34,6 +34,31 @@
 #define C3_SPLIT 1
 #endif
 
+// ---------------------------------------------------------------------------
+// Diagnostic accumulators that live inside the dispatch loop.  Both were added
+// to answer one specific question and both answer it already:
+//
+//   C3_IRQ_DIAG   the 2026-11-23 interrupt investigation.  It proved IRQ7 is
+//                 raised and taken (rise/fall 329/329, isr=987); AUDIT_2026-11-23
+//                 has the numbers.  Keeping it on costs two compares plus a
+//                 store per dispatch, i.e. a permanent tax on the hottest loop
+//                 in the firmware to re-answer a settled question.
+//   C3_REGION_STAT  the per-region instruction split that produced "rflash
+//                 680k/s, rdraw 12k/s".  It is six compares and two DRAM
+//                 read-modify-writes per AOT block, and a block averages 6.6
+//                 guest instructions, so it is roughly one compare per guest
+//                 instruction retired.
+//
+// Default 0 (off).  Re-enable by passing -DC3_IRQ_DIAG=1 / -DC3_REGION_STAT=1
+// to this component in main/CMakeLists.txt; the console's S/O reports read the
+// same globals either way and simply show zeros while the counters are off.
+#ifndef C3_IRQ_DIAG
+#define C3_IRQ_DIAG 0
+#endif
+#ifndef C3_REGION_STAT
+#define C3_REGION_STAT 0
+#endif
+
 #if C3_SPLIT && defined(ESP_PLATFORM)
 uint32_t g_cyc_aot = 0;      // inside aot_step (block executed)
 uint32_t g_cyc_inf = 0;      // fetch + fast_step/execute_one (no block)
@@ -788,9 +813,17 @@ uint32_t g_aot_uniq = 0;
 // Missed block entries, recorded on the device so the block list can be extended
 // with the PCs the handset actually runs.  Small open-addressed table: a miss is
 // already the slow path, and 1024 entries is enough to see the shape of a scene.
+//
+// 8 KiB of DRAM for a one-off census.  Compiled out with the rest of the miss
+// census: the device build has C3_MISS_CENSUS=0, the `M` console command then
+// answers with an empty table instead of paying for the storage forever.
+#if C3_MISS_CENSUS
 static uint32_t g_miss_pc[1024];
 static uint32_t g_miss_cnt[1024];
 static uint32_t g_miss_used = 0;
+#else
+static inline void aot_note_miss(uint32_t) {}
+#endif
 
 // Block-entry frequency census.  The device runs scenes the PC sampler never
 // visits, so IRAM placement has to be decided from hardware data: this table
@@ -837,6 +870,7 @@ static void aot_note_block(uint32_t) {}
 void aot_dump_blocks(void) {}
 #endif
 
+#if C3_MISS_CENSUS
 static void aot_note_miss(uint32_t lpc)
 {
 	unsigned h = (lpc * 2654435761u) >> 22;
@@ -864,6 +898,12 @@ void aot_dump_miss(void)
 	}
 	std::printf("CENSUS end %u\n", (unsigned)g_aot_uniq);
 }
+#else
+void aot_dump_miss(void)
+{
+	std::printf("MISSHEAD 0\nCENSUS end %u\n", (unsigned)g_aot_uniq);
+}
+#endif
 
 static void aot_mark_uniq(uint32_t lpc)
 {
@@ -1013,6 +1053,7 @@ UNSP_HOT bool unsp_device::aot_step(const uint32_t lpc)
 #endif
 #ifdef ESP_PLATFORM
 	aot_note_block(lpc);            // device-side frequency census only
+#if C3_REGION_STAT
 	// Region accounting: which part of the guest map is eating the frame.
 	if (lpc < 0x001000u)            g_ins_ram   += cnt;
 	else if (lpc < 0x010000u)       g_ins_irom  += cnt;
@@ -1023,6 +1064,7 @@ UNSP_HOT bool unsp_device::aot_step(const uint32_t lpc)
 	// replace.  If rband stays high while the HLE reports records consumed, the
 	// guest is still walking that range by another route.
 	if (lpc >= 0x207A3Eu && lpc < 0x207D10u) g_ins_band += cnt;
+#endif
 #endif
 	return true;
 }
@@ -1644,6 +1686,7 @@ UNSP_HOT void unsp_device::execute_run()
 		while (core->m_icount >= 0)
 		{
 			const uint32_t lpc = UNSP_LPC;
+#if C3_IRQ_DIAG
 			if (lpc >= 0x004000u && lpc < 0x006000u)
 			{
 				if (lpc >= 0x00486Bu && lpc <= 0x0048AFu)
@@ -1659,6 +1702,7 @@ UNSP_HOT void unsp_device::execute_run()
 					g_pc_ring_ri++;
 				}
 			}
+#endif
 			if (m_block_hist) m_block_hist[lpc & 0x3ffffu]++;
 			// The PRNG block runs from flash (0x2002F4) and, in the scenes that
 			// relocate it, from its RAM copy (0x0002F4).  Same code, same data

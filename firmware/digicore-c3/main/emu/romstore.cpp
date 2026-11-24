@@ -13,9 +13,16 @@ void SparseRom::clear()
 	m_loads = 0;
 	m_overlay_hits = 0;
 	m_writes = 0;
-	m_ov_lo = 1;
+	// lo > hi is the empty range: read16() and page_window() test it directly.
+	m_ov_lo = 0xffffffffu;
 	m_ov_hi = 0;
+#ifdef ESP_PLATFORM
+	// Null until alloc_cache(): a mapped build never has a page cache at all.
+	if (m_cache)
+		std::memset(m_cache, 0, size_t(SLOTS) * PAGE_WORDS * 2u);
+#else
 	std::memset(m_cache, 0, sizeof(m_cache));
+#endif
 	std::memset(m_overlay, 0, sizeof(m_overlay));
 }
 
@@ -37,6 +44,8 @@ int SparseRom::slot_holding(uint32_t page) const
 
 uint16_t SparseRom::read16_miss(uint32_t off, uint32_t page, uint32_t h)
 {
+	if (!m_cache)
+		return 0xffffu;                 // unreachable unless the store is unmounted
 	uint16_t *dst = m_cache + h * PAGE_WORDS;
 
 	// A written page must be served from the overlay, not from flash.
@@ -79,6 +88,8 @@ uint16_t SparseRom::read16_overlay(uint32_t off, uint32_t page)
 		return w;
 	}
 	const uint32_t h = (page ^ (page >> 4)) & uint32_t(SLOTS - 1);
+	if (!m_cache)
+		return 0xffffu;
 	if (m_tag[h] != page)
 		return read16_miss(off, page, h);
 	return m_cache[h * PAGE_WORDS + ((off >> 1) & (PAGE_WORDS - 1))];
@@ -136,7 +147,7 @@ void SparseRom::program_byte(uint32_t off, uint8_t data)
 
 	// Keep a resident cache line coherent so the fast path stays correct.
 	const int s = slot_holding(off >> PAGE_BITS);
-	if (s >= 0)
+	if (s >= 0 && m_cache)
 		m_cache[s * PAGE_WORDS + wi] = ov[wi];
 
 	m_writes++;
@@ -156,7 +167,7 @@ void SparseRom::erase_sector(uint32_t off)
 		ov[i] = 0xffffu;
 
 	const int s = slot_holding(page);
-	if (s >= 0) {
+	if (s >= 0 && m_cache) {
 		for (uint32_t i = 0; i < PAGE_WORDS; i++)
 			m_cache[s * PAGE_WORDS + i] = 0xffffu;
 	}
@@ -194,7 +205,7 @@ bool SparseRom::overlay_import(uint32_t page, const uint8_t *src)
 
 	// Keep a resident cache line coherent, exactly like program_byte() does.
 	const int s = slot_holding(page);
-	if (s >= 0)
+	if (s >= 0 && m_cache)
 		std::memcpy(m_cache + s * PAGE_WORDS, ov, PAGE_SIZE);
 
 	return true;

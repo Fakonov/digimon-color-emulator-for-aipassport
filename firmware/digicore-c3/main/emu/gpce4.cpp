@@ -1,4 +1,4 @@
-﻿// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 //  gpce4.cpp - Generalplus GPCE4 SoC (unSP 2.0, Sunplus)
 //
 //  Port of MAME 0.289:
@@ -20,6 +20,21 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+
+// Frame-tick store probe: counts who writes 0x0850 and from which PC.  It was
+// how the 2026-11-23 investigation proved the 64 Hz handler was running; that
+// question is answered, and the probe sits in the *every RAM write* path of the
+// SoC, so it is compiled out by default.  Re-enable with -DC3_TICK_DIAG=1.
+#ifndef C3_TICK_DIAG
+#define C3_TICK_DIAG 0
+#endif
+
+// Per-40-M-guest-cycle tick() trace on the serial console.  It printed during
+// the timer-coalescing work; left on, every call is a blocking UART format on
+// the frame path.  Off unless the build asks for it.
+#ifndef C3_TICK_TRACE
+#define C3_TICK_TRACE 0
+#endif
 
 namespace {
 
@@ -661,6 +676,7 @@ void Gpce4::write16(uint32_t addr, uint16_t data)
     addr &= ADDR_MASK;
 
     if (addr < 0x001000) {
+#if C3_TICK_DIAG
         if (addr == 0x0850) {           // frame-tick counter, diagnostic only
             g_tick_writes++;
             g_tick_val = data;
@@ -668,6 +684,7 @@ void Gpce4::write16(uint32_t addr, uint16_t data)
                 g_tick_pc = (((uint32_t(m_cpu->m_core->m_r[unsp_device::REG_SR]) >> 10) & 0x3fu) << 16) |
                             (m_cpu->m_core->m_r[unsp_device::REG_PC] & 0xffffu);
         }
+#endif
         ram[addr] = data;
         return;
     }
@@ -823,10 +840,22 @@ void Gpce4::io_w(uint16_t ofs, uint16_t data)
 // Port A read counter, defined with the interrupt counters further down.
 extern uint32_t g_ioa_reads;
 
+// Per-5000-read trace of PORTA.  This is the probe that answered "does the ROM
+// ever read the port" on 2026-11-23 (AUDIT_2026-11-23 §2.3).  It sits in the
+// key-read path of the frame loop and its guard is `% 5000u`: riscv32imc has no
+// hardware divider, so every single PORTA read pays a __umodsi3 call (~40
+// cycles) to decide whether to print.  On the device that is tens of thousands
+// of divisions per second, i.e. a double-digit share of the CPU.  Count only by
+// default; -DC3_IOA_TRACE=1 brings the trace back.
+#ifndef C3_IOA_TRACE
+#define C3_IOA_TRACE 0
+#endif
+
 uint16_t Gpce4::ioa_data_r()
 {
 #ifdef ESP_PLATFORM
     g_ioa_reads++;
+#if C3_IOA_TRACE
     {
         static unsigned n = 0;
         if ((++n % 5000u) == 1u) {
@@ -840,6 +869,7 @@ uint16_t Gpce4::ioa_data_r()
         }
     }
 #endif
+#endif
     return m_port_in[0];
 }                                                                            // :296
 void     Gpce4::ioa_data_w(uint16_t) { /* m_porta_out(data): nothing wired */ } // :302
@@ -847,11 +877,13 @@ void     Gpce4::ioa_data_w(uint16_t) { /* m_porta_out(data): nothing wired */ } 
 uint16_t Gpce4::ioa_buffer_r()
 {
 #ifdef ESP_PLATFORM
+#if C3_IOA_TRACE
     {
         static unsigned n = 0;
         if ((++n % 5000u) == 1u)
             std::printf("[iob] reads=%u val=%04x\n", n, unsigned(m_port_in[0]));
     }
+#endif
 #endif
     return m_port_in[0];
 }                                                                            // :308
@@ -1504,7 +1536,7 @@ void Gpce4::tick(uint32_t cycles)
     }
 
     m_now = target;
-#ifdef ESP_PLATFORM
+#if defined(ESP_PLATFORM) && C3_TICK_TRACE
     {
         static uint64_t next_log = 0;
         if (m_now >= next_log) {

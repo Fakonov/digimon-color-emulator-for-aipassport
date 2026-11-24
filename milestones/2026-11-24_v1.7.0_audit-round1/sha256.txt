@@ -1,0 +1,13 @@
+# v1.7.0 build fingerprints (2026-11-24)
+
+## In this directory (archived)
+7aa3e81e57d9e935617a69d211ff84d8d830b78cd34842ef1c45bae05a235daa  digicore-c3-v1.7.0.bin  1,192,640 B   app partition image, no ROM
+
+## Rebuildable, not archived
+e5d92fba694126525b2fafc7fe95b4c3ad221866888049b5edafb8a954e0b618  digicore-c3-full.bin     4,677,888 B   merged image, CONTAINS the sparse ROM partition
+c6fcaa69329d682965dff82d0b186bd34a28ba6d0da6973c50ba8bb59f749a6f  sparse/digicore-sparse.bin 2,515,200 B  ROM page store (unchanged since v1.6.0)
+
+## Device state at flash time (2026-11-24 17:2x)
+roms header 4 KiB   c244169f937bb184942cacc3409ab638c2df36f23f9c85f51a178f0855181874  (identical before/after)
+save partition      changed only in slot B: DGSV sequence 0x42/0x43 -> 0x44/0x45, i.e. the
+                    game saved twice during the run. Slot A untouched. See README section 2.
