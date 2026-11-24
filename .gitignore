@@ -1,0 +1,44 @@
+# build output
+build/
+build-sim/
+*.bin
+*.elf
+*.map
+sdkconfig.old
+sdkconfig
+dependencies.lock.bak
+
+# the SoC's internal mask ROM is the one .bin that belongs in the tree
+!firmware/digicore-c3/main/assets/internal_rom_221017a.bin
+
+# ROM images and their sparse page store: never in the repo
+roms/*.bin
+firmware/digicore-c3/sparse/
+
+# ESP-IDF managed dependencies (restored from dependencies.lock)
+managed_components/
+
+# generated emulator blocks (rebuild with tools/aot.py)
+# kept in the tree on purpose: build.ps1 does not regenerate it, and a clone
+# that cannot compile is worse than a 3.8 MB generated file.
+# firmware/digicore-c3/main/emu/aot_blocks.c
+
+# host tools
+*.exe
+*.o
+*.obj
+*.pdb
+*.log
+*.pgm
+*.bmp
+
+# python / node
+__pycache__/
+*.pyc
+node_modules/
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

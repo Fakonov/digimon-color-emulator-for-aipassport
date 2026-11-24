@@ -1,0 +1,357 @@
+// Minimal ES8311 + I2S0 output for the AI Passport (ESP32-C3) board.
+//
+// Why this file exists
+// --------------------
+// The GPCE4 ROM in roms/dmc_v1_base.bin never writes the DAC registers.  That
+// was measured four independent ways (see docs/DELIVERY_2026-11-22.md section
+// 5): zero DAC operands in the 8 MB flash image, sixteen in the internal ROM
+// of which all are production-test or dead fade helpers, zero DAC writes in a
+// 60 s dynamic trace, and an empty IRQ0 handler that is a bare reti.  So the
+// emulated console has no sound to forward - there is no audio stream to tap.
+//
+// The hardware, however, is fully wired: ES8311 codec at I2C 0x18 sharing the
+// bus with the CW2017 fuel gauge, I2S0 full duplex on MCLK=6 BCLK=5 WS=3
+// DOUT=2 DIN=4, and the speaker amplifier is tied always-on (no GPIO).  What
+// was missing was firmware.  This module fills that gap with a square-wave
+// synthesiser so the device can at least answer a key press with a beep.
+//
+// This is explicitly a synthetic sound, not emulation.  Nothing here claims to
+// reproduce the original console's audio, because the original console's audio
+// does not exist in this cartridge.
+//
+// Register values follow the local esp_codec_dev ES8311 driver
+// (digimon-passport/firmware/digimon-passport/managed_components/
+//  espressif__esp_codec_dev/device/es8311/es8311.c) for 48 kHz, 16 bit, MCLK =
+// 256 * fs = 12.288 MHz, codec as I2S slave, DAC only.
+
+#include "audio.h"
+
+#include <math.h>
+#include <string.h>
+
+#include "driver/gpio.h"
+#include "driver/i2c_master.h"
+#include "driver/i2s_std.h"
+#include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
+
+static const char *TAG = "audio";
+
+#define AUDIO_I2C_PORT 0
+#define AUDIO_I2C_SDA  10
+#define AUDIO_I2C_SCL  7
+#define AUDIO_ES8311_ADDR 0x18
+
+#define AUDIO_MCLK_GPIO 6
+#define AUDIO_BCLK_GPIO 5
+#define AUDIO_WS_GPIO   3
+#define AUDIO_DOUT_GPIO 2
+
+#define AUDIO_RATE      48000
+#define AUDIO_MCLK_HZ   (AUDIO_RATE * 256)
+
+static i2c_master_bus_handle_t s_bus;
+static i2c_master_dev_handle_t s_codec;
+static i2s_chan_handle_t s_tx;
+static bool s_ready;
+// A beep request is queued and rendered by audio_task.  It must not block the
+// caller: the emulator loop calls this from update_buttons(), and an 18 ms
+// synchronous I2S write there would add 18 ms to every frame that sees a press.
+typedef struct
+{
+	int freq;
+	int ms;
+} beep_req_t;
+
+static QueueHandle_t s_req;
+
+static void render_beep(int freq, int ms);
+
+static void audio_task(void *arg)
+{
+	beep_req_t r;
+	for (;;)
+	{
+		if (xQueueReceive(s_req, &r, portMAX_DELAY) != pdTRUE)
+			continue;
+		render_beep(r.freq, r.ms);
+	}
+}
+
+static volatile int s_volume_pct = 55;
+static bool s_wrote_ok;
+
+// ---------------------------------------------------------------------------
+// ES8311
+// ---------------------------------------------------------------------------
+
+static esp_err_t reg_w(uint8_t reg, uint8_t val)
+{
+	uint8_t buf[2] = { reg, val };
+	return i2c_master_transmit(s_codec, buf, sizeof(buf), 100);
+}
+
+static esp_err_t reg_r(uint8_t reg, uint8_t *out)
+{
+	return i2c_master_transmit_receive(s_codec, &reg, 1, out, 1, 100);
+}
+
+static esp_err_t es8311_init(void)
+{
+	// Soft reset, then release.  There is no reset GPIO on this board.
+	esp_err_t err = reg_w(0x00, 0x1F);
+	if (err != ESP_OK)
+		return err;
+	vTaskDelay(pdMS_TO_TICKS(20));
+	err = reg_w(0x00, 0x00);
+	if (err != ESP_OK)
+		return err;
+	err = reg_w(0x00, 0x80);        // power on, slave mode
+	if (err != ESP_OK)
+		return err;
+
+	// Clock manager: MCLK from the SoC, 256 * fs, codec derives BCLK/LRCK.
+	reg_w(0x01, 0x3F);              // all clocks on
+	reg_w(0x02, 0x00);              // pre_div = 1
+	reg_w(0x05, 0x00);              // adc/dac divider = 1
+	reg_w(0x03, 0x10);              // fs_mode 48k, single speed
+	reg_w(0x04, 0x10);              // dac osr
+	reg_w(0x07, 0x00);              // lrck high
+	reg_w(0x08, 0xFF);              // lrck low
+	reg_w(0x06, 0x03);              // bclk divider low 5 bits
+
+	// Format: 16 bit, I2S, DAC only.
+	reg_w(0x09, 0x0C);              // SDP in: 16 bit
+	reg_w(0x0A, 0x0C);              // SDP out: 16 bit
+	reg_w(0x0B, 0x00);              // no tri-state
+	reg_w(0x0C, 0x00);              // single speed, no dither
+
+	// The vendor driver brings the chip up in two passes and the *running* value
+	// of the system-power register is 0x01, not the 0xFC used during bring-up.
+	// 0xFC only appears in the middle of the sequence; leaving it there parks the
+	// chip in a state where I2S happily consumes samples, the DMA drains, and the
+	// speaker stays silent - which is exactly what the hardware did.
+	//
+	// Pass 1, mirrored from es8311.c:246-258.
+	reg_w(0x17, 0x00);              // ADC reference off while configuring
+	reg_w(0x0E, 0xFF);              // analog PGA off
+	reg_w(0x12, 0x02);              // DAC powered down
+	reg_w(0x0D, 0xFA);              // system power: analog off
+	reg_w(0x15, 0x00);              // ADC ramp rate 0
+	reg_w(0x45, 0x00);              // GPIO/DAC output routing
+	reg_w(0x0D, 0xFC);              // system power: bring up both rails
+
+	// Pass 2, mirrored from es8311.c:310-329 - this is the final state.
+	reg_w(0x17, 0xBF);              // ADC reference on
+	reg_w(0x0E, 0x02);              // analog PGA on
+	reg_w(0x12, 0x00);              // DAC on
+	reg_w(0x14, 0x1A);              // analog mic bias (unused, vendor value)
+	reg_w(0x0D, 0x01);              // <-- the running system-power value
+	reg_w(0x15, 0x40);              // ADC ramp rate
+	reg_w(0x37, 0x08);              // bypass DAC equaliser
+	reg_w(0x45, 0x00);              // DAC drives the analog output pins
+
+	reg_w(0x13, 0x10);              // enable headphone / line driver
+	reg_w(0x1C, 0x6A);              // ADC equaliser bypass (not used)
+	reg_w(0x31, 0x00);              // unmute
+	reg_w(0x32, 0xBF);              // 0 dB
+
+	uint8_t id = 0;
+	if (reg_r(0xFD, &id) == ESP_OK)
+		ESP_LOGI(TAG, "ES8311 id=%02X at 0x%02X", id, AUDIO_ES8311_ADDR);
+	return ESP_OK;
+}
+
+// ---------------------------------------------------------------------------
+// I2S
+// ---------------------------------------------------------------------------
+
+static esp_err_t i2s_start_output(void)
+{
+	i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+	chan.auto_clear = true;
+	esp_err_t err = i2s_new_channel(&chan, &s_tx, NULL);
+	if (err != ESP_OK)
+		return err;
+
+	i2s_std_config_t cfg = {
+		.clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(AUDIO_RATE),
+		.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT,
+		                                              I2S_SLOT_MODE_STEREO),
+		.gpio_cfg = {
+			.mclk = AUDIO_MCLK_GPIO,
+			.bclk = AUDIO_BCLK_GPIO,
+			.ws = AUDIO_WS_GPIO,
+			.dout = AUDIO_DOUT_GPIO,
+			.din = I2S_GPIO_UNUSED,
+			.invert_flags = {
+				.mclk_inv = false,
+				.bclk_inv = false,
+				.ws_inv = false,
+			},
+		},
+	};
+	// The codec wants MCLK = 256 * fs; the default multiple is 256 already, but
+	// pin it so a future rate change cannot silently break the codec PLL.
+	cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
+
+	err = i2s_channel_init_std_mode(s_tx, &cfg);
+	if (err != ESP_OK)
+		return err;
+	return i2s_channel_enable(s_tx);
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+bool audio_init(void)
+{
+	i2c_master_bus_config_t bus_cfg = {
+		.i2c_port = AUDIO_I2C_PORT,
+		.sda_io_num = AUDIO_I2C_SDA,
+		.scl_io_num = AUDIO_I2C_SCL,
+		.clk_source = I2C_CLK_SRC_DEFAULT,
+		.glitch_ignore_cnt = 7,
+		.flags.enable_internal_pullup = true,
+	};
+	if (i2c_new_master_bus(&bus_cfg, &s_bus) != ESP_OK)
+	{
+		ESP_LOGW(TAG, "i2c bus init failed");
+		return false;
+	}
+	i2c_device_config_t dev_cfg = {
+		.dev_addr_length = I2C_ADDR_BIT_LEN_7,
+		.device_address = AUDIO_ES8311_ADDR,
+		.scl_speed_hz = 100000,
+	};
+	if (i2c_master_bus_add_device(s_bus, &dev_cfg, &s_codec) != ESP_OK)
+	{
+		ESP_LOGW(TAG, "es8311 not on the bus");
+		return false;
+	}
+	if (es8311_init() != ESP_OK)
+	{
+		ESP_LOGW(TAG, "es8311 init failed");
+		return false;
+	}
+	if (i2s_start_output() != ESP_OK)
+	{
+		ESP_LOGW(TAG, "i2s init failed");
+		return false;
+	}
+	s_req = xQueueCreate(4, sizeof(beep_req_t));
+	if (!s_req)
+	{
+		ESP_LOGW(TAG, "beep queue alloc failed");
+		return false;
+	}
+	// Same priority as the emulator loop (app_main runs at 1).  Anything higher
+	// would preempt the guest for the 10-18 ms an I2S write takes; at equal
+	// priority the round robin still lets the loop run, and the task is blocked
+	// on the queue the rest of the time anyway.
+	if (xTaskCreate(audio_task, "audio", 3072, NULL, 1, NULL) != pdPASS)
+	{
+		ESP_LOGW(TAG, "audio task spawn failed");
+		return false;
+	}
+	s_ready = true;
+	ESP_LOGI(TAG, "ready: ES8311 + I2S0 %d Hz, amp always on", AUDIO_RATE);
+	return true;
+}
+
+void audio_set_volume(int pct)
+{
+	if (pct < 0)
+		pct = 0;
+	if (pct > 100)
+		pct = 100;
+	s_volume_pct = pct;
+	// ES8311 REG32 runs 0x00 = -95.5 dB up to 0xFF = +32 dB at 0.5 dB per step
+	// (es8311.c:145-156), so 0xBF is exactly 0 dB.  The mapping that used to
+	// live here - (100 - pct) * 255 / 100, later (100 - pct) * 0x40 / 100 - was
+	// wrong in both direction and span: at the default 55 % the first gave
+	// 0x72 (-38.5 dB) and the second 0x1C (-81.5 dB, i.e. silence).  Park the
+	// codec at 0 dB and do the level control in the 16-bit domain inside
+	// render_beep() (amp = 12000 * s_volume_pct / 100), where the scaling is
+	// linear and cannot fall off the bottom of the register.
+	if (s_ready)
+		reg_w(0x32, 0xBF);
+}
+
+static void render_beep(int freq, int ms)
+{
+	if (!s_ready || freq <= 0 || ms <= 0)
+		return;
+
+	const int total = AUDIO_RATE * ms / 1000;
+	const int half = AUDIO_RATE / (freq * 2);
+	if (half <= 0)
+		return;
+
+	static int16_t buf[512];
+	int written = 0;
+	int phase = 0;
+	const int16_t amp = (int16_t)(12000 * s_volume_pct / 100);
+
+	while (written < total)
+	{
+		int n = 0;
+		while (n < 256 && written + n < total)
+		{
+			const int16_t v = (phase < half) ? amp : (int16_t)-amp;
+			buf[n * 2 + 0] = v;
+			buf[n * 2 + 1] = v;
+			if (++phase >= half * 2)
+				phase = 0;
+			n++;
+		}
+		size_t sent = 0;
+		const esp_err_t werr = i2s_channel_write(s_tx, buf, (size_t)n * 4, &sent, 100);
+		if (!s_wrote_ok)
+		{
+			s_wrote_ok = true;
+			ESP_LOGI(TAG, "first i2s write: err=%d sent=%u of %u",
+			         (int)werr, (unsigned)sent, (unsigned)(n * 4));
+		}
+		if (werr != ESP_OK)
+			break;
+		written += n;
+	}
+}
+
+void audio_beep(int freq, int ms)
+{
+	if (!s_ready || !s_req || freq <= 0 || ms <= 0)
+		return;
+	const beep_req_t r = { freq, ms };
+	// Drop when the queue is full: a backlog of clicks is worse than a missed one.
+	if (xQueueSend(s_req, &r, 0) != pdTRUE)
+		ESP_LOGD(TAG, "beep queue full, dropping %d Hz", freq);
+}
+
+void audio_silence(int ms)
+{
+	if (!s_ready || ms <= 0)
+		return;
+	static int16_t zeros[256];
+	const int total = AUDIO_RATE * ms / 1000;
+	int written = 0;
+	while (written < total)
+	{
+		int n = (total - written) < 128 ? (total - written) : 128;
+		size_t sent = 0;
+		if (i2s_channel_write(s_tx, zeros, (size_t)n * 4, &sent, 100) != ESP_OK)
+			break;
+		written += n;
+	}
+}
+
+// See audio.h: the fuel gauge shares these pins, so it must not open a bus.
+void *audio_i2c_bus(void)
+{
+	return s_ready ? (void *)s_bus : NULL;
+}
