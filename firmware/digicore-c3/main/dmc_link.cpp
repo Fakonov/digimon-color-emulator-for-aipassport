@@ -352,8 +352,13 @@ void save_send()
 
 void hello()
 {
+    // Report the partition, not saveimg: with no ROM the engine never gets to
+    // guest_init(), so saveimg_init() never ran either - but the save slot is
+    // still there and export/import work on it.
+    const esp_partition_t *sp = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, esp_partition_subtype_t(0x41), "save");
     std::printf("DMC1 READY %d %s %d\n", s_rom_ok ? 1 : 0,
-                s_rom_ok ? "loaded" : "-", saveimg_ready() ? 1 : 0);
+                s_rom_ok ? "loaded" : "-", sp != nullptr ? 1 : 0);
 }
 
 }  // namespace

@@ -2,8 +2,8 @@
 
 ## In this directory (archived)
 8c469203d5c723e552f207ae468a0caf245cbcda46c88c0a06185ed892e0cdd4  digicore-c3-v1.6.0.bin  1,205,696 B   app partition image, no ROM
-7b254ed6e1267e5388e383cbd1388cced4352ea4507f78cacf8858968f569423  dmc_web.html             14,735 B   Web Serial transfer page
+90a146887d4e5405f958e8d634b8276a6d95b8fca4341197b9661b611b4a5142  dmc_web.html             14,722 B   Web Serial transfer page
 
 ## Rebuildable, not archived
-a1b56706b70f52dbee70f6bccf54b6c703e2123a3404cecc9a38a5b8bcbce62b  digicore-c3-full.bin     4,677,888 B   merged image, CONTAINS the sparse ROM partition
+cc09d254a510aa6e82743f4364d9afa31321c2633c6806a6d2b7032ae4613f55  digicore-c3-full.bin     4,677,888 B   merged image, CONTAINS the sparse ROM partition
 c6fcaa69329d682965dff82d0b186bd34a28ba6d0da6973c50ba8bb59f749a6f  sparse/digicore-sparse.bin 2,515,200 B  ROM page store, uploaded by the web page
