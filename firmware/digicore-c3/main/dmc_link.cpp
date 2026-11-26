@@ -34,6 +34,7 @@
 
 #include "rom_esp.h"
 #include "saveimg.h"
+#include "wallclock.h"
 
 namespace {
 
@@ -393,7 +394,17 @@ bool dmclink_exec(const char *line)
 {
     if (std::strncmp(line, "DMC1", 4) != 0)
         return false;
-    if (std::strcmp(line, "DMC1 HELLO") == 0) {
+    if (std::strncmp(line, "DMC1 HELLO", 10) == 0) {
+        // The web page already announces itself here, and it is the only party
+        // on this cable that knows what time it is.  An optional
+        // "DMC1 HELLO <epoch> [tz_min]" therefore doubles as the clock sync:
+        // the board has no RTC, so without this the guest clock can only resume
+        // from the last snapshot (docs/AUDIT_SAVE_CLOCK_2026-11-24_R3.md).
+        long long epoch = 0;
+        int tz = 480;
+        const int n = std::sscanf(line, "DMC1 HELLO %lld %d", &epoch, &tz);
+        if (n >= 1 && epoch > 1600000000LL)
+            wallclock_set(int64_t(epoch), n >= 2 ? tz : 480);
         hello();
         return true;
     }

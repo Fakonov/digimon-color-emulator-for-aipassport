@@ -1,4 +1,4 @@
-﻿# digicore-c3: the Digimon Color GPCE4 model + unSP interpreter on the C3.
+# digicore-c3: the Digimon Color GPCE4 model + unSP interpreter on the C3.
 #
 # main/emu/* is a copy of emu/* (the PC harness) with three device-side edits:
 #   gpce4.h/.cpp  SPI flash behind SparseRom instead of a host pointer
@@ -11,6 +11,7 @@ idf_component_register(
          "saveimg.cpp"
          "gueststate.cpp"
          "fbsave.cpp"
+         "wallclock.cpp"
          "menu.cpp"
          "bezel.cpp"
          "dmc_link.cpp"
@@ -71,6 +72,12 @@ target_add_binary_data(${COMPONENT_LIB} "assets/internal_rom_221017a.bin" BINARY
 # level CMakeLists feeds it to PROJECT_VER (so it lands in the app descriptor
 # and idf.py / esptool report it), and here it becomes a string macro the code
 # can print without pulling in esp_app_format just to read its own descriptor.
+# version.txt has to be a configure dependency: without this, editing it alone does
+# not re-run cmake, DIGICORE_VERSION keeps the old string and `V` on the console
+# reports the previous release while the new code is running (measured
+# 2026-11-25: v1.10.1 image still answered ver=1.10.0).
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_LIST_DIR}/../version.txt")
 file(READ "${CMAKE_CURRENT_LIST_DIR}/../version.txt" DIGICORE_VER_RAW)
 string(STRIP "${DIGICORE_VER_RAW}" DIGICORE_VER)
 target_compile_definitions(${COMPONENT_LIB} PRIVATE "DIGICORE_VERSION=\"${DIGICORE_VER}\"")

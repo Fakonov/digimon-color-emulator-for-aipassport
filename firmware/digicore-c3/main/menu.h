@@ -14,18 +14,32 @@
 // can never be pressed.  The official manual lists two of them as real features
 // (A+C on the clock screen changes the time, A+B on the grave hatches a new
 // egg), so they live as command rows instead of gestures.
-enum { MENU_ITEMS = 9 };
+//
+// TIME LAPSE is the emulator's answer to "let it grow faster": the ROM already
+// carries a 60x flag (RAM 0x0D03, internal ROM 0x5C10 adds +0x3C seconds per
+// carry), and feeding the software RTC extra half-second ticks lets the host
+// pick any rate between 1x and 60x.  Growth, hunger, sleep and death all run on
+// the same second-carry pulse, so they accelerate together and keep their
+// original order - unlike editing the clock, which the ROM explicitly does not
+// let affect growth.
+enum { MENU_ITEMS = 8 };
 enum {
     MENU_IDX_CHORD    = 0,   // SEND A+C
     MENU_IDX_CHORD_AB = 1,   // SEND A+B
-    MENU_IDX_AUTO_OFF = 2,
-    MENU_IDX_BRIGHT   = 3,
-    MENU_IDX_VOLUME   = 4,
-    MENU_IDX_AUTOSAVE = 5,
-    MENU_IDX_SAVE_OUT = 6,
-    MENU_IDX_SAVE_IN  = 7,
-    MENU_IDX_ABOUT    = 8,
+    MENU_IDX_LAPSE    = 2,   // TIME LAPSE: 1x / 15x / 60x / 300x
+    MENU_IDX_AUTO_OFF = 3,
+    MENU_IDX_BRIGHT   = 4,
+    MENU_IDX_VOLUME   = 5,
+    MENU_IDX_AUTOSAVE = 6,
+    MENU_IDX_ABOUT    = 7,
 };
+// SAVE OUT / SAVE IN were rows 6 and 7 until 2026-11-25.  A manual load restores
+// the newest snapshot, which is the autosave one, and those are taken while the
+// guest sits in its ROM park loop: the CPU cannot resume there, so the load
+// replayed power-on and the game restarted.  It also fought the autosave ring
+// (one "save" could be overwritten by the next autosave 60 s later), so the two
+// rows were removed.  The autosave covers the power-cut case; the console still
+// has `D` and `U` for bench work.
 
 // Rows that are commands rather than values.  menu_press_b() on one of them
 // queues the request here; app_main drains it with menu_take_action() so the
@@ -33,10 +47,8 @@ enum {
 // injected.
 enum {
     MENU_ACTION_NONE = 0,
-    MENU_ACTION_SAVE = 1,
-    MENU_ACTION_LOAD = 2,
-    MENU_ACTION_CHORD = 3,
-    MENU_ACTION_CHORD_AB = 4,
+    MENU_ACTION_CHORD = 1,
+    MENU_ACTION_CHORD_AB = 2,
 };
 int  menu_take_action();      // returns the queued action and clears it
 
@@ -56,6 +68,14 @@ int  menu_auto_off_sec();     // 16 = follow the machine, 0 = never sleep
 int  menu_bright_pct();       // 20..100
 int  menu_volume_pct();       // 0..100
 int  menu_autosave_sec();     // 0 = off, otherwise the guest-state snapshot period
+
+// Game-time multiplier: 1 (off), 15, 60 or 300.  Above 60 the host also sets
+// the ROM's own 60x flag, so one injected carry becomes a whole minute.
+int  menu_time_lapse_x();
+// Console/test hook: pick a mode by index (0..3) and persist it.  Returns the
+// multiplier that is now selected.
+int  menu_set_time_lapse_idx(int idx);
+int  menu_time_lapse_idx();
 
 // Where the emulator's framebuffer sits on the panel.  The menu pushes whole
 // scanlines, so the pixels it does not own have to come from somewhere: filling
@@ -87,6 +107,14 @@ void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg);
 // emulator's auto-off is set longer than the machine's 16 s.  `strip` needs
 // 2 * width * 8 bytes and width is the whole panel width (320).
 void menu_banner_present(uint8_t *strip, int width, const char *text);
+
+// Single-line time-lapse notice: 240x22 in the 24 px strip below the guest
+// window (the window ends at y = 216 of 240), so it covers neither the pet nor
+// the bottom status-icon row.  It is modal - app_main swallows every key except
+// B while it is up - and it is redrawn every frame on top of the live picture,
+// which is cheap at this size (5.3 k pixels against the 37 k of the blit).
+// `strip` needs 2 * 240 * 22 bytes.
+void menu_lapse_toast_present(uint8_t *strip, int w, int h, const char *speed);
 
 // Debug aid: dump the next `frames` menu pushes to the console as downsampled
 // hex rows ("B <band> <y> <pixels>").  The menu paints straight to the panel

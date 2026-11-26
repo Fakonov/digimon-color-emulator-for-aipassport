@@ -1,0 +1,2 @@
+# v1.10.1 app image (app partition 0x10000, not including ROM or save)
+digicore-c3-v1.10.1.bin  F3DA05F0D36887E74D17C583648148154F42E09D4265460BE463BA2850C30EAB

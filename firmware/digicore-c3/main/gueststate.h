@@ -13,8 +13,8 @@
 //  not adjacent in memory.
 //
 //  A record is three 4 KiB sectors, so erasing one only costs those three and
-//  the ring spreads the wear across all of them: a snapshot every 60 s is ~1440
-//  writes a day over eight positions, well inside the flash's endurance.
+//  the ring spreads the wear across all five of them: a snapshot every 60 s is
+//  ~1440 writes a day over five positions, well inside the flash endurance.
 //
 //  Record layout (GUESTSTATE_RECORD_SIZE = 12 KiB, three erase sectors):
 //
@@ -60,3 +60,8 @@ bool gueststate_load(void *a, uint32_t len_a, void *b, uint32_t len_b);
 
 // Sequence number of the newest record, 0 when there is none.
 uint32_t gueststate_newest_seq();
+
+// Test hook: wipe the newest record's magic so the next load has to fall back
+// to an older record.  This is the only way to exercise the torn-write path
+// from the console; a half-written record cannot be produced on demand.
+bool gueststate_invalidate_newest();

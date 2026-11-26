@@ -174,6 +174,11 @@ void SparseRom::erase_sector(uint32_t off)
 	m_writes++;
 }
 
+void SparseRom::overlay_touch()
+{
+    m_writes++;
+}
+
 int SparseRom::overlay_export(uint32_t *pages, uint8_t *dst, int max_pages) const
 {
 	int n = 0;
@@ -198,10 +203,11 @@ bool SparseRom::overlay_import(uint32_t page, const uint8_t *src)
 
 	std::memcpy(ov, src, PAGE_SIZE);
 
-	// Count it like a guest program would, so persist_save_image() notices the
-	// change and starts its settle timer.  Without this an injected image sits
-	// in the overlay and never reaches the partition.
-	m_writes++;
+	// Deliberately NOT counted as a guest write.  This call is how a saved page
+	// comes back at boot; counting it made persist_save_image() see a "change"
+	// two seconds after every boot and re-store the same bytes into the other
+	// slot - one 16 KiB sector erase and an 8 KiB program per power-up, for
+	// nothing.  The console `W` probe marks the store dirty with overlay_touch().
 
 	// Keep a resident cache line coherent, exactly like program_byte() does.
 	const int s = slot_holding(page);

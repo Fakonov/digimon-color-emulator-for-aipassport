@@ -95,6 +95,19 @@ bool fbsave_store(const void *pixels, uint32_t bytes)
     return true;
 }
 
+uint32_t fbsave_stored_crc()
+{
+    if (!fbsave_init())
+        return 0;
+    FrameHeader h;
+    if (esp_partition_read(s_part, kBase, &h, sizeof(h)) != ESP_OK)
+        return 0;
+    if (h.magic != kMagic || h.version != kVersion || h.bytes == 0 ||
+        h.bytes + sizeof(FrameHeader) > kRegion)
+        return 0;
+    return h.crc;
+}
+
 bool fbsave_load(void *pixels, uint32_t bytes)
 {
     if (!fbsave_init())

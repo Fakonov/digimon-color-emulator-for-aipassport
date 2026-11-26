@@ -337,3 +337,85 @@
 - 四个坑：轮询追不上 50 ms 音符（改事件驱动）、音频任务优先级 1 被饿死（改 3）、codec 空闲 15 s 断电后不唤醒、音量五轮听感标定 20000→10000→5000→2500→1250。
 - 设备：v1.9.0 已烧 COM4，`VER ver=1.9.0`；`blocks` 96/s（100 % 实时），菜单 20 % 听感合适。
 - 里程碑：`milestones/2026-11-24_v1.9.0_rom-audio/`；取证：`docs/RESEARCH_AUDIO_2026-11-24.md`、`_research/audio_probe/FINDINGS_2026-11-24.md`。
+
+## 2026-11-24 23:5x — v1.10.0：第三轮审计（存档 / 读档 / 自动存档 / 时钟）
+
+- 报告：`docs/AUDIT_SAVE_CLOCK_2026-11-24_R3.md`（17,872 B / 242 行）；里程碑 `milestones/2026-11-24_v1.10.0_save-clock/`（README 4,654 B / 66 行 + app 镜像 + sha256）。
+- 用户报“游戏时钟比真实时间慢”。v1.9.0 同测法（首末各采一次、中间不打扰）：唤醒态 **0.317x**（20 客人秒 / 63.1 宿主秒）、挂机态 **0.7438x**（47 / 63.2）；开机 6 分钟后界面 `23:13:20` 对宿主 `23:19:19`。
+- 根因三条：①种子取 `__TIME__`（编译时刻，镜像放一天就慢一天，每次重启都回去）；②软件 RTC 由 2 Hz 中断 + 帧体 `0x5BE2` 驱动，客人挂机/关中断/宿主丢帧就不走；③第 120 帧无条件重播 `__TIME__`，读档后把恢复的时钟冲掉。
+- 存档侧另外四个缺陷：`guest_pc()` 取 SR[10..15]（那是 DS，PC bank 在 SR[0..5]）→ 自动存档守卫与恢复守卫全部误判；`fb_crc` 只写不校验（帧块是 5 条记录共用的单块）；`gueststate_load()` 先拷后校验（失败时把活 RAM 写坏，`U` 命令中招）；`system_sleep_w()` 拒绝休眠后仍置 `asleep=1`，挂机 16 s 后自动存档彻底停摆。
+- 修复：新增 `wallclock.{h,cpp}`（NVS 纪元 + 固定时区，来源 console > nvs > guest > build）；`clock_sync()` 每 250 ms 比对、±1 s 死区内交给客人自己走、超出写回 `0x0CAF/0x0CAE/0x0CAD` 并置 `0x0CB2`；读档保留时钟、按 NVS 补停机差；自动存档改绝对截止时间（首存 10 s、失败 5 s 重试、成功按 60/120/300 s 排下一次）；恢复时 PC 在卡带则原样恢复、在 ROM 则重播开机（硬弹 `0x200300` 实测 3 帧后掉进 `pc=0000d0`，已回滚并写进注释）；`gueststate_load()` 两遍读；`fbsave_stored_crc()` 配对校验；新增 `t <epoch> [tz_min]` 命令与 `DMC1 HELLO [epoch] [tz_min]`。
+- 中途反向故障（F11）：挂机/读档后时钟会**突然快 9 小时**。`[0x0CB1]` 半秒计数器积压到 16 位上限（65535 tick = 32767 s = 9 h 6 min），帧体恢复后每帧消费 2、补 1 秒。实测 23:57 正常、00:09 变 `09:09`（屏幕同图 `docs/c3_clock_shot_2310.png`，正好 +9 小时）。二次伤害：最初那版“采纳玩家时间”把这个 45 倍速的排水当成玩家设时间，形成正反馈。修复：`clock_drop_backlog()` 每 250 ms 把 `[0x0CB1]` 截到 ≤2（只截不补），读档路径在客人跑起来前也截一次；采纳逻辑加连续跳变判据（孤立一次才算玩家）。复测：挂机 120 s 唤醒，`[0x0CB1]=0`、时钟 +121 s、`dev` 0/1、`steps` 8→9。
+- 上机（v1.10.0，只刷 `0x10000`）：速率 **1.0020x**（唤醒）/ **1.0181x**（挂机），高负载 60 s `|dev| ≤ 2 s`；`ACK t`/`CLK` 时差 0 s；卡带态读档 `resumed at pc=200343 sr=0020 sp=0ff5 int2=0205 frame=restored clock=kept` → `clock -> +6 s`；停机型读档 `replaying power-on` + `clock seeded 23:49:18 from nvs`；自动存档 seq=84 @ 11.2 s、seq=85 @ 71.3 s（+60.0 s）。
+- 构建：app 1,014,224 B（`33021B2D…`）、full 4,677,888 B（`AFAE8A7F…`）；Flash Code 605,272 B；DRAM 208,472 B（余 112,824 B）。版本 `1.10.0`。
+- 新增工具：`tools/c3_setclock.py`（PC 侧一条命令对时）。未动 `tools/dmc_web.html`（用户未提交改动）、分区表、AOT 块、显示/音频/电池路径。
+- 限制：无 RTC，冷启动误差 = 关机时长；帧块仍单块（磨损待双块方案）；设置卡打开时客人停跑（原有行为）。
+
+## 2026-11-25 01:4x — v1.11.1：时钟编辑重新生效
+
+- 用户报告：时钟界面 A+C 打开时间编辑，按 C 确认后又跳回原值；断电重开后 CONTINUE → 时间界面，怎么调都不生效。
+- 根因：v1.10.1 为修“读档污染锚点”把“采纳玩家时间”整条删了，`clock_sync()` 每 250 ms 把客人时钟纠回锚点，玩家的提交活不过 250 ms。
+- 修法：用**硬件写**识别提交，不再猜 RAM 跳变。ROM 的提交函数（flash `0x204179`）是唯一在 `0x0CB0` 已置 1 之后写 `Timebase_Clear(0x3033)` 的地方；启动路径（irom `0x42BF`/`0x586B`）也写但时钟是关的，`0x0CB0==0` 时不采纳。`timebase_clear_w()` 置标志、`clock_sync()` 消费并 `wallclock_adopt_local()`。
+- 顺带修两颗地雷：①种子改成最多试 4 次——ROM 的时间设置界面每帧清 `0x0CB0`，每帧硬写会对打到画面卡在 logo（实测 `scr=001C` 但 fb 还是 logo，客人停在 ROM 等待循环）；②种子从“第 120 帧一次”改成“第 300 ms 起每帧写、直到连续存活”，正常开机 1.3 s 内 `clock running 01:26:09 (nvs)`，早于玩家能按到 CONTINUE。
+- 新增测试钩子：`y <hh> <mm> <ss>`（原子重放 ROM 提交：RTC 三字 + `0x0CB0/1/2` + `0x3054=1` + `0x3033`）、`j <addr> <val>`（写任意地址，`Q` 只能写 RAM）。分条发命令验证过：`clock_sync` 会在两条命令之间纠回中间值——这正是“提交必须原子”的证明。
+- 实测：`y 9 41 30` → guest `09:41:30`、`src=guest`（采纳）、31 s 后 `09:42:01` 仍在走；`t` 能恢复真实时间，offset 0 s。
+- 构建：app 1,016,960 B（`D72F9A17…`）、Flash Code 607,652 B、DRAM 208,488 B（余 112,808 B）；`VER ver=1.11.1`。里程碑 `milestones/2026-11-25_v1.11.1_clock-edit/`。
+- 玩家仍要按的一步：断电后标题 → A+C → CONTINUE → 时间界面 → C。固件已把 RTC 设好，界面暂存值取自 RTC，直接确认即可；这是 ROM 没有 RTC 的设计。
+
+## 2026-11-25 01:0x — v1.11.0：第四轮审计（存档加固）
+
+- 报告 `docs/AUDIT_SAVE_CLOCK_2026-11-25_R4.md`；里程碑 `milestones/2026-11-25_v1.11.0_save-hardening/`。
+- **R4-F1（P0）**：`gueststate_load()` 只挑序列号最大的记录，CRC 不对就整盘放弃——一次掉电写坏最新记录，5 条环退化成 0 条，开机从零开始。改成按序列降序逐条验 CRC，用第一条通过的。复现钩子：控制台 `i` 把最新记录的 CRC 取反（不是擦 magic，擦 magic 只模拟空槽）。实测 `seq=165 is torn; falling back` → `restored snapshot seq=164 ... (older record after a torn one)`。
+- **R4-F2（P1）**：每次快照都写 32 KiB 帧块，但只有"PC 在卡带"的记录能直接恢复，停机型记录只能重播开机、ROM 会重画全屏——帧块白擦 4 扇区 + 阻塞主循环 ~150 ms。改成 `resumable = pc ∈ [0x200000,0x400000)` 才写。实测 `frame skipped (power-on replay)`、`CLK snapf=0`；`D` 后立刻复位仍 `frame=restored`。
+- **R4-F3（P1）**：`overlay_import()` 里的 `m_writes++` 让每次开机 2 s 后重存一次 save 镜像（16 KiB 擦 + 8 KiB 写）。导入不再计写，`W` 改用 `overlay_touch()`。修后开机日志不再有 `saveimg: stored`。
+- **R4-F4（P2）**：`wallclock_persist()` 把构建时间锚点写进 NVS，下次开机当成可信来源、覆盖快照时钟。改成只有 `live` 锚点才落盘。
+- **R4-F5**：`gueststate.h` 注释"前七条还在"改为 5 条。
+- 擦写账：每 60 s 3 扇区、15 扇区轮转 → 288 次/扇区/天（24/7 全年约 10.5 万次，每天 8 小时约 3.5 万次）；帧块已从热路径移除。
+- 构建：app 1,014,352 B（`F95A79E7…`）、full 4,677,888 B（`87C1517F…`）；Flash Code 605,352 B；DRAM 208,464 B（余 112,832 B）。`VER ver=1.11.0`。
+- 未做：状态未变则跳过存档（要先量空闲期真正在变的 RAM 字）；saveimg 的 8 KiB DRAM（换 ROM 镜像才用得上）。
+
+## 2026-11-25 00:4x — v1.10.1：手动存读档删掉，锚点唯一真相
+
+- 用户回报“手动读档不太正常”。控制台复现（v1.10.0）：`menu: load last requested` → `restored snapshot seq=139` → `snapshot pc=005376 outside the cartridge; replaying power-on` → `resumed at pc=00480d … clock=cold`，即**读档 = 游戏重启**。
+- 三个原因：①`SAVE IN` 读的是环里最新的自动存档，而自动存档多半发生在客人停在 ROM 等待循环（`pc=005376`）时，那个 PC 没有可恢复的栈帧；②`SAVE OUT` 存不出可继续的点位，60 s 后就被下一次自动存档顶掉；③v1.10.0 的“采纳客人时间”把读档带回来的旧时钟当成玩家操作（`src=guest`），锚点被拖到 `01:42`（真实 00:34），随后每次自动存档都把错误纪元写进 NVS。
+- 断电是否丢进度：**不丢**。v1.10.1 硬复位实测 `restored snapshot seq=148`、`clock seeded 00:41:27 from nvs`，RAM 片段 `0x0C90..0x0C9F` 复位前后逐字相同（`0x0C86/0x0C88` 是 ROM 开机初始化改的）。最坏丢“最后一次自动存档之后”的内容，默认 60 s。
+- 改动：`menu.h`/`menu.cpp` 删 `SAVE OUT`/`SAVE IN`（9 → 7 项，`ABOUT` 前移到 6，`MENU_ACTION_SAVE/LOAD` 同步删）；`app_main.cpp` 删对应分支与整条“跳变采纳”路径；`wallclock.h/.cpp` 删 `wallclock_adopt_local()`。控制台 `D`/`U` 保留给台架。
+- 验证：菜单第 3 行按 B 仍是 `bright -> 40%`（行号没串）；`Q 0caf 5` 后 `CLK guest=00:39:26`（250 ms 内纠回）；`ACK t` 偏移 0 s；自动存档 seq=147 @ 71.3 s、seq=149 @ 11.3 s。
+- 构建：app 1,012,096 B（`F3DA05F0…`）、full 4,677,888 B（`FA2D713C…`）；Flash Code 603,462 B；DRAM 208,456 B（余 112,840 B）。里程碑 `milestones/2026-11-25_v1.10.1_no-manual-save/`。
+- 代价：游戏自带的“设置时间”界面改不动系统时间，要改时间用 `tools/c3_setclock.py`；已写进报告 §5。
+
+## 2026-11-26 00:3x — 研究：时间快进且不动进化/进度
+
+- 报告：`docs/RESEARCH_TIME_LAPSE_2026-11-26.md`（研究，无固件改动、未烧机）。
+- 结论：ROM 自带 60× 倍速开关 `0x0D03`（internal ROM `0x5C10` 处 `秒 += 0x3C`）。它改的是**时间流速**，不是时钟数值；`[0x0CB2]` 分钟脉冲照常产生，`0x209349` 钩子照常把 `0x0CE6..0x0CE9` 倒计时各减 1 → 进化/成长/死亡与时钟严格同源，规则不变。手册“改时间不加速成长”反证了成长挂在脉冲上，不挂在 `0x0CAF/CAE/CAD` 的数值上。
+- 全镜像扫描（`tmp/scan_refs.py`）：`0x0D03` 只有 6 处引用——irom `0x5C07` 读（倍速），flash `0x201EA8/0x2046F0/0x2302AA` 写 0，`0x2046A7` 在 `[0x081B]==0x70` 时写 1（ROM 自己的隐藏入口），`0x20B4E2` 读（把动画步进压到每帧一步）。
+- PC 实测（`--frames 900`，`--pc-hist`）：base 走常规进位 `0x5C17` 12 次；fast 走快进分支 `0x5C0D` 6 次、RAM `0x0CAE=6`，与“6 次 × 60 秒 = 6 分钟”完全吻合。名义 60×，14 秒窗口只量到 26×，原因是 PC 端没有 sleep inhibit，ROM 的 16 秒空闲在 fast 下 0.27 真实秒就走完，帧体调用从 940 掉到 624；设备固件 `app_main.cpp:2866` 已拒绝休眠，60 fps 稳定时应接近 60×（待上机确认）。
+- 设备端不能直接置位的四个坑：①`clock_sync()` 每 250 ms 纠偏会把快进打回并清 `[0x0CB1]`；②自动存档 `wallclock_persist()` 存的是旧锚点；③快照里带着 `0x0D03`，读档会让快进复活；④菜单没有入口。
+- 方案：A=菜单 `TIME LAPSE OFF/60X` + `wallclock_track_local()` 锚点跟随 + 关快进/存档前 adopt + 读档后重写标志；B=菜单/控制台跳时钟（`wallclock_set`，成长不动，用于跳过夜晚）；C=宿主注入 tick（可调倍率，不做）。改动集中在 `menu.h/.cpp`、`app_main.cpp`、`wallclock.h/.cpp` 四个文件。
+- 未完成：PC 端进育成画面的按键序列在本 build 上没复现（四种序列都停在设时钟/主界面），`0x0CE6..0x0CE9` 的递减实验留到设备上做。
+
+## 2026-11-26 01:1x — v1.12.0：时间倍速（TIME LAPSE）+ 中央模态提示 + B 键取消
+
+- 用户要求：加速成长（睡觉无所谓）、开启后屏幕要有明确提示、按键能取消；COM4 授权自主测试。
+- 实现（`firmware/digicore-c3/main/`）：
+  - `menu.h/.cpp`：`MENU_ITEMS` 7→8，新增 `MENU_IDX_LAPSE` 行，值 OFF/15X/60X/300X，NVS 键 `lapse`；`menu_time_lapse_x()` / `menu_set_time_lapse_idx()`；新增 `menu_lapse_toast_present()`（280×84 居中卡片：`TIME LAPSE` / 黄底倍速 / `B = STOP`），只推卡片自身的 84 行。
+  - `app_main.cpp`：`kLapseModes[]`（每次进位 1 秒或 60 秒）＋ `time_lapse_step()` 微秒累加器（倍率与帧率解耦，每帧最多注入一次 `[0x0CB1]=2`）；`sync_time_lapse()` 每帧维持 `0x0D03`（ROM 的 `0x2302A8` 分支会清它），关档时 `wallclock_adopt_local()` 收锚点；`clock_sync()` 快进分支只 `wallclock_track_local()` 不纠偏；快照前 adopt、恢复后 `sync_time_lapse(true)`；控制台 `f [0..3]`，`CLK` 行加 `lapse= ticks=`。
+  - 提示条状态机：菜单关闭沿或控制台直接开启时弹出；卡片与 blit 必须同帧推，改成 10 Hz 成对推送（guest_fps 13.4 → 20.9）；关闭时 `bezel_paint()` + 全窗重绘。
+  - 取消：提示条模态期间只认 B 的按下沿（物理键或 `K` 注入），A/C 全部吞掉、pad 保持释放、长 A 开不出菜单；关闭后 NVS 存 0。
+  - 第一版把提示画在顶部 8 px 边条，被面板 30 px 圆角遮罩裁掉一半（用户实测反馈），已改为中央卡片；长按 C 取消的手势同时删除。
+  - `wallclock.h/.cpp`：新增 `wallclock_track_local()`（跟随虚拟时间、不落 NVS）。
+- 真机实测（COM4，v1.12.0，只写 `0x10000`，NVS 与存档分区未动）：
+  - 启动读到 NVS=15X → `lapse notice up (15X)`；`f 2` → 60X；`K 2 6`（B）→ `B on the lapse notice -> time lapse off` + `clock 10:12:25 taken as the new anchor`，随后 `lapse=1x`。
+  - 菜单：长 A 1211 ms → A×2 → B → `menu: time-lapse -> 15X` → C 关卡 → `lapse notice up (15X) after the card closed`。
+  - 300X：2.5 s 真实时间推进 10 分钟；`CLK ... src=lapse lapse=300x ticks=19`。
+- 构建：app 1,022,144 B `A24CD64F…`、full 4,677,888 B；`App version: 1.12.0`。
+- 实测（设备内 `LAPSE` 行，每 5 s，避开串口延迟，10 秒窗口）：
+  - 15X → 实测 **11.9×**（10 分钟 = 119 游戏分钟）
+  - 60X → 实测 **53.7×**（10 分钟 = 537 游戏分钟）
+  - 300X → 实测 **300×**（5 秒推进 25 分钟，10 分钟 = 3000 游戏分钟）
+- 三条被真机数据推翻的假设（都写进了 `kLapseModes` 注释）：
+  1. "每帧注入一次"让倍率跟帧率走（实测 15X=8.6、60X=12.9），改成按注入周期计时；
+  2. "只开 0x0D03 不注入"能拿 60×，实测只有 5.9×——这个卡带长期 `int off`，2 Hz 中断落不进去；
+  3. 不压制 ROM 自己的半秒 tick，同一档在 5.9×–51× 之间乱跳；现在非注入帧把 `[0x0CB1]` 清零。
+- 提示条四次迭代：顶部 8 px 边条（被 30 px 圆角裁一半）→ 正中 280×64（挡宠物）→ 下方 280×64（挡下排状态图标）→ **窗口下缘单行 240×22**（`y=216`；游戏窗口到 215 为止，宠物与下排图标全露）。单行只需每帧重画，不再限频。
+- 未测：有存档有宠物时的倍率（当前设备无存档，游戏在标题/主界面之间切换，帧体执行率不稳）；断电/读档一致性；卡片像素需人眼确认。

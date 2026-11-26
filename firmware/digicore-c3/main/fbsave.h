@@ -47,3 +47,10 @@ bool fbsave_store(const void *pixels, uint32_t bytes);
 // stored, the sizes disagree or the CRC does not match; `pixels` is then left
 // holding whatever the panel already had, which the caller overwrites anyway.
 bool fbsave_load(void *pixels, uint32_t bytes);
+
+// CRC of the frame currently in flash, or 0 when the block holds no valid
+// frame.  A gueststate record stores the CRC of the frame it was paired with,
+// and the block is shared by the whole ring, so a restore has to compare the
+// two before painting: a later snapshot that failed to store its record still
+// overwrote this block.
+uint32_t fbsave_stored_crc();

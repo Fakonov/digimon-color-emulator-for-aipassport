@@ -156,8 +156,14 @@ public:
 	// `dst + i * PAGE_SIZE` its 4 KiB of bytes.  Returns the page count.
 	int overlay_export(uint32_t *pages, uint8_t *dst, int max_pages) const;
 	// Install a page that came back from flash.  Replaces whatever the overlay
-	// held for that page, so a restore always wins over a stale write.
+	// held for that page, so a restore always wins over a stale write.  Not
+	// counted as a guest write: a restore must not make the save partition
+	// rewrite itself on every boot.
 	bool overlay_import(uint32_t page, const uint8_t *src);
+
+	// Mark the save image dirty on purpose (console `W`).  persist_save_image()
+	// keys off overlay_writes(), so a probe that injects pages has to say so.
+	void overlay_touch();
 
 	// ---- statistics (logged once per second) ------------------------------
 	uint32_t page_loads() const { return m_loads; }

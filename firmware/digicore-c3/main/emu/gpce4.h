@@ -388,6 +388,8 @@ struct Gpce4 : public UnspBus {
     uint16_t m_wake_mask_b = 0xffff;         // 0x300d, IOB_WakeUp_Mask
     uint16_t m_wake_mask_c = 0xffff;         // 0x300e, IOC_WakeUp_Mask
     uint32_t m_sleep_writes = 0;             // how many times 0x3036 was written
+    uint32_t m_timebase_writes = 0;          // how many times 0x3033 was written
+    bool m_time_set_seen = false;            // a 0x3033 write is pending
     bool m_asleep = false;
     // AUTO OFF = NEVER: the handset must not go dark, so System_Sleep is refused
     // and the guest is dropped back on `m_sleep_resume_pc` instead.  The ROM's
@@ -401,6 +403,11 @@ uint32_t m_sleep_bounced = 0;            // power-down sequences bounced at 0x30
     uint32_t sleep_writes() const { return m_sleep_writes; }
     uint32_t sleep_ignored() const { return m_sleep_ignored; }
     bool asleep() const { return m_asleep; }
+    // Set when the guest wrote Timebase_Clear (0x3033).  Combined with
+    // [0x0CB0] == 1 that is the ROM reading "a new time was committed";
+    // app_main consumes it through take_time_set().
+    bool take_time_set() { const bool v = m_time_set_seen; m_time_set_seen = false; return v; }
+    uint32_t timebase_writes() const { return m_timebase_writes; }
     void wake_from_sleep();
     uint16_t m_dac_cha1 = 0;                 // 0x3041, last sample (no audio sink)
     uint16_t m_dac_cha2 = 0;                 // 0x3042

@@ -58,12 +58,21 @@ static const int kAutoSaveChoices[] = {60, 120, 300, 0};
 static const char *const kAutoSaveNames[] = {"60S", "2M", "5M", "OFF"};
 static const int kAutoSaveCount = (int)(sizeof(kAutoSaveChoices) / sizeof(kAutoSaveChoices[0]));
 
+// Game-time multiplier.  Everything up to 60x is done by feeding the software
+// RTC extra half-second ticks (one carry = one second); 300x additionally sets
+// the ROM's own 60x flag so each carry is a whole minute.  See app_main's
+// time_lapse_step() for the tick arithmetic.
+static const int kLapseChoices[] = {1, 15, 60, 300};
+static const char *const kLapseNames[] = {"OFF", "15X", "60X", "300X"};
+static const int kLapseCount = (int)(sizeof(kLapseChoices) / sizeof(kLapseChoices[0]));
+
 static int s_auto_idx = 0;
 static int s_bright_idx = 3;      // 80%, the value the firmware shipped with
 static int s_volume_idx = 1;      // 20%: quiet enough to be safe on a fresh flash
 static int s_save_idx = 0;        // 60 s, the period the feature was asked for
+static int s_lapse_idx = 0;       // OFF: a fresh image must not age on its own
 static int s_sel = MENU_IDX_AUTO_OFF;
-static int s_action = MENU_ACTION_NONE;   // SAVE OUT / SAVE IN, drained by app_main
+static int s_action = MENU_ACTION_NONE;   // chord rows, drained by app_main
 static bool s_open = false;
 // The menu owns the panel through menu_present(), so it only has to be pushed
 // again when something on it changed -- the values, or which row is selected.
@@ -126,10 +135,13 @@ void menu_load()
         s_volume_idx = v;
     if (nvs_get_u8(s_nvs, "save", &v) == ESP_OK && v < kAutoSaveCount)
         s_save_idx = v;
+    if (nvs_get_u8(s_nvs, "lapse", &v) == ESP_OK && v < kLapseCount)
+        s_lapse_idx = v;
 
-    ESP_LOGI(TAG, "auto-off %s, bright %d%%, volume %d%%, auto-save %s",
+    ESP_LOGI(TAG, "auto-off %s, bright %d%%, volume %d%%, auto-save %s, time-lapse %s",
              kAutoOffNames[s_auto_idx], kBrightChoices[s_bright_idx],
-             kVolumeChoices[s_volume_idx], kAutoSaveNames[s_save_idx]);
+             kVolumeChoices[s_volume_idx], kAutoSaveNames[s_save_idx],
+             kLapseNames[s_lapse_idx]);
 }
 
 void menu_open()
@@ -171,6 +183,15 @@ void menu_press_b()
         s_action = MENU_ACTION_CHORD_AB;
         ESP_LOGI(TAG, "A+B chord requested");
         break;
+    case MENU_IDX_LAPSE:
+        // The rate lives in the emulator, not the ROM: app_main notices the new
+        // index on its next frame and re-arms the tick injector.  Persisting it
+        // means a machine that was left at 60x comes back at 60x, which is what
+        // someone breeding a pet expects.
+        s_lapse_idx = (s_lapse_idx + 1) % kLapseCount;
+        persist_u8("lapse", (uint8_t)s_lapse_idx);
+        ESP_LOGI(TAG, "time-lapse -> %s", kLapseNames[s_lapse_idx]);
+        break;
     case MENU_IDX_AUTO_OFF:
         s_auto_idx = (s_auto_idx + 1) % kAutoOffCount;
         persist_u8("auto", (uint8_t)s_auto_idx);
@@ -191,14 +212,7 @@ void menu_press_b()
         persist_u8("save", (uint8_t)s_save_idx);
         ESP_LOGI(TAG, "auto-save -> %s", kAutoSaveNames[s_save_idx]);
         break;
-    case MENU_IDX_SAVE_OUT:
-        s_action = MENU_ACTION_SAVE;
-        ESP_LOGI(TAG, "save now requested");
-        break;
-    case MENU_IDX_SAVE_IN:
-        s_action = MENU_ACTION_LOAD;
-        ESP_LOGI(TAG, "load last requested");
-        break;
+
     default:
         // ABOUT has nothing to change; pressing B just re-pushes the row so the
         // bar blinks, which is the same feedback the other rows give.
@@ -222,6 +236,17 @@ int menu_auto_off_sec() { return kAutoOffChoices[s_auto_idx]; }
 int menu_bright_pct()   { return kBrightChoices[s_bright_idx]; }
 int menu_volume_pct()   { return kVolumeChoices[s_volume_idx]; }
 int menu_autosave_sec() { return kAutoSaveChoices[s_save_idx]; }
+int menu_time_lapse_x() { return kLapseChoices[s_lapse_idx]; }
+int menu_time_lapse_idx() { return s_lapse_idx; }
+int menu_set_time_lapse_idx(int idx)
+{
+    if (idx < 0 || idx >= kLapseCount)
+        idx = 0;
+    s_lapse_idx = idx;
+    persist_u8("lapse", (uint8_t)s_lapse_idx);
+    s_dirty = true;
+    return kLapseChoices[s_lapse_idx];
+}
 
 // ---------------------------------------------------------------- rendering
 
@@ -462,12 +487,11 @@ static void label_for(char *buf, size_t n, int item)
     // stays empty rather than repeating it.
     case MENU_IDX_CHORD:    buf[0] = '\0'; break;
     case MENU_IDX_CHORD_AB: buf[0] = '\0'; break;
+    case MENU_IDX_LAPSE:    snprintf(buf, n, "%s", kLapseNames[s_lapse_idx]); break;
     case MENU_IDX_AUTO_OFF: snprintf(buf, n, "%s", kAutoOffNames[s_auto_idx]); break;
     case MENU_IDX_BRIGHT:   snprintf(buf, n, "%d%%", kBrightChoices[s_bright_idx]); break;
     case MENU_IDX_VOLUME:   snprintf(buf, n, "%d%%", kVolumeChoices[s_volume_idx]); break;
     case MENU_IDX_AUTOSAVE: snprintf(buf, n, "%s", kAutoSaveNames[s_save_idx]); break;
-    case MENU_IDX_SAVE_OUT: snprintf(buf, n, "%s", "SAVE NOW"); break;
-    case MENU_IDX_SAVE_IN:  snprintf(buf, n, "%s", "LOAD LAST"); break;
     default:                snprintf(buf, n, "%s", DIGICORE_VERSION); break;
     }
 }
@@ -477,12 +501,11 @@ static const char *name_for(int item)
     switch (item) {
     case MENU_IDX_CHORD:    return "SEND A+C";
     case MENU_IDX_CHORD_AB: return "SEND A+B";
+    case MENU_IDX_LAPSE:    return "TIME LAPSE";
     case MENU_IDX_AUTO_OFF: return "AUTO OFF";
     case MENU_IDX_BRIGHT:   return "BRIGHT";
     case MENU_IDX_VOLUME:   return "VOLUME";
     case MENU_IDX_AUTOSAVE: return "AUTO SAVE";
-    case MENU_IDX_SAVE_OUT: return "SAVE OUT";
-    case MENU_IDX_SAVE_IN:  return "SAVE IN";
     default:                return "VERSION";
     }
 }
@@ -563,6 +586,64 @@ void menu_banner_present(uint8_t *strip, int width, const char *text)
     const esp_err_t err = display_draw_bitmap(0, 0, width, h, strip);
     if (err != ESP_OK)
         ESP_LOGE(TAG, "banner push failed: %d", int(err));
+}
+
+// Centre-of-panel time-lapse notice.  Unlike banner_present() this one does not
+// own the whole width: it is a card in the middle of the live picture, so only
+// its own rows are pushed and everything around it keeps whatever the guest is
+// drawing.
+void menu_lapse_toast_present(uint8_t *strip, int w, int h, const char *speed)
+{
+    constexpr int kToastW = 240;
+    constexpr int kToastH = 22;
+    static const uint8_t kToastRound[4] = {4, 2, 1, 0};
+
+    const int x0 = (w - kToastW) / 2;
+    // The guest window ends at y = 24 + 192 = 216, so this strip sits entirely
+    // outside it: neither the pet nor the bottom status-icon row is covered.
+    const int y0 = h - kToastH - 2;
+
+    char text[32];
+    snprintf(text, sizeof(text), "LAPSE %s  B=STOP", speed);
+    const int tx = x0 + (kToastW - text_width(text)) / 2;
+    const int ty = (kToastH - kTextH) / 2;
+
+    uint8_t *p = strip;
+    for (int dy = 0; dy < kToastH; ++dy) {
+        for (int dx = 0; dx < kToastW; ++dx)
+            s_row[x0 + dx] = 0x0000;
+
+        int inset = 0;
+        if (round_span(dy, kToastH, kToastRound, 4, &inset)) {
+            const int xa = inset;
+            const int xb = kToastW - 1 - inset;
+            for (int dx = xa; dx <= xb; ++dx)
+                s_row[x0 + dx] = kPanelBg;
+
+            const bool horizontal = (dy < kEdge) || (kToastH - 1 - dy < kEdge);
+            if (horizontal) {
+                for (int dx = xa; dx <= xb; ++dx)
+                    s_row[x0 + dx] = kPanelEdge;
+            } else {
+                for (int i = 0; i < kEdge; ++i) {
+                    s_row[x0 + xa + i] = kPanelEdge;
+                    s_row[x0 + xb - i] = kPanelEdge;
+                }
+            }
+        }
+
+        if (dy >= ty && dy < ty + kTextH)
+            text_scanline(s_row, 320, tx, text, dy - ty, kInk);
+
+        for (int dx = 0; dx < kToastW; ++dx) {
+            const uint16_t c = s_row[x0 + dx];
+            *p++ = (uint8_t)(c >> 8);
+            *p++ = (uint8_t)(c & 0xFF);
+        }
+    }
+    const esp_err_t err = display_draw_bitmap(x0, y0, kToastW, kToastH, strip);
+    if (err != ESP_OK)
+        ESP_LOGE(TAG, "lapse toast push failed: %d", int(err));
 }
 
 void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg)

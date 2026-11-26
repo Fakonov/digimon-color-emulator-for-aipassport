@@ -682,7 +682,7 @@ void Gpce4::write16(uint32_t addr, uint16_t data)
             g_tick_writes++;
             g_tick_val = data;
             if (m_cpu)
-                g_tick_pc = (((uint32_t(m_cpu->m_core->m_r[unsp_device::REG_SR]) >> 10) & 0x3fu) << 16) |
+                g_tick_pc = ((uint32_t(m_cpu->m_core->m_r[unsp_device::REG_SR]) & 0x3fu) << 16) |
                             (m_cpu->m_core->m_r[unsp_device::REG_PC] & 0xffffu);
         }
 #endif
@@ -862,7 +862,7 @@ uint16_t Gpce4::ioa_data_r()
         if ((++n % 5000u) == 1u) {
             uint32_t pc = 0;
             if (m_cpu) {
-                pc = (((uint32_t(m_cpu->m_core->m_r[unsp_device::REG_SR]) >> 10) & 0x3fu) << 16) |
+                pc = ((uint32_t(m_cpu->m_core->m_r[unsp_device::REG_SR]) & 0x3fu) << 16) |
                      m_cpu->m_core->m_r[unsp_device::REG_PC];
             }
             std::printf("[ioa] reads=%u val=%04x pc=%06x\n", n,
@@ -977,6 +977,15 @@ void Gpce4::system_clock_w(uint16_t data)                              // :551
 
 void Gpce4::timebase_clear_w(uint16_t data)                            // :556
 {
+    // The write itself only re-phases the low frequency divider (MAME ignores
+    // it), but it is also a precise marker: the ROM's "commit the time I just
+    // set" routine (flash 0x204179) is the only writer of this register that
+    // happens with 0x0CB0 already set to 1.  The boot paths (irom 0x42BF and
+    // irom 0x586B) write it too, with the clock disabled - which is what lets
+    // the host tell a player's time set from an init sequence without guessing
+    // from RAM deltas.
+    m_timebase_writes++;
+    m_time_set_seen = true;
     if (trace_io) std::printf("[gpce4] Timebase_Clear = %04x\n", unsigned(data));
 }
 
@@ -1039,6 +1048,11 @@ void Gpce4::system_sleep_w(uint16_t data)
             uint16_t((m_cpu->m_core->m_r[unsp_device::REG_SR] & 0xffc0u) |
                      ((resume >> 16) & 0x3fu));
         m_cpu->m_core->m_r[unsp_device::REG_PC] = uint16_t(resume & 0xffffu);
+        // The request was refused, so the machine never went to sleep: keep the
+        // flag clear.  Latching it here made snapshot_machine_state() treat
+        // every later frame as "inside the power-down path" and skip the save,
+        // which is why autosave stopped for good 16 s after the last key press.
+        m_asleep = false;
         if (trace_io)
             std::printf("[gpce4] System_Sleep = %04x -> parked on pc=%06x\n",
                         unsigned(data), unsigned(resume));

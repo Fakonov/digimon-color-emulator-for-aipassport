@@ -49,6 +49,7 @@
 #include "menu.h"
 #include "bezel.h"
 #include "dmc_link.h"
+#include "wallclock.h"
 #include "esp_rom_crc.h"
 
 // The 5x7 face the settings card draws with.  Its own copy of the table (295 B)
@@ -221,6 +222,9 @@ static int64_t s_pad_blank_us = 0;
 // one piece of the gesture that decides whether the settings menu ever opens.
 static int64_t s_a_down_us = 0;
 static bool s_ac_fired = false;
+// Long-C is no longer the cancel gesture: the modal notice owns B now, and while
+// it is up every other key is swallowed.  Kept as a comment so the next person
+// does not reintroduce a second path that fights the notice.
 // Set while A is down and has not yet been shown to the guest.  Cleared either
 // by the long-press threshold (the press becomes the menu gesture and never a
 // tap) or by the release below it (the press is delivered as a kPressFrames
@@ -483,8 +487,179 @@ static bool s_boot_ok = false;
 #endif
 
 static bool s_clock_seeded = false;
+// Set by restore_machine_state() when the record it restored already had a
+// running guest clock (0x0CB0 == 1 and h/m/s inside range).  The old code
+// re-seeded the clock from the build timestamp on every boot, including a boot
+// that had just restored a snapshot, so loading a save silently rewound the
+// player's clock to the compile time (measured: 23:13:20 after every resume).
+static bool s_clock_from_snapshot = false;
+// A restored clock outranks the build timestamp, but not a real anchor: while
+// this is set, clock_sync() leaves the guest clock alone instead of dragging it
+// back to the compile time.
+static bool s_clock_keep_guest = false;
 static bool s_shot2_done = false;
 static bool s_shot_done = false;
+
+// Clock upkeep, once per host frame (see clock_sync()).
+static int64_t s_clock_check_us = 0;
+static int32_t s_clock_last_dev = 0;      // last measured guest-vs-host delta
+static uint32_t s_clock_steps = 0;        // how many corrections were written
+
+static uint32_t s_clock_holds = 0;        // frames left inside the dead band
+static uint32_t s_frame_stores = 0;       // panel frames pushed to flash (resumable only)
+// Seed-in-progress state: the clock is written every frame until it survives a
+// few frames (the ROM's boot path zeroes it) or the player commits one.
+static int64_t s_seed_first_us = 0;
+static uint32_t s_seed_tries = 0;
+// The clock carried by the restored record, kept for the case where there is no
+// real anchor at all (fresh flash, no `t` yet): it beats the build timestamp.
+static bool s_keep_valid = false;
+static int s_keep_h = 0, s_keep_m = 0, s_keep_s = 0;
+
+// ---- time lapse -----------------------------------------------------------
+static int64_t guest_clock_sec();   // defined with the clock helpers below
+// The ROM advances its own software RTC from [0x0CB1]: the 2 Hz interrupt adds
+// one every half second, and internal ROM 0x5BE2 consumes two of them per
+// second-carry.  When [0x0D03] is set that carry is worth +0x3C seconds instead
+// of +1 (0x5C10).  Both facts are used here:
+//
+//   * feeding extra ticks makes a carry happen more often than once a second;
+//   * [0x0D03] makes each carry worth a whole minute.
+//
+// Every carry raises [0x0CB2], which is what the 0x209349 minute hook checks
+// before stepping 0x0CE6..0x0CE9 down.  So growth, hunger, sleep and death all
+// accelerate by exactly the same factor and keep their original order - this is
+// not "editing the clock", which the ROM deliberately keeps out of growth.
+static int s_lapse_x = 1;          // current multiplier (1 = off)
+static uint64_t s_lapse_acc = 0;   // carry credit: microseconds x carries/second
+static int64_t s_lapse_last_us = 0;
+static uint32_t s_lapse_ticks = 0; // injected tick pairs this session (diagnostics)
+// The lapse notice is a modal card in the middle of the picture (see
+// menu_lapse_toast_present), not the top-margin banner: the banner's first rows
+// sit under the panel's rounded-corner mask and were being clipped.
+static bool s_lapse_toast = false;
+static bool s_lapse_repaint = false;   // one-shot: the card covered whole screen rows
+static char s_lapse_toast_text[16] = "";
+static int64_t s_lapse_log_us = 0;     // next LAPSE bench line
+
+// Multipliers the menu offers.
+//
+// The ROM has its own once-per-second carry, fed by the 2 Hz interrupt through
+// [0x0CB1].  That source is not dependable here: this cartridge spends most of
+// its frame with `int off`, and at the frame rates the lapse itself induces the
+// interrupt barely lands (measured: 60X with the flag set but no injection came
+// out at 5.9x, i.e. one carry every ten seconds instead of every second).
+//
+// So every preset drives the carry itself and suppresses the ROM's:
+//
+//   * [0x0D03] is set in all three, so one carry is worth a whole minute;
+//   * one carry is injected every `period_us`;
+//   * on every frame that does not inject, [0x0CB1] is cleared, which keeps the
+//     stray 2 Hz tick from adding a minute the preset did not ask for.
+//
+// The result is a multiplier that depends on the clock, not on the frame rate:
+// 60 s / period_us.
+struct LapseMode { int x; uint32_t period_us; };
+static const LapseMode kLapseModes[] = {
+    {1,   0},        // off: the ROM keeps its own clock, untouched
+    {15,  4000000},  // 15 s of game time per real second
+    {60,  1000000},  // 60 s per second
+    {300, 200000},   // 300 s per second
+};
+static const int kLapseModeCount = int(sizeof(kLapseModes) / sizeof(kLapseModes[0]));
+
+static const LapseMode &lapse_mode(int x)
+{
+    for (int i = 0; i < kLapseModeCount; i++)
+        if (kLapseModes[i].x == x)
+            return kLapseModes[i];
+    return kLapseModes[0];
+}
+
+// Write the ROM flag and reset the accumulator.  Called whenever the menu value
+// changes, after a restore, and once at boot.  `force` also rewrites [0x0D03]
+// when the multiplier did not change, which is what a restore needs: the record
+// carries whatever flag was live when it was taken.
+static void sync_time_lapse(bool force)
+{
+    const int want = menu_time_lapse_x();
+    const int prev = s_lapse_x;
+    if (want <= 1 && prev > 1) {
+        // Leaving the fast lane: the guest clock has run far ahead of the
+        // anchor, so adopt it instead of letting clock_sync() drag it back.
+        wallclock_adopt_local(guest_clock_sec());
+        s_clock_keep_guest = false;
+        ESP_LOGI(TAG, "time lapse off; clock %02d:%02d:%02d taken as the new anchor",
+                 s_soc.ram[0x0CAF], s_soc.ram[0x0CAE], s_soc.ram[0x0CAD]);
+    }
+    if (want != prev || force) {
+        s_lapse_acc = 0;
+        s_lapse_last_us = 0;
+        s_lapse_ticks = 0;
+        s_lapse_x = want;
+    }
+    // The notice belongs to "a lapse just started while you were not in the
+    // card": from the console, or from the card closing.  While the card is up
+    // the row itself is the feedback, so raising the card inside it would only
+    // hide the menu.
+    if (want > 1 && prev <= 1 && !menu_is_open()) {
+        s_lapse_toast = true;
+        std::snprintf(s_lapse_toast_text, sizeof(s_lapse_toast_text), "%dX", want);
+        ESP_LOGI(TAG, "lapse notice up (%s)", s_lapse_toast_text);
+    } else if (want <= 1) {
+        s_lapse_toast = false;
+    }
+    // Every preset runs the ROM in its 60x-carry mode; the multiplier is the
+    // injection period, not the flag.
+    const uint16_t flag = (want > 1) ? 1u : 0u;
+    // Kept in place, not just written on change: a few of the ROM's own
+    // state-machine branches clear 0x0D03 (0x2302A8), and one of them runs while
+    // the pet screen is up, which would silently end the lapse a few seconds in.
+    if (s_soc.ram[0x0D03] != flag) {
+        s_soc.ram[0x0D03] = flag;
+        ESP_LOGI(TAG, "time lapse %dx (0x0D03=%u)", want, unsigned(flag));
+    }
+}
+
+// microseconds times carries-per-second so the multiplier does not depend on
+// the frame rate; at most one pair is injected per frame because 0x5BE2 only
+// consumes one pair per call, and asking for more would just pile up in
+// [0x0CB1] for clock_drop_backlog() to throw away.
+static void time_lapse_step()
+{
+    const LapseMode &m = lapse_mode(s_lapse_x);
+    if (m.period_us == 0) {
+        s_lapse_acc = 0;
+        s_lapse_last_us = 0;
+        return;
+    }
+    if (s_soc.ram[0x0CB0] != 1)      // RTC disabled: 0x5BE2 would drop the tick
+        return;
+    const int64_t now = esp_timer_get_time();
+    if (s_lapse_last_us == 0) {
+        s_lapse_last_us = now;
+        return;
+    }
+    uint32_t dt = uint32_t(now - s_lapse_last_us);
+    s_lapse_last_us = now;
+    if (dt > 250000)
+        dt = 250000;                 // a stall must not be paid out in one burst
+    s_lapse_acc += dt;
+    if (s_lapse_acc >= m.period_us) {
+        // Keep the remainder so the period does not drift with the frame rate,
+        // but never let a stall pay out in a burst.
+        s_lapse_acc -= m.period_us;
+        if (s_lapse_acc > m.period_us)
+            s_lapse_acc = 0;
+        s_soc.ram[0x0CB1] = 2;       // "two half seconds are due": one carry
+        s_lapse_ticks++;
+    } else {
+        // Swallow the ROM's own half-second tick.  Without this the multiplier
+        // was whatever the cartridge's `int off` windows happened to let through
+        // (measured swings from 5.9x to 51x for the same nominal preset).
+        s_soc.ram[0x0CB1] = 0;
+    }
+}
 
 // One-shot framebuffer dump over the console, so the host can prove the guest
 // really painted these pixels on the device (tools/c3_shot.py turns it into a
@@ -836,9 +1011,19 @@ static volatile bool s_force_full = false;
 static int s_pattern = 0;          // 0 = guest picture, 1 = fb pattern, 2 = panel edges, 3 = align target
 
 // Defined next to the snapshot code below; the console needs them here.
-static void snapshot_machine_state(void);
+static bool snapshot_machine_state(bool force);
 static void restore_machine_state(void);
-static bool load_panel_frame(void);
+static bool load_panel_frame(uint32_t expect_crc);
+static bool snapshot_clock_valid(void);
+static void guest_reset_cpu(void);
+// Wall-clock upkeep (defined with the frame loop): pushes the host time into the
+// guest's software RTC registers.
+static void clock_sync(bool force);
+static void clock_drop_backlog();
+static void clock_seed_step();
+static int64_t guest_clock_sec();
+static void sync_time_lapse(bool force = false);
+static void time_lapse_step();
 // Defined with paint_pattern(); the G command pushes it once on demand.
 static void panel_edge_test(void);
 static void panel_align_test(void);
@@ -856,13 +1041,20 @@ struct SnapBlob {
 };
 static SnapBlob s_snap_blob;        // ~340 B of DRAM, reused by every path
 
-// UNSP keeps the PC in two places: the low 16 bits in r7 and the bank in the top
-// six bits of SR.  Every other part of this file talks about the flat 24-bit
-// address, so this is the one place that decodes it.
+// UNSP keeps the PC in two places: the low 16 bits in r7 and the bank in the
+// *low six bits of SR* (unspdefs.h: UNSP_LPC = ((SR & 0x3f) << 16) | PC, and
+// unsp.h add_lpc() writes it back with `SR &= 0xffc0; SR |= bank`).  SR bits
+// 10..15 are the data segment, not the PC bank.
+//
+// This used to read `(sr >> 10) & 0x3f`, i.e. the DS field.  The guest runs its
+// main loops with DS = 0, so the function returned the bare 16-bit PC: every
+// "is the PC inside the cartridge?" test was false, autosave skipped every
+// snapshot taken outside flash-data code, and a resume from such a record
+// replayed power-on.  Both call sites are load-bearing, hence the comment.
 static uint32_t guest_pc(void)
 {
     const uint32_t sr = s_cpu.m_core->m_r[unsp_device::REG_SR];
-    return (((sr >> 10) & 0x3fu) << 16) | s_cpu.m_core->m_r[unsp_device::REG_PC];
+    return (((sr & 0x3fu) << 16) | s_cpu.m_core->m_r[unsp_device::REG_PC]);
 }
 
 static void console_exec(char *line)
@@ -1048,6 +1240,24 @@ static void console_exec(char *line)
                     (long long)s_a_down_us, (long long)s_pad_blank_us,
                     menu_auto_off_sec(), menu_confirm_is_open() ? 1 : 0, menu_is_open() ? 1 : 0,
                     unsigned(s_soc.ram[0x0C88]), unsigned(s_port_bits));
+        // Software RTC vs the host anchor.  `dev` is guest minus wall in
+        // seconds, `steps` counts corrections actually written, `holds` the
+        // checks that stayed inside the dead band.  This is the line the save /
+        // clock audit measures itself with.
+        {
+            int ch = 0, cm = 0, cs = 0;
+            wallclock_hms(&ch, &cm, &cs);
+            std::printf("CLK guest=%02d:%02d:%02d wall=%02d:%02d:%02d dev=%d steps=%u "
+                        "holds=%u snapf=%u seed=%u stable=%u tbw=%u src=%s en=%u "
+                        "lapse=%dx ticks=%u\n",
+                        s_soc.ram[0x0CAF], s_soc.ram[0x0CAE], s_soc.ram[0x0CAD],
+                        ch, cm, cs, int(s_clock_last_dev), unsigned(s_clock_steps),
+                        unsigned(s_clock_holds), unsigned(s_frame_stores),
+                        s_clock_seeded ? 1u : 0u, unsigned(s_seed_tries),
+                        unsigned(s_soc.timebase_writes()),
+                        wallclock_source(), unsigned(s_soc.ram[0x0CB0]),
+                        s_lapse_x, unsigned(s_lapse_ticks));
+        }
         break;
     case 'R':                      // force a full repaint
         s_force_full = true;
@@ -1056,14 +1266,63 @@ static void console_exec(char *line)
     case 'D':                      // D: take a machine snapshot now
         // Snapshot of the whole machine - CPU registers plus the 8 KiB RAM
         // window - not just the flash overlay 'W' injects into.
-        snapshot_machine_state();
-        std::printf("ACK D seq=%u\n", unsigned(gueststate_newest_seq()));
+        std::printf("ACK D %s seq=%u\n",
+                    snapshot_machine_state(true) ? "stored" : "skipped",
+                    unsigned(gueststate_newest_seq()));
+        break;
+    case 'y': {                    // y <hh> <mm> <ss>: replay the ROM's clock commit
+        // Exactly what flash 0x204179 does, in one call: the RTC registers, the
+        // enable bit, the half-second counter, then Timebase_Clear.  Doing it
+        // piecemeal from the console cannot work - clock_sync corrects each
+        // intermediate value back before the next command lands, which is
+        // precisely why the real commit is a single guest call.
+        int hh = -1, mm = -1, ss = -1;
+        if (sscanf(line + 1, "%d %d %d", &hh, &mm, &ss) == 3 && hh >= 0 && hh < 24 &&
+            mm >= 0 && mm < 60 && ss >= 0 && ss < 60) {
+            s_soc.ram[0x0CAF] = uint16_t(hh);
+            s_soc.ram[0x0CAE] = uint16_t(mm);
+            s_soc.ram[0x0CAD] = uint16_t(ss);
+            s_soc.ram[0x0CB0] = 1;
+            s_soc.ram[0x0CB1] = 0;
+            s_soc.ram[0x0CB2] = 0;
+            s_soc.write16(0x3054, 0x0001);
+            s_soc.write16(0x3033, 0x5555);
+            std::printf("ACK y %02d:%02d:%02d\n", hh, mm, ss);
+        } else {
+            std::printf("NAK y (usage: y <hh> <mm> <ss>)\n");
+        }
+        break;
+    }
+    case 'j': {                    // j <addr> <value>: write any guest address (test hook)
+        // Q only reaches RAM; this one goes through write16(), so it can poke IO
+        // registers too.  It is how the clock-editor commit (Timebase_Clear) is
+        // exercised without a finger on the pad.
+        unsigned a = 0, v = 0;
+        if (sscanf(line + 1, "%x %x", &a, &v) == 2 && a <= 0x3FFFFFu) {
+            s_soc.write16(a, uint16_t(v));
+            std::printf("ACK j [%06X] = %04X\n", a, v);
+        } else {
+            std::printf("NAK j\n");
+        }
+        break;
+    }
+    case 'i':                      // i: invalidate the newest snapshot (torn-write test)
+        // Pairs with the fallback in gueststate_load(): after this, a reset must
+        // come back on the previous record instead of starting from scratch.
+        {
+            const uint32_t before = gueststate_newest_seq();
+            const bool ok = gueststate_invalidate_newest();
+            std::printf("ACK i %s seq_was=%u\n", ok ? "invalidated" : "none", unsigned(before));
+        }
         break;
     case 'U': {                    // U: resume from the newest snapshot now
         if (!gueststate_ready()) {
             std::printf("NAK U no partition\n");
             break;
         }
+        // gueststate_load() verifies the record CRC before it writes into the
+        // destination, so a rejected record can no longer leave live guest RAM
+        // half overwritten (the old path did exactly that).
         if (!gueststate_load(&s_snap_blob, uint32_t(sizeof(s_snap_blob)), s_soc.ram,
                              uint32_t(sizeof(s_soc.ram)))) {
             std::printf("NAK U no valid record\n");
@@ -1071,15 +1330,64 @@ static void console_exec(char *line)
         }
         *s_cpu.m_core = s_snap_blob.cpu;
         if (!s_soc.restore_state(s_snap_blob.io)) {
-            std::printf("NAK U bad SoC block\n");
+            // Put the machine back on a state it can run from instead of
+            // leaving it with a record's RAM and the previous CPU file.
+            s_soc.reset();
+            s_soc.set_cpu(&s_cpu);
+            guest_reset_cpu();
+            std::printf("NAK U bad SoC block; replayed power-on\n");
             break;
         }
+        clock_drop_backlog();
+        sync_time_lapse(true);
         s_force_full = true;
-        const bool frame = load_panel_frame();
+        const bool frame = load_panel_frame(s_snap_blob.fb_crc);
         s_blit_repaint_all = true;
+        s_clock_from_snapshot = snapshot_clock_valid();
+        if (s_clock_from_snapshot)
+            clock_sync(true);
         std::printf("ACK U seq=%u pc=%06X frame=%s\n", unsigned(gueststate_newest_seq()),
-                    unsigned(((s_cpu.m_core->m_r[6] & 0x3fu) << 16) | s_cpu.m_core->m_r[7]),
-                    frame ? "restored" : "none");
+                    unsigned(guest_pc()), frame ? "restored" : "none");
+        break;
+    }
+    case 't': {                    // t <epoch> [tz_min]: set the wall clock
+        long long epoch = 0;
+        int tz = 480;
+        const int got = sscanf(line + 1, "%lld %d", &epoch, &tz);
+        if (got >= 1 && epoch > 1600000000LL) {
+            wallclock_set(int64_t(epoch), got >= 2 ? tz : 480);
+            s_clock_keep_guest = false;   // a real anchor now outranks the record
+            clock_sync(true);
+            // Report the wall clock, not the guest's registers: before frame 120
+            // the guest clock is still the ROM's 0:00:00 and saying so would
+            // read as "the time was not accepted".
+            int wh = 0, wm = 0, ws = 0;
+            wallclock_hms(&wh, &wm, &ws);
+            std::printf("ACK t %02d:%02d:%02d src=%s tz=%+d guest=%02d:%02d:%02d\n",
+                        wh, wm, ws, wallclock_source(), got >= 2 ? tz : 480,
+                        s_soc.ram[0x0CAF], s_soc.ram[0x0CAE], s_soc.ram[0x0CAD]);
+        } else {
+            int h, m, sec;
+            wallclock_hms(&h, &m, &sec);
+            std::printf("NAK t (usage: t <unix_epoch> [tz_min]); now=%02d:%02d:%02d "
+                        "src=%s\n", h, m, sec, wallclock_source());
+        }
+        break;
+    }
+    case 'f': {                    // f [0..3]: time-lapse preset (OFF/15X/60X/300X)
+        const char *a = line + 1;
+        while (*a == ' ') a++;
+        if (*a == '\0') {
+            std::printf("ACK f idx=%d x=%dx ticks=%u 0x0D03=%u\n",
+                        menu_time_lapse_idx(), menu_time_lapse_x(),
+                        unsigned(s_lapse_ticks), unsigned(s_soc.ram[0x0D03]));
+            break;
+        }
+        const int idx = std::atoi(a);
+        const int x = menu_set_time_lapse_idx(idx);
+        sync_time_lapse(true);
+        std::printf("ACK f idx=%d x=%dx 0x0D03=%u\n", idx, x,
+                    unsigned(s_soc.ram[0x0D03]));
         break;
     }
     case 'F': {                    // F <hz>: guest cycles covered by one rendered frame
@@ -1199,6 +1507,7 @@ static void console_exec(char *line)
         for (uint32_t page = 0x7FDu; page <= 0x7FEu; page++)
             if (rom->overlay_import(page, probe))
                 ok++;
+        rom->overlay_touch();          // import() no longer counts as a guest write
         std::printf("ACK W pages=%u writes=%u crc=%08X\n", ok,
                     unsigned(rom->overlay_writes()), unsigned(esp_rom_crc32_le(0, probe, 4096)));
         break;
@@ -1451,6 +1760,33 @@ static void panel_align_test(void)
 // ---------------------------------------------------------------------------
 static void update_buttons(void)
 {
+    // The lapse notice is modal: while it is up the only thing a key may do is
+    // dismiss it (B) and stop the lapse.  Everything else is swallowed, the pad
+    // stays released, and the settings gesture is not reachable.
+    if (s_lapse_toast) {
+        const int edge = buttons_take_latched();
+        buttons_state();                     // keep the poller's debounce fed
+        // The console injector (K <mask> <frames>) counts as a finger here too.
+        const bool b_tap = (edge & BTN_KEY1) != 0 ||
+                           (s_inject_left > 0 && (s_inject_mask & BTN_KEY1) != 0);
+        if (b_tap) {
+            s_lapse_toast = false;
+            s_inject_left = 0;
+            s_inject_mask = 0;
+            menu_set_time_lapse_idx(0);
+            sync_time_lapse(true);
+            s_lapse_repaint = true;
+            ESP_LOGI(TAG, "B on the lapse notice -> time lapse off");
+        }
+        if (s_port_bits != 0xffff) {
+            s_port_bits = 0xffff;
+            s_soc.set_port(0, 0xffff);
+        }
+        s_last_input_us = esp_timer_get_time();
+        s_off_notice_done = false;
+        return;
+    }
+
     // The poller runs every 5 ms; this loop runs once per guest frame (16.7 ms)
     // and the guest only acts on a key that stays down for four frames.  So a
     // physical tap is latched and stretched to kPressFrames guest frames.  A key
@@ -1645,18 +1981,11 @@ static void update_buttons(void)
             menu_press_b();
         else if ((edge & BTN_KEY2) != 0)
             menu_press_c();
-        // SAVE OUT / SAVE IN are commands, not values.  The menu queues one and
-        // this is the only place that knows how a snapshot is stored, so the
-        // menu module itself never touches flash.
+        // The chord rows are commands, not values.  The menu queues one and this
+        // is the only place that knows how a chord is injected.  (SAVE OUT /
+        // SAVE IN used to be here; they are console-only now - see
+        // docs/AUDIT_SAVE_CLOCK_2026-11-24_R3.md section 6.)
         switch (menu_take_action()) {
-        case MENU_ACTION_SAVE:
-            snapshot_machine_state();
-            break;
-        case MENU_ACTION_LOAD:
-            restore_machine_state();
-            menu_close();             // the restored frame replaces the card
-            s_blit_repaint_all = true;
-            break;
         case MENU_ACTION_CHORD:
             // Row 0 of the card.  The chord is a level, not a pulse: the
             // cartridge ignores anything shorter than a couple of seconds, and
@@ -1968,12 +2297,27 @@ static uint32_t save_panel_frame(void)
         ESP_LOGW(TAG, "panel frame not stored; a restore will repaint instead");
         return 0;
     }
+    s_frame_stores++;
     return esp_rom_crc32_le(0, reinterpret_cast<const uint8_t *>(panel_window()),
                             kPanelWindowBytes);
 }
 
-static bool load_panel_frame(void)
+// `expect_crc` is the fb_crc field of the record being restored.  fbsave keeps
+// exactly one frame block for the whole ring, so the newest record can name a
+// frame that a later, failed snapshot already overwrote.  The old code loaded
+// whatever was in that block and ignored the CRC it had stored next to the
+// state; a mismatched pair paints a picture from one moment over RAM from
+// another.  A zero expectation (frame never stored) or a mismatch now means
+// "repaint from RAM" instead.
+static bool load_panel_frame(uint32_t expect_crc)
 {
+    if (expect_crc == 0)
+        return false;
+    if (fbsave_stored_crc() != expect_crc) {
+        ESP_LOGW(TAG, "frame block %08x does not match record %08x; repainting",
+                 unsigned(fbsave_stored_crc()), unsigned(expect_crc));
+        return false;
+    }
     if (!fbsave_load(panel_window(), kPanelWindowBytes))
         return false;
     // The restore memcpy'd straight into fb[], bypassing store_pixel().
@@ -1981,73 +2325,107 @@ static bool load_panel_frame(void)
     return true;
 }
 
-static int64_t s_snap_last_us = 0;
+// Autosave runs on an absolute deadline.  The round of 2026-11-24 found the
+// previous "reset the timer whenever the attempt was skipped" logic meant a
+// parked guest (asleep, or with its PC in the ROM) never saved at all, and that
+// the very first save only happened after a full period, so a power cut inside
+// the first minute lost everything.
+static int64_t s_snap_next_us = 0;
+static constexpr int64_t kFirstSnapshotUs = 10 * 1000000;    // 10 s after boot
+static constexpr int64_t kSnapshotRetryUs = 5 * 1000000;     // after a failure
 static uint32_t s_snap_count = 0;
 static uint32_t s_snap_ram_crc = 0;
 static bool s_snap_ram_crc_valid = false;
 
-static void snapshot_machine_state(void)
+// True when the guest RAM holds a clock worth keeping (a snapshot or a seed).
+static bool snapshot_clock_valid()
+{
+    return s_soc.ram[0x0CB0] == 1 && s_soc.ram[0x0CAF] < 24 &&
+           s_soc.ram[0x0CAE] < 60 && s_soc.ram[0x0CAD] < 60;
+}
+
+// Returns true when the record reached flash, false when this attempt has to be
+// retried later.
+static bool snapshot_machine_state(bool force)
 {
     if (!gueststate_ready())
-        return;
+        return false;
 
-    // Never persist a state the guest cannot resume from: after ~18 s of no
-    // input the ROM walks into its power-down path, and by the time it writes
-    // 0x3036 the PC is already somewhere inside that loop (0x5200-0x5400) with
-    // the peripheral shutdown half done.  Those addresses belong to the ROM, not
-    // to the cartridge, so a record taken there restores a CPU that will never
-    // draw again.  Only snapshot while the guest is executing cartridge code.
-    const uint32_t pc = guest_pc();
-    if (s_soc.asleep() || pc < 0x200000u) {
-        s_snap_last_us = esp_timer_get_time();
-        return;
+    // The one state that must not be persisted is the ROM's power-down tail:
+    // by the time it writes 0x3036 the peripheral shutdown is half done and the
+    // PC sits inside the ROM, so the record describes a machine that is neither
+    // running nor off.  A parking loop, by contrast, is fine: the RAM has the
+    // pet and the clock, and restore bounces the PC back to the frame loop.
+    if (s_soc.asleep()) {
+        ESP_LOGD(TAG, "snapshot skipped: guest is in its power-down path");
+        return false;
     }
 
     // Skip the write when nothing in guest RAM moved: a pet sitting on an idle
     // screen changes nothing, and flash endurance is the scarce resource here.
     const uint32_t crc = esp_rom_crc32_le(
         0, reinterpret_cast<const uint8_t *>(s_soc.ram), sizeof(s_soc.ram));
-    if (s_snap_ram_crc_valid && crc == s_snap_ram_crc) {
-        s_snap_last_us = esp_timer_get_time();
-        return;
-    }
+    if (!force && s_snap_ram_crc_valid && crc == s_snap_ram_crc)
+        return true;                       // nothing to store, but not a failure
 
     s_snap_blob.cpu = *s_cpu.m_core;
     s_soc.save_state(s_snap_blob.io);
-    // The panel GRAM is not part of the guest's address space, so it gets its
-    // own flash block (fbsave.cpp).  Its CRC rides in the payload: a record
-    // whose frame block was never written then restores to a repaint instead
-    // of a stale picture.
-    s_snap_blob.fb_crc = save_panel_frame();
-    if (gueststate_store(&s_snap_blob, uint32_t(sizeof(s_snap_blob)), s_soc.ram,
-                         uint32_t(sizeof(s_soc.ram)))) {
-        s_snap_ram_crc = crc;
-        s_snap_ram_crc_valid = true;
-        s_snap_count++;
+    // The panel GRAM is not part of the guest's address space, so a record that
+    // can resume exactly needs the frame in its own flash block (fbsave.cpp).
+    //
+    // Only resumable records get one.  A snapshot taken while the guest sits in
+    // its ROM park loop is replayed through power-on instead (the PC has no
+    // resumable stack frame), and the ROM repaints the screen from scratch - so
+    // storing that frame would burn a 32 KiB erase block (four sectors, the
+    // single largest wear item on this board) plus ~150 ms inside the frame
+    // loop, every minute, for a picture that is about to be redrawn anyway.
+    const uint32_t snap_pc = guest_pc();
+    const bool resumable = snap_pc >= 0x200000u && snap_pc < 0x400000u;
+    s_snap_blob.fb_crc = resumable ? save_panel_frame() : 0;
+    if (!gueststate_store(&s_snap_blob, uint32_t(sizeof(s_snap_blob)), s_soc.ram,
+                          uint32_t(sizeof(s_soc.ram)))) {
+        ESP_LOGW(TAG, "snapshot store failed; retrying in %d s",
+                 int(kSnapshotRetryUs / 1000000));
+        return false;
     }
-    s_snap_last_us = esp_timer_get_time();
+    ESP_LOGI(TAG, "snapshot pc=%06x %s", unsigned(snap_pc),
+             resumable ? "frame stored (direct resume)" : "frame skipped (power-on replay)");
+    s_snap_ram_crc = crc;
+    s_snap_ram_crc_valid = true;
+    s_snap_count++;
+    // Keep the wall clock in step with the save: after a power cut this is the
+    // epoch a cold boot resumes from.  Under time lapse the guest clock is the
+    // only thing that knows how far virtual time has run, so take it first -
+    // otherwise the snapshot would carry the fast clock and the anchor the slow
+    // one, and the next cold boot would rewind the machine.
+    if (s_lapse_x > 1)
+        wallclock_adopt_local(guest_clock_sec());
+    wallclock_persist();
+    return true;
 }
 
-// Once per host frame: take a snapshot when the minute is up.
+// Once per host frame: take a snapshot when the deadline passes.
 static void maybe_snapshot_machine_state(void)
 {
     if (!gueststate_ready())
         return;
-    const int64_t now = esp_timer_get_time();
     const int period = menu_autosave_sec();
-    if (s_snap_last_us == 0) {
-        s_snap_last_us = now;
-        return;
-    }
     if (period <= 0) {
-        // Auto-save is off, but keep the clock parked on "now" so turning it
-        // back on does not fire a snapshot the instant the menu closes.
-        s_snap_last_us = now;
+        s_snap_next_us = 0;                // OFF: nothing scheduled
         return;
     }
-    if (now - s_snap_last_us < int64_t(period) * 1000000)
+    const int64_t now = esp_timer_get_time();
+    if (s_snap_next_us == 0) {
+        // First save shortly after boot instead of one whole period later.
+        s_snap_next_us = now + kFirstSnapshotUs;
         return;
-    snapshot_machine_state();
+    }
+    if (now < s_snap_next_us)
+        return;
+    if (snapshot_machine_state(false))
+        s_snap_next_us = now + int64_t(period) * 1000000;
+    else
+        s_snap_next_us = now + kSnapshotRetryUs;
 }
 
 // The guest's own power save.  The retail ROM writes 0x3036 (System_Sleep)
@@ -2106,6 +2484,11 @@ static void update_sleep_backlight(void)
     } else if (s_notice_until_us != 0 && now >= s_notice_until_us) {
         s_notice_until_us = 0;
         s_banner_text = "";
+    } else if (s_notice_until_us == 0) {
+        // Nothing to announce.  Without this the last banner stayed on screen
+        // forever: turning the lapse off fell through every branch above and the
+        // "LAPSE 300X" line kept its pointer, so the repaint never happened.
+        s_banner_text = "";
     }
 
     const bool dark = auto_off > 0 && idle >= int64_t(auto_off) * 1000000;
@@ -2144,54 +2527,260 @@ static void restore_machine_state(void)
     // the port/IRQ state and drives UNSP_IRQ7_LINE, and the CPU only samples
     // that line on its next instruction.
     if (!s_soc.restore_state(s_snap_blob.io)) {
-        ESP_LOGW(TAG, "snapshot SoC block rejected; starting from reset");
+        // The RAM already holds the record's contents, so leaving the previous
+        // SoC state in place would run a mixed machine.  Reset both halves and
+        // say so instead of claiming to start from reset while doing neither.
+        ESP_LOGW(TAG, "snapshot SoC block rejected; replaying power-on");
+        s_soc.reset();
+        s_soc.set_cpu(&s_cpu);
+        guest_reset_cpu();
+        s_force_full = true;
+        s_blit_repaint_all = true;
+        s_snap_ram_crc_valid = false;
         return;
     }
     // The panel GRAM is not part of the guest's address space: ST7735 reset
     // leaves it black and the guest only pushes the tiles it believes changed,
-    // which after a restore is none of them.  Put the stored picture back first.
-    const bool have_frame = load_panel_frame();
+    // which after a restore is none of them.  Put the stored picture back first,
+    // but only if the frame block really belongs to this record.
+    const bool have_frame = load_panel_frame(s_snap_blob.fb_crc);
     // A snapshot taken while the guest was in the System_Sleep path restores a
     // CPU that will never poll the pad again.  Treat it as a wake-up instead of
     // restoring a dead state: the RAM (and therefore the pet) survives, only the
     // PC restarts.
     const bool was_asleep = s_snap_blob.io.asleep != 0;
-    if (was_asleep) {
-        // A record that captured the ROM's power-down path still has the pet and
-        // the clock in RAM, so the machine picks up where it left off rather than
-        // asking the player to set the clock again: put the PC back on the frame
-        // loop.  set_sleep_inhibit first, so wake_from_sleep() only clears the
-        // flag instead of replaying power-on.
+    const uint32_t pc = guest_pc();
+    // Whether the record's own clock survives this resume.  A power-on replay
+    // zeroes the ROM's clock registers, so it has to be re-seeded from the wall
+    // anchor; a direct resume keeps what the record holds.
+    bool clock_kept = snapshot_clock_valid();
+    if (pc < 0x200000u || pc >= 0x400000u) {
+        // A record whose PC sits in the ROM (the key-wait loop the idle timer
+        // parks on, or the power-down tail) cannot resume at that address: the
+        // registers and stack belong to a loop that no longer exists.  Replaying
+        // power-on with the RAM untouched is the ROM's own CONTINUE path, and the
+        // clock is re-seeded from the wall anchor at frame 120, so the pet and
+        // the time both survive.
+        //
+        // Bouncing the PC to kGuestResumePc instead was tried and measured on
+        // 2026-11-24: the guest executed three frames and then ran into 0x00d0
+        // with SR=fc00, 33 s per frame, because the park loop's stack frame was
+        // still on the stack.  Do not "improve" this without a stack unwind.
+        ESP_LOGW(TAG, "snapshot pc=%06x outside the cartridge; replaying power-on", pc);
+        guest_reset_cpu();
+        clock_kept = false;                // power-on re-seeds from the anchor
+    } else if (was_asleep) {
+        // Asleep but with a cartridge PC: treat it as a wake-up.  set_sleep_
+        // inhibit first so wake_from_sleep() only clears the flag.
         s_soc.set_sleep_inhibit(kGuestResumePc);
         s_soc.wake_from_sleep();
-        s_cpu.m_core->m_r[unsp_device::REG_SR] =
-            uint16_t((s_cpu.m_core->m_r[unsp_device::REG_SR] & 0xffc0u) |
-                     ((kGuestResumePc >> 16) & 0x3fu));
-        s_cpu.m_core->m_r[unsp_device::REG_PC] = uint16_t(kGuestResumePc & 0xffffu);
-    } else if (guest_pc() < 0x200000u) {
-        // A record whose PC sits in the ROM or in the low RAM alias cannot resume:
-        // those addresses are the power-down path or a stale boot artefact.
-        // Replaying power-on is always safe and keeps RAM, so the pet survives.
-        ESP_LOGW(TAG, "snapshot pc=%06x outside the cartridge; replaying power-on",
-                 unsigned(guest_pc()));
-        guest_reset_cpu();
     }
     // The panel still shows the previous power-on frame and the ST7735 window
     // state knows nothing about the restored RAM, so ask for a full repaint.
     s_force_full = true;
     s_blit_repaint_all = true;
     s_snap_ram_crc_valid = false;
-    ESP_LOGI(TAG, "resumed at pc=%06x sr=%04x sp=%04x int2=%04x frame=%s%s",
-             unsigned(((s_cpu.m_core->m_r[6] & 0x3fu) << 16) | (s_cpu.m_core->m_r[7] & 0xffffu)),
-             unsigned(s_cpu.m_core->m_r[6]),
+    s_clock_from_snapshot = clock_kept;
+    if (clock_kept) {                  // remember it for a boot with no real anchor
+        s_keep_h = s_soc.ram[0x0CAF];
+        s_keep_m = s_soc.ram[0x0CAE];
+        s_keep_s = s_soc.ram[0x0CAD];
+        s_keep_valid = true;
+    }
+    // A record can carry a saturated half-second backlog; draining it costs one
+    // second per frame, so drop it before the guest runs (see clock_drop_backlog).
+    clock_drop_backlog();
+    // The record carries whatever 0x0D03 it was saved with.  The menu is the
+    // authority now: a player who saved at 60x and then switched to OFF must not
+    // get an accelerated machine back.
+    sync_time_lapse(true);
+    ESP_LOGI(TAG, "resumed at pc=%06x sr=%04x sp=%04x int2=%04x frame=%s clock=%s%s",
+             unsigned(guest_pc()),
+             unsigned(s_cpu.m_core->m_r[unsp_device::REG_SR]),
              unsigned(s_cpu.m_core->m_r[unsp_device::REG_SP] & 0xffffu),
              unsigned(s_snap_blob.io.interrupt2_ctrl),
              have_frame ? "restored" : "none",
+             s_clock_from_snapshot ? "kept" : "cold",
              was_asleep ? " wake=reset" : "");
+}
+
+// ---------------------------------------------------------------------------
+//  guest clock
+//
+//  The handset has no RTC chip.  Its firmware keeps hh:mm:ss in RAM and advances
+//  it from the SoC's 2 Hz interrupt (docs/RE_RTC.md): the IRQ handler bumps the
+//  half-second counter [0x0CB1], and the frame body's 0x5BE2 turns two of those
+//  into one second.  That is exact on the real machine because it executes its
+//  frame body 60 times per wall second.
+//
+//  Here it is not: the guest parks in the ROM after 16 s of no input, gates the
+//  interrupt with its own `int off`, and the emulator itself cannot always run a
+//  1.6 M-cycle frame inside 16.6 ms.  Measured on v1.9.0 with a key repeating
+//  every 3 s: 20 guest seconds per 63 wall seconds (0.317x).  Parked: 0.744x.
+//  A software clock fed at 0.3x is why the game's clock "runs slow".
+//
+//  So the host owns wall time now: wallclock.cpp holds a Unix anchor (NVS, console
+//  or build timestamp, in that order of quality) and this pair of functions
+//  pushes it into the guest registers whenever the guest has drifted outside a
+//  +/-1 s dead band.  Inside the band the guest's own code keeps running, so its
+//  second-carry pulse [0x0CB2] and the once-per-second repaint are untouched.
+// ---------------------------------------------------------------------------
+static void guest_clock_write(int h, int m, int s)
+{
+    s_soc.ram[0x0CB0] = 1;                 // RTC enabled
+    s_soc.ram[0x0CAF] = uint16_t(h);
+    s_soc.ram[0x0CAE] = uint16_t(m);
+    s_soc.ram[0x0CAD] = uint16_t(s);
+    s_soc.ram[0x0CB1] = 0;                 // half-second counter restarts
+    s_soc.ram[0x0CB2] = 1;                 // "second carried": repaint the clock
+}
+
+// The ROM's half-second counter [0x0CB1] is fed by the 2 Hz interrupt and
+// drained two-per-frame by 0x5BE2.  That balances only while the guest runs its
+// frame body 60 times a second; whenever it parks, the counter grows instead,
+// and the moment the frame body comes back it converts the backlog into seconds
+// at frame rate.  Measured 2026-11-25: [0x0CB1] reached its 16-bit ceiling
+// (65535 ticks = 32767 s = 9 h 6 min) and the clock then ran forward nine hours
+// in about twelve minutes - exactly the size of one full counter.  Keep at most
+// one second of pending time; the host correction covers the difference.
+static void clock_drop_backlog()
+{
+    if (s_soc.ram[0x0CB1] > 2u)
+        s_soc.ram[0x0CB1] = 2u;
+}
+
+static int64_t guest_clock_sec()
+{
+    return int64_t(s_soc.ram[0x0CAF]) * 3600 + int64_t(s_soc.ram[0x0CAE]) * 60 +
+           int64_t(s_soc.ram[0x0CAD]);
+}
+
+// `force` = write the host time regardless of the dead band (console `t`, a
+// resume, the initial seed).  Otherwise at most four cheap checks per second.
+static void clock_sync(bool force)
+{
+    if (!s_clock_seeded)
+        return;
+    // A time the player committed in the game's own clock editor.  This is the
+    // only way the guest may move the host anchor, and it is triggered by a
+    // hardware write (Timebase_Clear with 0x0CB0 already 1), not by watching
+    // RAM deltas - the delta heuristic adopted a restarted clock once and
+    // dragged the anchor an hour off.
+    if (s_soc.take_time_set() && snapshot_clock_valid()) {
+        s_clock_keep_guest = false;
+        wallclock_adopt_local(guest_clock_sec());
+        s_clock_check_us = 0;
+        return;
+    }
+    if (!force && !wallclock_live() && s_clock_keep_guest)
+        return;                            // a restored clock beats an image-age anchor
+    // Time lapse: the guest clock is the time source while the injector runs.
+    // Writing the anchor back would undo every injected second and also clear
+    // [0x0CB1], which is the tick the next carry needs.  Follow it instead, and
+    // leave the NVS write to the next snapshot.
+    if (s_lapse_x > 1 && !force) {
+        const int64_t g = guest_clock_sec();
+        if (g >= 0)
+            wallclock_track_local(g);
+        s_clock_check_us = esp_timer_get_time();
+        s_clock_last_dev = 0;
+        return;
+    }
+    const int64_t now = esp_timer_get_time();
+    if (!force && now - s_clock_check_us < 250000)
+        return;
+    s_clock_check_us = now;
+
+    clock_drop_backlog();
+
+    int h = 0, m = 0, s = 0;
+    wallclock_hms(&h, &m, &s);
+    const int64_t want = int64_t(h) * 3600 + m * 60 + s;
+    int64_t dev = want - guest_clock_sec();
+    dev %= 86400;
+    if (dev > 43200)
+        dev -= 86400;
+    if (dev < -43200)
+        dev += 86400;
+    s_clock_last_dev = int32_t(dev);
+    if (!force && dev > -2 && dev < 2) {
+        s_clock_holds++;
+        return;
+    }
+    guest_clock_write(h, m, s);
+    s_clock_steps++;
+    // A correction every few seconds is normal at 0.3x; only the big ones (a
+    // resume after a power cut, a console time set) are worth a log line.
+    if (force || dev >= 5 || dev <= -5)
+        ESP_LOGI(TAG, "clock -> %02d:%02d:%02d (%+lld s, %u correction(s))",
+                 h, m, s, (long long)dev, unsigned(s_clock_steps));
 }
 
 // One guest frame = exactly FRAME_CYCLES of guest time, sliced at the SoC's
 // next timer event.  Identical to the loop in emu/main.cpp.
+// Called once per host frame until the guest clock is running.
+//
+// The ROM's boot path zeroes hh:mm:ss and clears 0x0CB0 (flash 0x2041C5), so a
+// one-shot seed can be wiped by code that has not run yet: v1.10.x seeded at
+// frame 120, and after a power cut the player could still land on the "set the
+// time" prompt.  Writing the time every frame until it has survived three
+// frames fixes both ends - it lands before the prompt can be reached, and it
+// does not care when the ROM init happens to run.
+static void clock_seed_step(void)
+{
+    if (s_clock_seeded)
+        return;
+
+    // A time committed in the boot prompt's editor outranks any anchor.
+    if (s_soc.take_time_set() && snapshot_clock_valid()) {
+        s_clock_seeded = true;
+        s_clock_keep_guest = false;
+        wallclock_adopt_local(guest_clock_sec());
+        ESP_LOGI(TAG, "clock %02d:%02d:%02d committed at the boot prompt",
+                 s_soc.ram[0x0CAF], s_soc.ram[0x0CAE], s_soc.ram[0x0CAD]);
+        return;
+    }
+    if (s_seed_first_us == 0)
+        s_seed_first_us = esp_timer_get_time();
+    if (esp_timer_get_time() - s_seed_first_us < 300000)
+        return;                            // let the ROM init run first
+
+    if (s_soc.ram[0x0CB0] == 1) {
+        s_clock_seeded = true;
+        // No real anchor anywhere and a clock in the record: keep the record's,
+        // it beats "the moment this image was compiled".
+        s_clock_keep_guest = (!wallclock_live() && s_keep_valid);
+        ESP_LOGI(TAG, "clock running %02d:%02d:%02d (%s)",
+                 s_soc.ram[0x0CAF], s_soc.ram[0x0CAE], s_soc.ram[0x0CAD],
+                 s_clock_keep_guest ? "kept from the record" : wallclock_source());
+        return;
+    }
+
+    // The ROM's clock-set screen clears 0x0CB0 on every frame while it waits
+    // for the player.  Fighting that is worse than losing it: the screen stops
+    // drawing (measured, v1.11.1: the panel sat on the boot logo with the guest
+    // parked in ROM).  Give the seed a few tries, then stay out of the way -
+    // the player commits through the editor and the 0x3033 hook picks it up.
+    if (s_seed_tries >= 4) {
+        s_clock_seeded = true;
+        s_clock_keep_guest = (!wallclock_live() && s_keep_valid);
+        ESP_LOGW(TAG, "clock seed gave up after %u tries; waiting for the player",
+                 unsigned(s_seed_tries));
+        return;
+    }
+    s_seed_tries++;
+
+    int hh = 0, mm = 0, ss = 0;
+    if (!wallclock_live() && s_keep_valid) {
+        hh = s_keep_h;
+        mm = s_keep_m;
+        ss = s_keep_s;
+    } else {
+        wallclock_hms(&hh, &mm, &ss);
+    }
+    guest_clock_write(hh, mm, ss);
+}
+
 static void run_guest_frame(void)
 {
     s_slices_frame = 0;
@@ -2274,27 +2863,7 @@ static void run_guest_frame(void)
         }
     }
 
-    // The handset has no RTC chip: the boot path zeroes the software clock and
-    // clears its enable flag, so the UI parks on a 0:00 clock-set screen until
-    // someone presses through it (docs/RE_RTC.md).  The board has no time
-    // source either, so seed the guest clock from the build timestamp a couple
-    // of seconds in -- that is enough for the pet/growth logic to run, and it
-    // is deterministic per build.  Buttons still work if the user wants to set
-    // a different time.
-    if (s_frames == 120 && !s_clock_seeded) {
-        s_clock_seeded = true;
-        static const char kBuildTime[] = __TIME__;
-        int hh = 0, mm = 0, ss = 0;
-        if (sscanf(kBuildTime, "%d:%d:%d", &hh, &mm, &ss) == 3) {
-            s_soc.ram[0x0CB0] = 1;
-            s_soc.ram[0x0CAF] = uint16_t(hh);
-            s_soc.ram[0x0CAE] = uint16_t(mm);
-            s_soc.ram[0x0CAD] = uint16_t(ss);
-            s_soc.ram[0x0CB1] = 0;
-            s_soc.ram[0x0CB2] = 1;
-            ESP_LOGI(TAG, "clock seeded %02d:%02d:%02d from build time", hh, mm, ss);
-        }
-    }
+
 
     s_frames++;
 }
@@ -2395,7 +2964,14 @@ extern "C" void app_main(void)
     // after guest_init() meant the panel lit at the compile-time default and
     // then jumped to the stored level a few hundred ms later.
     menu_load();
+    // The ROM's time-lapse flag is ours to seed: a machine powered up with the
+    // menu at 300X has to come up running 300X, and one left at OFF must not
+    // inherit whatever the fresh image happens to have in RAM.
+    sync_time_lapse(true);
     s_brightness_pct = menu_bright_pct();
+    // NVS is up now (menu_load initialised it), so the clock anchor can be read
+    // even on a boot with no ROM in the store.
+    wallclock_init();
 
     if (display_init() == ESP_OK) {
         s_display_ok = true;
@@ -2541,12 +3117,53 @@ extern "C" void app_main(void)
                 s_menu_was_open = false;
                 bezel_paint(s_strip, sizeof(s_strip), s_batt_pct);
                 s_blit_repaint_all = true;
+                // A lapse picked inside the card gets its notice now that the
+                // card is gone; while it was up the row itself was the feedback.
+                if (s_lapse_x > 1 && !s_lapse_toast) {
+                    s_lapse_toast = true;
+                    std::snprintf(s_lapse_toast_text, sizeof(s_lapse_toast_text),
+                                  "%dX", s_lapse_x);
+                    ESP_LOGI(TAG, "lapse notice up (%s) after the card closed",
+                             s_lapse_toast_text);
+                }
             }
+            if (s_lapse_repaint) {
+                // The notice card covers rows the game window does not, so
+                // dismissing it needs the shell repainted, not just a blit.
+                s_lapse_repaint = false;
+                bezel_paint(s_strip, sizeof(s_strip), s_batt_pct);
+                s_blit_repaint_all = true;
+            }
+            // Time lapse: one tick injection per frame at most, right before the
+            // guest runs so the frame body's 0x5BE2 sees it in this same frame.
+            time_lapse_step();
             run_guest_frame();
         }
         // The cartridge's buzzer: TimerB sets the pitch, PWM0 gates IOA0.  This
         // publishes the current note to the audio task once per frame; 0 = off.
         audio_set_buzzer(s_soc.buzzer_hz());
+        // Wall-clock upkeep.  Runs here rather than inside run_guest_frame() so
+        // it also ticks while the settings card has the guest parked; the guest
+        // only reads these registers when it repaints the clock.
+        sync_time_lapse();
+        clock_seed_step();
+        clock_sync(false);
+        // Time-lapse bench line.  The multiplier has to be measured from inside
+        // the firmware: a console round trip arrives up to a second late, which
+        // is a 10% error at 60x and a 300% one at 300x.  Printed only while a
+        // lapse runs, every 5 s.
+        if (s_lapse_x > 1) {
+            const int64_t now = esp_timer_get_time();
+            if (now >= s_lapse_log_us) {
+                s_lapse_log_us = now + 5000000;
+                ESP_LOGI(TAG, "LAPSE %dx %lldms ticks=%u guest=%02d:%02d:%02d scr=%04X",
+                         s_lapse_x, (long long)(now / 1000), unsigned(s_lapse_ticks),
+                         s_soc.ram[0x0CAF], s_soc.ram[0x0CAE], s_soc.ram[0x0CAD],
+                         unsigned(s_soc.ram[0x0C88]));
+            }
+        } else {
+            s_lapse_log_us = 0;
+        }
 
         const uint32_t frame_us = uint32_t(esp_timer_get_time() - t_guest0);
         s_guest_us += frame_us;
@@ -2559,6 +3176,9 @@ extern "C" void app_main(void)
         // is 9,216 framebuffer reads on a 160 MHz part.  s_boot_ok latches the
         // first true, so every later frame short-circuits.
         const bool content = s_boot_ok || window_has_content();
+        // While the lapse strip is up the blit and the strip have to be pushed
+        // together, or the game repaint wipes it.  At 240x22 that is 5.3 k extra
+        // pixels against the window's 37 k, so every frame is affordable.
         if (s_display_ok && !menu_is_open() && !menu_confirm_is_open()) {
             const int64_t t_blit0 = esp_timer_get_time();
             blit_frame();
@@ -2570,6 +3190,10 @@ extern "C" void app_main(void)
                 panel_align_test();
             s_blit_us += uint32_t(esp_timer_get_time() - t_blit0);
             s_host_frames++;
+            // The card sits on top of the picture the blit just painted, so it
+            // has to follow it in the same frame.
+            if (s_lapse_toast)
+                menu_lapse_toast_present(s_strip, kDstW, kDstH, s_lapse_toast_text);
             // Battery: one register read every 30 s, and the corner is only
             // pushed when the number actually moves.  Deliberately inside this
             // block - while the card owns the panel it paints over the wall,
@@ -2595,7 +3219,20 @@ extern "C" void app_main(void)
         // The top margin belongs to us, not to the guest: pushing the banner
         // once is enough because nothing else ever draws there.
         if (s_banner_text != s_banner_shown) {
-            menu_banner_present(s_strip, kDstW, s_banner_text);
+            const bool clearing =
+                s_banner_text[0] == '\0' && s_banner_shown != nullptr &&
+                s_banner_shown[0] != '\0';
+            if (clearing && !menu_is_open() && !menu_confirm_is_open()) {
+                // The banner is black-backed, so "no banner" has to restore the
+                // wall underneath rather than leave a dark strip.  bezel_paint()
+                // blanks the glass, hence the full repaint request.
+                bezel_paint(s_strip, sizeof(s_strip), s_batt_pct);
+                s_blit_repaint_all = true;
+            } else {
+                menu_banner_present(s_strip, kDstW, s_banner_text);
+            }
+            ESP_LOGI(TAG, "banner \"%s\"%s", s_banner_text,
+                     clearing ? " (cleared, shell repainted)" : "");
             s_banner_shown = s_banner_text;
         }
 
