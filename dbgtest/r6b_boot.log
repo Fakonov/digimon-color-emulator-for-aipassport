@@ -1,0 +1,109 @@
+I (148) esp_image: segment 1: paddr=0005f0c8 vaddr=3fc98200 sizeESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0x15 (USB_UART_CHIP_RESET),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x4202f90c
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 22 2026 15:09:01
+I (25) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (33) boot.esp32c3: SPI Mode       : DIO
+I (37) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (45) boot: Partition Table:
+I (48) boot: ## Label            Usage          Type ST Offset   Length
+I (54) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (67) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 00280000
+I (80) boot:  4 save             Unknown data     01 41 00490000 00020000
+I (86) boot: End of partition table
+I (90) esp_image: segment 0: paddr=00010020 vaddr=3c0b0020 size=4f0a0h (323744) map
+I (148) esp_image: segment 1: paddr=0005f0c8 vaddr=3fc98200 size=00f50h (  3920) load
+I (149) esp_image: segment 2: paddr=00060020 vaddr=42000020 size=ad508h (709896) map
+I (262) esp_image: segment 3: paddr=0010d530 vaddr=3fc99150 size=00da8h (  3496) load
+I (263) esp_image: segment 4: paddr=0010e2e0 vaddr=40380000 size=181b4h ( 98740) load
+I (284) esp_image: segment 5: paddr=0012649c vaddr=50000000 size=00020h (    32) load
+I (291) boot: Loaded app from partition at offset 0x10000
+I (291) boot: Disabling RNG early entropy source...
+I (302) cpu_start: Unicore app
+I (310) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (310) cpu_start: Pro cpu start user code
+I (310) cpu_start: cpu freq: 160000000 Hz
+I (312) app_init: Application information:
+I (316) app_init: Project name:     digicore-c3
+I (320) app_init: App version:      1.15.0
+I (324) app_init: Compile time:     Nov 26 2026 22:51:15
+I (329) app_init: ELF file SHA256:  bbac44086...
+I (333) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (338) efuse_init: Min chip rev:     v0.3
+I (342) efuse_init: Max chip rev:     v1.99 
+I (346) efuse_init: Chip rev:         v1.1
+I (350) heap_init: Initializing. RAM available for dynamic allocation:
+I (356) heap_init: At 3FCB54A0 len 0000AB60 (42 KiB): RAM
+I (361) heap_init: At 3FCC0000 len 0001C710 (113 KiB): Retention RAM
+I (367) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (373) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (380) spi_flash: detected chip: generic
+I (382) spi_flash: flash io: dio
+I (386) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (392) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (399) main_task: Started on CPU0
+I (402) main_task: Calling app_main()
+I (405) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (412) DIGICORE: build Nov 26 2026 22:51:20, reset cause 11, heap 159068 B (largest block 114688 B)
+I (425) menu: auto-off FOLLOW 16S, bright 80%, volume 20%, auto-save 60S, time-lapse OFF
+I (429) wallclock: clock source=nvs tz=+480 min epoch=1795662332
+I (435) display: init ST7789P3 320x240
+I (569) display: ready, landscape 320x240, backlight off
+I (569) DIGICORE: panel window buffer: ready (73728 B, 80792 B heap free)
+I (600) DIGICORE: panel cleared to black (320x240)
+I (646) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (679) audio: ES8311 id=83 at 0x18
+I (680) audio: ready: ES8311 + I2S0 48000 Hz, amp always on
+I (690) audio: first i2s write: err=0 sent=1024 of 1024
+I (848) batt: CW2017 v0F ready, 4126 mV, SOC 83%
+I (850) DIGICORE: battery 83%
+I (854) ROMSTORE: sparse store mapped at 0x3c100000 (2560 KiB), direct read path on, no page cache allocated
+I (855) ROMSTORE: partition `roms` data/0x40 at 0x210000, 2560 KiB
+I (861) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (869) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (875) DIGICORE: digimon-color-passport v1.15.0
+I (879) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+I (886) saveimg: save partition 131072 bytes at 0x490000
+I (893) saveimg: loaded 2 page(s) from slot 0 seq=340
+I (897) DIGICORE: restored 2/2 flash page(s) of game state
+I (901) gueststate: ring 5 x 12288 B newest seq=2338
+I (910) gueststate: restored snapshot seq=2338 from record 3
+I (922) DIGICORE: resumed at pc=207ca3 sr=0020 sp=0fb3 int2=0205 frame=restored clock=kept
+VER ver=1.15.0 win=0,18 96x96 scale=2 left=64 top=24 off=0,0 home=64,24 fb=128 chunk=16
+[gpce4] sleep resume point 000000 -> 200300
+W (1015) DIGICORE: LONGF us=92118 pc=207d0c slices=112 aotb=2975 aoti=23003 fallback=39 miss=19531 dblk=2975 dins=23003 dmiss=19531 dfb=39 dtick=2546 hp=48520/259946/453814/0/75375 ppx=8/1344/1326
+I (1032) DIGICORE: banner ""
+I (1049) DIGICORE: BOOT_OK first non-blank guest frame at 1 frames, pc=007d0c, display_on=1 sleep=0 madctl=00a8
+W (1125) DIGICORE: LONGF us=76358 pc=207ca3 slices=105 aotb=5477 aoti=42624 fallback=77 miss=37314 dblk=2502 dins=19621 dmiss=17783 dfb=38 dtick=2113 hp=49241/202143/446921/0/65024 ppx=14/1311/1327
+I (1133) DIGICORE: backlight -> 80%
+I (1324) DIGICORE: clock running 11:05:31 (nvs)
+W (1600) DIGICORE: LONGF us=81394 pc=207ca3 slices=107 aotb=18842 aoti=103104 fallback=486 miss=75810 dblk=3227 dins=24187 dmiss=17446 dfb=72 dtick=2319 hp=41510/193817/96910/0/131181 ppx=0/1246/1231
+W (1688) DIGICORE: LONGF us=73835 pc=005b57 slices=101 aotb=21595 aoti=124144 fallback=521 miss=93204 dblk=2753 dins=21040 dmiss=17394 dfb=35 dtick=2355 hp=42614/182952/95523/0/69502 ppx=2/1223/1192
+W (1771) DIGICORE: LONGF us=70383 pc=207ca3 slices=95 aotb=23904 aoti=142332 fallback=556 miss=109890 dblk=2309 dins=18188 dmiss=16686 dfb=35 dtick=1973 hp=41545/182488/94514/0/60583 ppx=12/1150/1174
+W (1844) DIGICORE: LONGF us=61460 pc=200343 slices=89 aotb=26156 aoti=158787 fallback=601 miss=123472 dblk=2252 dins=16455 dmiss=13582 dfb=45 dtick=1843 hp=36053/141644/74136/0/51048 ppx=10/940/948
+W (2273) DIGICORE: LONGF us=67232 pc=207d0f slices=156 aotb=38639 aoti=210677 fallback=994 miss=153090 dblk=2833 dins=19774 dmiss=13715 dfb=74 dtick=2214 hp=29289/143000/66855/0/62437 ppx=0/948/852
+W (2386) DIGICORE: LONGF us=100245 pc=207a4c slices=146 aotb=42615 aoti=241109 fallback=1047 miss=175320 dblk=3976 dins=30432 dmiss=22230 dfb=53 dtick=3289 hp=61336/270850/142072/0/98838 ppx=4/1805/1800
+W (2501) DIGICORE: LONGF us=101444 pc=207ca3 slices=136 aotb=45984 aoti=267591 fallback=1097 miss=199524 dblk=3369 dins=26482 dmiss=24204 dfb=50 dtick=2827 hp=63951/304804/137269/0/86904 ppx=18/1639/1704
+W (2998) DIGICORE: LONGF us=115831 pc=207ca3 slices=155 aotb=61700 aoti=340818 fallback=1553 miss=246048 dblk=4549 dins=34327 dmiss=25474 dfb=89 dtick=3625 hp=60335/278949/142563/0/113019 ppx=0/1834/1799
+W (3120) DIGICORE: LONGF us=107742 pc=005b4a slices=145 aotb=65397 aoti=369485 fallback=1605 miss=272100 dblk=3697 dins=28667 dmiss=26052 dfb=52 dtick=3228 hp=113485/271806/140636/0/95443 ppx=14/1776/1737
+W (3196) DIGICORE: LONGF us=61577 pc=200343 slices=137 aotb=67799 aoti=386475 fallback=1652 miss=285093 dblk=2402 dins=16990 dmiss=12993 dfb=47 dtick=2430 hp=34637/141347/80273/0/50681 ppx=10/950/1011
+W (3703) DIGICORE: LONGF us=105597 pc=005f8b slices=155 aotb=83797 aoti=462534 fallback=2102 miss=330690 dblk=4444 dins=33889 dmiss=22740 dfb=56 dtick=3141 hp=64027/332724/147830/0/111039 ppx=0/1899/1894
+W (3821) DIGICORE: LONGF us=108940 pc=207cfa slices=147 aotb=87364 aoti=490586 fallback=2153 miss=357304 dblk=3567 dins=28052 dmiss=26614 dfb=51 dtick=2936 hp=63874/271406/134376/0/91683 ppx=17/1802/1704
+W (4735) DIGICORE: LONGF us=87903 pc=200343 slices=321 aotb=122963 aoti=644633 fallback=3372 miss=407886 dblk=4131 dins=30711 dmiss=3718 dfb=174 dtick=5106 hp=185283/658163/440670/0/87297 ppx=72/4559/4560
+W (5128) DIGICORE: LONGF us=83810 pc=230321 slices=261 aotb=143663 aoti=725539 fallback=4073 miss=428683 dblk=3775 dins=29255 dmiss=3125 dfb=163 dtick=5066 hp=184374/658847/444399/0/85580 ppx=72/4560/4560
+[gpce4] first System_Sleep write = 5555
+I (11103) gueststate: snapshot seq=2339 -> record 4 (280 + 8192 B)
+I (11104) DIGICORE: snapshot pc=005251 frame skipped (power-on replay)

@@ -140,6 +140,30 @@ uint32_t g_rd_fast = 0, g_rd_slow = 0, g_wr_fast = 0, g_wr_slow = 0;
 #define SPLIT_ADD(var) ((void)0)
 #endif
 
+// ---- HLE attribution (C3_HLEPROF) ----------------------------------------
+// The frame diagnostics could say how many guest cycles a long frame used and
+// how many pixels went through each hook, but not where the *host* time went.
+// Two rounds of auditing guessed at that ("must be the sprite data reads") and
+// could not settle it.  One cycle-counter read around each hook call answers it
+// directly: the hook is entered once per row/blit, not once per pixel, so the
+// cost is ~3 host cycles per call - noise against a 14 ms frame.
+#ifndef C3_HLEPROF
+#define C3_HLEPROF 0
+#endif
+#if C3_HLEPROF && defined(ESP_PLATFORM)
+uint32_t g_h_band = 0;   // hle_render_band
+uint32_t g_h_blit = 0;   // hle_blit_key
+uint32_t g_h_push = 0;   // hle_push_pixels
+uint32_t g_h_fill = 0;   // hle_fill_span
+uint32_t g_h_mul = 0;    // hle_mul32
+#define HLE_T0() const uint32_t __ht0 = esp_cpu_get_cycle_count()
+#define HLE_ADD(var) var += (esp_cpu_get_cycle_count() - __ht0)
+#else
+uint32_t g_h_band = 0, g_h_blit = 0, g_h_push = 0, g_h_fill = 0, g_h_mul = 0;
+#define HLE_T0() ((void)0)
+#define HLE_ADD(var) ((void)0)
+#endif
+
 void unsp_device::unimplemented_opcode(uint16_t op)
 {
 	std::printf("unsp: unimplemented %04X at %06X\n", op, UNSP_LPC);
@@ -1206,11 +1230,30 @@ bool unsp_device::hle_blit_key()
 	const int32_t budget = core->m_icount > 0 ? core->m_icount : 0;
 	if (budget < (int32_t)g_blit_cyc_per_px)
 		return false;                   // no room for even one pixel: interpret
+	// Sprite source window.  The clip check above already decided there is work
+	// to do; the source itself is read one 16 bit word per pixel out of the flash
+	// window, and going through read16() costs an indirect bus call, four address
+	// range compares and the SparseRom page lookup for *every* pixel.  A 2 KiB
+	// page window covers 2048 consecutive sprite words, which is more than any
+	// 96 pixel row, so the whole sprite is read through one host pointer with a
+	// single range test per pixel.  fetch_window() returns null for pages that
+	// are absent or overlaid, and the loop then falls back to read16().
+	uint32_t win_base = 0xffffffffu;
+	uint32_t win_mask = 0u;
+	const uint16_t *win = nullptr;
+
 	uint32_t cycles = 0;
 	uint32_t pixels = 0;
 	while ((uint16_t)(i - end) >= 0x8000u && (int32_t)cycles < budget)
 	{
-		const uint16_t val = read16(src);
+		uint16_t val;
+		if (win != nullptr && (src - win_base) <= win_mask)
+			val = win[src & win_mask];
+		else
+		{
+			win = m_bus->fetch_window(src, &win_base, &win_mask);
+			val = (win != nullptr) ? win[src & win_mask] : read16(src);
+		}
 		if (val != AOT_HLE_BLIT_KEY)
 		{
 			const uint32_t dst = (uint32_t)i + (uint32_t)bias + AOT_HLE_BLIT_BIAS;
@@ -1320,6 +1363,30 @@ static bool hle_push_pixels(unsp_device *const d)
 	uint16_t src = (uint16_t)core->m_r[unsp_device::REG_R1];
 	uint32_t remaining = count;
 	uint32_t cycles = 0;
+
+	// Fast path: hand the whole span to the LCD model in one call.  Two SPI2
+	// TXDATA writes per pixel means an indirect call, an I/O address decode, the
+	// FIFO bookkeeping and the command switch *per byte* - measured on the round-6
+	// build as the largest remaining per-pixel cost of a full-screen move.  The
+	// source has to sit inside the flat RAM window (the 96 word scan-line buffer
+	// always does) and the span must not run past its end, so the pointer the
+	// panel model receives can never read outside guest RAM.  Outside a RAMWR
+	// window the callback returns false and the byte path below still runs.
+	if (d->m_lcd_push != nullptr && d->m_ram != nullptr)
+	{
+		const uint32_t affordable = (uint32_t)budget / AOT_HLE_PUSH_CYCLES;
+		uint32_t n = remaining < affordable ? remaining : affordable;
+		const uint32_t room = 0x1000u - (uint32_t)src;      // words left in the window
+		if (n > room)
+			n = room;
+		if (n != 0u && (uint32_t)src + n - 1u <= d->m_ram_limit &&
+		    d->m_lcd_push(d->m_lcd_push_opaque, d->m_ram + src, n))
+		{
+			src = (uint16_t)(src + n);
+			remaining -= n;
+			cycles += n * AOT_HLE_PUSH_CYCLES;
+		}
+	}
 
 	while (remaining != 0u && cycles + AOT_HLE_PUSH_CYCLES <= (uint32_t)budget)
 	{
@@ -1612,6 +1679,11 @@ static bool hle_render_band(unsp_device *const d)
 	uint32_t *const r = core->m_r;
 	const uint32_t budget = core->m_icount > 0 ? (uint32_t)core->m_icount : 0u;
 
+	// The scan-line buffer is written through the flat RAM window below; without
+	// it (no SoC attached) hand the line back to the guest rather than crash.
+	if (d->m_ram == nullptr)
+		return false;
+
 	const uint16_t bp = (uint16_t)r[unsp_device::REG_BP];
 	const uint16_t y = d->read16((uint32_t)bp);
 	const uint16_t count = d->read16(AOT_HLE_BAND_NREC);
@@ -1685,28 +1757,45 @@ static bool hle_render_band(unsp_device *const d)
 		if (cnt != 0)
 		{
 			const uint16_t row = (uint16_t)(y - ry0);
-			const uint32_t dst = AOT_HLE_BAND_LINE + bias;
+
+			// The scan-line buffer at 0x07BA is plain guest RAM and the flat window
+			// covers it, so both the fill and the blit write it through m_ram[]
+			// instead of the bus.  dst + 0..95 always stays inside 0x1000.
+			uint16_t *const line = d->m_ram + AOT_HLE_BAND_LINE;
 
 			if (gfx == 0xFFFEu)
 			{
 				const uint16_t v = d->read16(rec + 1u);
 				for (uint16_t i = 0; i < cnt; i++)
-					d->write16(dst + i, v);
+					line[bias + i] = v;
 			}
 			else
 			{
 				// src = rec[7]:rec[6] + w*row, then skip the clipped left part.
 				uint32_t src = ((uint32_t)d->read16(rec + 7u) << 16) | d->read16(rec + 6u);
 				src += (uint32_t)w * (uint32_t)row;
+				// One page window per record: the sprite row is cnt <= 96
+				// consecutive words, and a 2 KiB window covers it whole.  Without
+				// it every pixel pays an indirect bus call plus the SparseRom page
+				// lookup (see hle_blit_key).
+				uint32_t win_base = 0xffffffffu;
+				uint32_t win_mask = 0u;
+				const uint16_t *win = nullptr;
+				auto px_at = [&](uint32_t a) -> uint16_t {
+					if (win != nullptr && (a - win_base) <= win_mask)
+						return win[a & win_mask];
+					win = d->m_bus->fetch_window(a, &win_base, &win_mask);
+					return (win != nullptr) ? win[a & win_mask] : d->read16(a);
+				};
 				if (d->read16(rec + 0x0Bu) != 0)   // horizontally flipped
 				{
 					src += (uint32_t)w - 1u;
 					src -= srcskip;
 					for (uint16_t i = 0; i < cnt; i++, src--)
 					{
-						const uint16_t px = d->read16(src);
+						const uint16_t px = px_at(src);
 						if (px != AOT_HLE_BAND_KEY)
-							d->write16(dst + i, px);
+							line[bias + i] = px;
 					}
 				}
 				else
@@ -1714,9 +1803,9 @@ static bool hle_render_band(unsp_device *const d)
 					src += srcskip;
 					for (uint16_t i = 0; i < cnt; i++, src++)
 					{
-						const uint16_t px = d->read16(src);
+						const uint16_t px = px_at(src);
 						if (px != AOT_HLE_BAND_KEY)
-							d->write16(dst + i, px);
+							line[bias + i] = px;
 					}
 				}
 			}
@@ -1828,26 +1917,56 @@ UNSP_HOT void unsp_device::execute_run()
 #ifdef ESP_PLATFORM
 			// Keyed sprite blit: one C loop instead of ~150k interpreted
 			// instructions per 96x96 sprite (see hle_blit_key).
-			if (m_hle_blit && lpc == AOT_HLE_BLIT_ENTRY && hle_blit_key())
-				continue;
+			if (m_hle_blit && lpc == AOT_HLE_BLIT_ENTRY)
+			{
+				HLE_T0();
+				const bool hit = hle_blit_key();
+				HLE_ADD(g_h_blit);
+				if (hit)
+					continue;
+			}
 			// LCD pixel push: 65 virtual cycles per pixel in C instead of
 			// fourteen guest instructions (see hle_push_pixels).
-			if (g_hle_push_px && lpc == AOT_HLE_PUSH_ENTRY && hle_push_pixels(this))
-				continue;
+			if (g_hle_push_px && lpc == AOT_HLE_PUSH_ENTRY)
+			{
+				HLE_T0();
+				const bool hit = hle_push_pixels(this);
+				HLE_ADD(g_h_push);
+				if (hit)
+					continue;
+			}
 			// Constant-colour fill: 0x005B1D runs once per pixel of a redraw and
 			// never reads memory, so the whole span collapses to two writes per
 			// pixel (see hle_fill_span).
-			if (g_hle_fill_px && lpc == AOT_HLE_FILL_ENTRY && hle_fill_span(this))
-				continue;
+			if (g_hle_fill_px && lpc == AOT_HLE_FILL_ENTRY)
+			{
+				HLE_T0();
+				const bool hit = hle_fill_span(this);
+				HLE_ADD(g_h_fill);
+				if (hit)
+					continue;
+			}
 			// 32x32->32 multiply: 0x005F8B is called for every sprite offset and
 			// every fill pixel.  Replaces the arithmetic only; the push and both
 			// pops stay in the guest, so the stack stays balanced.
-			if (g_hle_mul32 && lpc == AOT_HLE_MUL_ENTRY && hle_mul32(this))
-				continue;
+			if (g_hle_mul32 && lpc == AOT_HLE_MUL_ENTRY)
+			{
+				HLE_T0();
+				const bool hit = hle_mul32(this);
+				HLE_ADD(g_h_mul);
+				if (hit)
+					continue;
+			}
 			// Sprite record loop: consume every remaining record for this scan
 			// line in C, then let the guest re-test and push the line buffer.
-			if (g_hle_render_band && lpc == AOT_HLE_BAND_LOOP && hle_render_band(this))
-				continue;
+			if (g_hle_render_band && lpc == AOT_HLE_BAND_LOOP)
+			{
+				HLE_T0();
+				const bool hit = hle_render_band(this);
+				HLE_ADD(g_h_band);
+				if (hit)
+					continue;
+			}
 #endif
 			{
 				SPLIT_T0();

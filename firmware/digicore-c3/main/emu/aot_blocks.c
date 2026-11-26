@@ -14,7 +14,7 @@
 #endif
 
 // 00480F: 3 native instructions, 4 cycles worst case
-static void aot_b00480F(AotCtx *c)
+AOT_IRAM static void aot_b00480F(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x00480Fu);
@@ -48,7 +48,7 @@ static void aot_b00480F(AotCtx *c)
 }
 
 // 004813: 7 native instructions, 0 cycles worst case
-static void aot_b004813(AotCtx *c)
+AOT_IRAM static void aot_b004813(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -198,7 +198,7 @@ AOT_IRAM static void aot_b00481D(AotCtx *c)
 }
 
 // 004820: 2 native instructions, 4 cycles worst case
-static void aot_b004820(AotCtx *c)
+AOT_IRAM static void aot_b004820(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x004820u);
@@ -226,7 +226,7 @@ static void aot_b004820(AotCtx *c)
 }
 
 // 004822: 4 native instructions, 4 cycles worst case
-static void aot_b004822(AotCtx *c)
+AOT_IRAM static void aot_b004822(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -271,7 +271,7 @@ static void aot_b004822(AotCtx *c)
 }
 
 // 004824: 2 native instructions, 4 cycles worst case
-static void aot_b004824(AotCtx *c)
+AOT_IRAM static void aot_b004824(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x004824u);
@@ -299,7 +299,7 @@ static void aot_b004824(AotCtx *c)
 }
 
 // 004826: 1 native instructions, 9 cycles worst case
-static void aot_b004826(AotCtx *c)
+AOT_IRAM static void aot_b004826(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x004826u);
@@ -397,7 +397,7 @@ AOT_IRAM static void aot_b00485D(AotCtx *c)
 }
 
 // 00485E: 7 native instructions, 9 cycles worst case
-static void aot_b00485E(AotCtx *c)
+AOT_IRAM static void aot_b00485E(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -470,7 +470,7 @@ static void aot_b00485E(AotCtx *c)
 }
 
 // 004860: 6 native instructions, 9 cycles worst case
-static void aot_b004860(AotCtx *c)
+AOT_IRAM static void aot_b004860(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -532,7 +532,7 @@ static void aot_b004860(AotCtx *c)
 }
 
 // 004862: 5 native instructions, 9 cycles worst case
-static void aot_b004862(AotCtx *c)
+AOT_IRAM static void aot_b004862(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -583,7 +583,7 @@ static void aot_b004862(AotCtx *c)
 }
 
 // 004865: 3 native instructions, 9 cycles worst case
-static void aot_b004865(AotCtx *c)
+AOT_IRAM static void aot_b004865(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x004865u);
@@ -611,7 +611,7 @@ static void aot_b004865(AotCtx *c)
 }
 
 // 004866: 2 native instructions, 9 cycles worst case
-static void aot_b004866(AotCtx *c)
+AOT_IRAM static void aot_b004866(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x004866u);
@@ -652,7 +652,7 @@ AOT_IRAM static void aot_b004869(AotCtx *c)
 }
 
 // 00486A: 0 native instructions, 0 cycles worst case
-static void aot_b00486A(AotCtx *c)
+AOT_IRAM static void aot_b00486A(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x00486Au);
@@ -662,7 +662,7 @@ static void aot_b00486A(AotCtx *c)
 }
 
 // 00486B: 9 native instructions, 4 cycles worst case
-static void aot_b00486B(AotCtx *c)
+AOT_IRAM static void aot_b00486B(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -757,7 +757,7 @@ static void aot_b00486B(AotCtx *c)
 }
 
 // 00486E: 7 native instructions, 4 cycles worst case
-static void aot_b00486E(AotCtx *c)
+AOT_IRAM static void aot_b00486E(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -832,7 +832,7 @@ static void aot_b00486E(AotCtx *c)
 }
 
 // 004876: 14 native instructions, 4 cycles worst case
-static void aot_b004876(AotCtx *c)
+AOT_IRAM static void aot_b004876(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -965,7 +965,7 @@ static void aot_b004876(AotCtx *c)
 }
 
 // 00487F: 7 native instructions, 4 cycles worst case
-static void aot_b00487F(AotCtx *c)
+AOT_IRAM static void aot_b00487F(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -67052,7 +67052,7 @@ AOT_IRAM static void aot_b2300E8(AotCtx *c)
 }
 
 // 2300EA: 5 native instructions, 4 cycles worst case
-static void aot_b2300EA(AotCtx *c)
+AOT_IRAM static void aot_b2300EA(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -67107,7 +67107,7 @@ static void aot_b2300EA(AotCtx *c)
 }
 
 // 2300F9: 5 native instructions, 9 cycles worst case
-static void aot_b2300F9(AotCtx *c)
+AOT_IRAM static void aot_b2300F9(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -67165,7 +67165,7 @@ static void aot_b2300F9(AotCtx *c)
 }
 
 // 230100: 2 native instructions, 9 cycles worst case
-static void aot_b230100(AotCtx *c)
+AOT_IRAM static void aot_b230100(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x230100u);
@@ -67191,7 +67191,7 @@ static void aot_b230100(AotCtx *c)
 }
 
 // 230101: 1 native instructions, 9 cycles worst case
-static void aot_b230101(AotCtx *c)
+AOT_IRAM static void aot_b230101(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x230101u);
@@ -67207,7 +67207,7 @@ static void aot_b230101(AotCtx *c)
 }
 
 // 230103: 1 native instructions, 9 cycles worst case
-static void aot_b230103(AotCtx *c)
+AOT_IRAM static void aot_b230103(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x230103u);
@@ -67223,7 +67223,7 @@ static void aot_b230103(AotCtx *c)
 }
 
 // 230105: 1 native instructions, 9 cycles worst case
-static void aot_b230105(AotCtx *c)
+AOT_IRAM static void aot_b230105(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x230105u);
@@ -67255,7 +67255,7 @@ AOT_IRAM static void aot_b230107(AotCtx *c)
 }
 
 // 230109: 1 native instructions, 9 cycles worst case
-static void aot_b230109(AotCtx *c)
+AOT_IRAM static void aot_b230109(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x230109u);
@@ -67271,7 +67271,7 @@ static void aot_b230109(AotCtx *c)
 }
 
 // 23010B: 1 native instructions, 9 cycles worst case
-static void aot_b23010B(AotCtx *c)
+AOT_IRAM static void aot_b23010B(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x23010Bu);
@@ -67287,7 +67287,7 @@ static void aot_b23010B(AotCtx *c)
 }
 
 // 23010D: 1 native instructions, 9 cycles worst case
-static void aot_b23010D(AotCtx *c)
+AOT_IRAM static void aot_b23010D(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x23010Du);
@@ -67358,7 +67358,7 @@ AOT_IRAM static void aot_b23010F(AotCtx *c)
 }
 
 // 230115: 5 native instructions, 4 cycles worst case
-static void aot_b230115(AotCtx *c)
+AOT_IRAM static void aot_b230115(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -67413,7 +67413,7 @@ static void aot_b230115(AotCtx *c)
 }
 
 // 23011B: 5 native instructions, 4 cycles worst case
-static void aot_b23011B(AotCtx *c)
+AOT_IRAM static void aot_b23011B(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -67468,7 +67468,7 @@ static void aot_b23011B(AotCtx *c)
 }
 
 // 230121: 5 native instructions, 4 cycles worst case
-static void aot_b230121(AotCtx *c)
+AOT_IRAM static void aot_b230121(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -67523,7 +67523,7 @@ static void aot_b230121(AotCtx *c)
 }
 
 // 230127: 5 native instructions, 4 cycles worst case
-static void aot_b230127(AotCtx *c)
+AOT_IRAM static void aot_b230127(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -67578,7 +67578,7 @@ static void aot_b230127(AotCtx *c)
 }
 
 // 23012D: 5 native instructions, 4 cycles worst case
-static void aot_b23012D(AotCtx *c)
+AOT_IRAM static void aot_b23012D(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -67633,7 +67633,7 @@ static void aot_b23012D(AotCtx *c)
 }
 
 // 230133: 5 native instructions, 4 cycles worst case
-static void aot_b230133(AotCtx *c)
+AOT_IRAM static void aot_b230133(AotCtx *c)
 {
 	int32_t cyc = 0;
 	uint32_t r0, r1, r2, r3, r4, r5, r6, r7, sb;
@@ -67688,7 +67688,7 @@ static void aot_b230133(AotCtx *c)
 }
 
 // 230139: 1 native instructions, 5 cycles worst case
-static void aot_b230139(AotCtx *c)
+AOT_IRAM static void aot_b230139(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x230139u);
@@ -68017,7 +68017,7 @@ AOT_IRAM static void aot_b230335(AotCtx *c)
 }
 
 // 00481A: 3 native instructions, 4 cycles worst case
-static void aot_b00481A(AotCtx *c)
+AOT_IRAM static void aot_b00481A(AotCtx *c)
 {
 	int32_t cyc = 0;
 	AOT_I(c, 0x00481Au);

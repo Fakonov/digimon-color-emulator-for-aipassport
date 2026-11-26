@@ -129,6 +129,12 @@ public:
 	bool (*m_lcd_fill)(void *opaque, uint16_t value, uint32_t count) = nullptr;
 	void *m_lcd_fill_opaque = nullptr;
 
+	// Same shortcut for a run of *different* pixels (the LCD push loop, 0x005B4A).
+	// Returns false when the LCD is not inside a RAMWR window, in which case the
+	// caller must keep writing 0x3092 byte by byte.
+	bool (*m_lcd_push)(void *opaque, const uint16_t *src, uint32_t count) = nullptr;
+	void *m_lcd_push_opaque = nullptr;
+
 	uint16_t m_vectorbase;
 
 	// coverage / debugging hooks (set by the harness, may be null)

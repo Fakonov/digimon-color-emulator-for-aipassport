@@ -68,6 +68,11 @@ static esp_lcd_panel_handle_t s_panel;
 static esp_lcd_panel_io_handle_t s_io;
 static SemaphoreHandle_t s_trans_done;
 static bool s_backlight_ready;
+// Set while a colour transfer is queued but not acknowledged.  The semaphore is
+// binary, so a completion that arrives after the caller stopped caring has to be
+// discarded before the next transfer, or it would be mistaken for that
+// transfer's completion.
+static volatile bool s_inflight;
 
 static bool on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
                                 esp_lcd_panel_io_event_data_t *edata,
@@ -202,7 +207,27 @@ void display_backlight_set(int percent)
     ledc_update_duty(BL_LEDC_MODE, BL_LEDC_CHANNEL);
 }
 
-esp_err_t display_draw_bitmap(int x, int y, int w, int h, const void *data)
+// Wait for the transfer that is in flight, if any.  Called before the caller
+// refills the buffer it handed over, and before any transfer that has to keep
+// the panel command stream in order.  esp_lcd SPI io layer blocks on
+// spi_device_acquire_bus() until this device queued transactions are finished,
+// so queueing two of our own transfers gains nothing: the overlap comes from the
+// whole window going out as ONE tx_color(), which the io layer splits into 32 KiB
+// DMA bursts with CS held low.
+static void display_wait_idle(void)
+{
+    if (s_inflight) {
+        if (xSemaphoreTake(s_trans_done, pdMS_TO_TICKS(1000)) != pdTRUE) {
+            ESP_LOGW(TAG, "color transfer timeout");
+        }
+        s_inflight = false;
+    }
+    // A completion that arrived after the last take is stale: drop it, or the
+    // next transfer would be considered finished before it started.
+    (void)xSemaphoreTake(s_trans_done, 0);
+}
+
+static esp_err_t display_push(int x, int y, int w, int h, const void *data)
 {
     if (!s_panel || !data || w <= 0 || h <= 0) {
         return ESP_ERR_INVALID_ARG;
@@ -211,14 +236,37 @@ esp_err_t display_draw_bitmap(int x, int y, int w, int h, const void *data)
         return ESP_ERR_INVALID_ARG;
     }
 
+    display_wait_idle();
+
     esp_err_t err = esp_lcd_panel_draw_bitmap(s_panel, x, y, x + w, y + h, data);
+    if (err != ESP_OK) {
+        s_inflight = false;
+        return err;
+    }
+    s_inflight = true;
+    return ESP_OK;
+}
+
+esp_err_t display_draw_bitmap(int x, int y, int w, int h, const void *data)
+{
+    const esp_err_t err = display_push(x, y, w, h, data);
     if (err != ESP_OK) {
         return err;
     }
-
-    if (xSemaphoreTake(s_trans_done, pdMS_TO_TICKS(1000)) != pdTRUE) {
-        ESP_LOGW(TAG, "color transfer timeout at y=%d", y);
-        return ESP_ERR_TIMEOUT;
-    }
+    display_wait_idle();
     return ESP_OK;
+}
+
+// Queue a transfer and return immediately: the bytes leave over DMA while the
+// caller (the emulator frame loop) keeps running the guest.  The caller must not
+// touch the buffer again until the next display_* call has returned, which the
+// display_wait_idle() at the head of every push guarantees.
+esp_err_t display_draw_bitmap_async(int x, int y, int w, int h, const void *data)
+{
+    return display_push(x, y, w, h, data);
+}
+
+void display_flush(void)
+{
+    display_wait_idle();
 }

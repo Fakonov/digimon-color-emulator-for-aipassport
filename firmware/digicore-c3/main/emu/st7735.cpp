@@ -312,3 +312,61 @@ void St7735::fill_run(uint16_t pixel, uint32_t count)
     m_pixellatch = pixel;
     m_commandstep += int(count * 2u);
 }
+
+// ---------------------------------------------------------------------------
+//  write_run - the same pixel walk as a data_w() stream, for a span of *different*
+//  pixels.
+//
+//  The guest's LCD push loop (0x005B4A) writes two SPI2 TXDATA bytes per pixel:
+//  io_w() -> spi2_txdata_w() -> data_w() -> store_pixel(), i.e. an indirect call,
+//  an I/O address decode, FIFO bookkeeping and a command switch for every byte -
+//  ~110 host cycles of bookkeeping for the same fb[] store.  hle_push_pixels()
+//  calls this instead when the LCD is inside a RAMWR window, which is the state
+//  the push routine always runs in.
+//
+//  Correctness rests on the same two things fill_run() rests on: copying
+//  store_pixel()'s index maths verbatim (including the 129-posx rotation when
+//  MADCTL.MV is clear) and advancing posx/posy with exactly the wrap rule data_w()
+//  uses.  m_pixellatch ends up holding the last pixel and m_commandstep advances
+//  by two per pixel, so a follow-up data_w() sees the state the byte stream would
+//  have left.
+// ---------------------------------------------------------------------------
+void St7735::write_run(const uint16_t *src, uint32_t count)
+{
+    if (m_command != 0x2c || count == 0u || src == nullptr)
+        return;
+
+    m_px_writes += count;
+    const bool mv = (m_madctl & 0x0020) != 0;
+    uint32_t px = uint32_t(m_posx);
+    uint32_t py = uint32_t(m_posy);
+    const uint32_t xmin = uint32_t(m_posminx), xmax = uint32_t(m_posmaxx);
+    const uint32_t ymin = uint32_t(m_posminy), ymax = uint32_t(m_posmaxy);
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+        const uint16_t pixel = src[i];
+        // Same index as store_pixel(): MV set means the GRAM walk is along x.
+        const int idx = (mv ? (int(px) + int(py) * GRAM_W)
+                            : (int(py) + (129 - int(px)) * GRAM_W)) & 0xffff;
+        const unsigned ry = unsigned(idx) >> 9;
+        const unsigned rx = unsigned(idx) & 0x1ffu;
+        if (rx < unsigned(PANEL) && ry < unsigned(PANEL))
+        {
+            fb[ry * PANEL + rx] = pixel;
+            m_dirty[ry >> 4] |= uint8_t(1u << (rx >> 4));
+        }
+
+        if (++px > xmax)
+        {
+            px = xmin;
+            if (++py > ymax)
+                py = ymin;
+        }
+    }
+
+    m_posx = int(px);
+    m_posy = int(py);
+    m_pixellatch = src[count - 1u];
+    m_commandstep += int(count * 2u);
+}

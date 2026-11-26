@@ -41,6 +41,12 @@ struct St7735 {
     // lands the same pixels in fb[] - only the register plumbing is skipped.
     void fill_run(uint16_t pixel, uint32_t count);
 
+    // Same window walk, but every pixel is different: this is the LCD push path
+    // (0x005B41), which the guest drives one 16 bit word at a time through two
+    // SPI2 TXDATA writes per pixel.  Charged the same 63 cycles/pixel by the
+    // hook, so land the pixels exactly the way data_w() would have.
+    void write_run(const uint16_t *src, uint32_t count);
+
     // Total pixels the guest has pushed into the panel.  The ROM stops drawing
     // when it parks the SoC (0x3036), so a growing count is the only evidence
     // that it started again -- the pet calling, pooping or evolving redraws the
@@ -260,6 +266,23 @@ struct Gpce4 : public UnspBus {
         if (lcd.m_command != 0x2c)
             return false;
         lcd.fill_run(value, count);
+        return true;
+    }
+
+    // Called by the HLE pixel-push loop with a span of guest RAM that is already
+    // laid out as consecutive RGB565 words (the 96 word line buffer, or a whole
+    // 96x96 sprite).  Same contract as lcd_fill_pixels: false means the caller
+    // must fall back to the two-SPI2-writes-per-pixel path, which keeps the
+    // command/parameter state machine correct when the LCD is not inside RAMWR.
+    bool lcd_push_pixels(const uint16_t *src, uint32_t count)
+    {
+        if (lcd.m_command != 0x2c)
+            return false;
+        lcd.write_run(src, count);
+        // The byte path raises SPITXIF on every byte; the guest never reads it
+        // (0x5B25 polls the MISC register), but leaving it clear would be a
+        // silent deviation in the model.
+        m_spi2_txstatus = uint16_t(m_spi2_txstatus | 0x8000);
         return true;
     }
 

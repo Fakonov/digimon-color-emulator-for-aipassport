@@ -319,6 +319,13 @@ extern uint32_t g_hle_push_px_total;
 extern bool g_hle_push_px;
 // Pixels that went straight into fb[] instead of two SPI2 register writes each.
 extern uint32_t g_hle_fill_fast;
+// Host cycles inside each HLE hook (C3_HLEPROF).  The LONGF line reports the
+// per-frame delta, which is the only way to tell a frame that is slow because it
+// executed a lot of guest code from one that is slow because a hook was fed a
+// sprite whose data is not in cache.
+extern uint32_t g_h_band, g_h_blit, g_h_push, g_h_fill, g_h_mul;
+static uint32_t s_hp_band0, s_hp_blit0, s_hp_push0, s_hp_fill0, s_hp_mul0;
+static uint32_t s_px_rec0, s_px_blit0, s_px_push0;
 extern uint32_t g_hle_band_calls;
 extern uint32_t g_hle_band_bail;
 extern uint32_t g_hle_band_recs;
@@ -387,6 +394,36 @@ static constexpr int kStripBytes =
 static_assert(kStripBytes >= kDstW * 2 * kMenuBandRows,
               "s_strip must hold one menu band or the menu writes past it");
 static uint8_t s_strip[kStripBytes] __attribute__((aligned(4)));
+
+// ---- whole-window transfer ------------------------------------------------
+// blit_frame() sends one tile row at a time, and every display_draw_bitmap()
+// blocks for the whole transfer: esp_lcd's SPI io layer waits for this device's
+// in-flight transactions (spi_device_acquire_bus) before it queues the next one,
+// so six bands are six serialised transfers no matter how they are buffered.
+//
+// The link on this board runs at 39.8 Mbit/s, not the 80 MHz display.c asks for:
+// measurements over three firmware revisions put a 12,288 B band at 2.2-2.7 ms,
+// which is the 40 MHz class, and a full 192x192 window at 14.4-14.8 ms.  That is
+// longer than a 14-16 ms guest frame, so a frame that repaints the whole window
+// pays the transfer *on top of* the emulation - and a scene whose large elements
+// move is made of exactly those frames.  Measured on the handset: the frame that
+// switches to the clock screen costs 73-88 ms of guest time, 6-8x a normal frame.
+//
+// So the whole window is packed into one buffer and queued once.  The io layer
+// splits a single tx_color() into 32 KiB DMA bursts with CS held low and calls
+// back only on the last one, so the CPU is free while the panel shifts bytes out;
+// the next frame's push drains whatever is left.  Partial frames keep the band
+// loop, which sends less data than a whole window and blocks for less time.
+static constexpr int kWinPxW = kWinW * kScale;              // 192
+static constexpr int kWinPxH = kWinH * kScale;              // 192
+static constexpr int kWinBytes = kWinPxW * kWinPxH * 2;     // 73,728
+// Dirty tiles (of 36) that make the whole-window path the cheaper one: below
+// this the band loop sends a strict subset and its blocking time is
+// proportional to that subset.
+static constexpr int kWholeWindowTiles = 21;
+static uint8_t *s_frame_buf = nullptr;                      // heap, 73,728 B
+static uint32_t s_win_pushes = 0;                           // whole-window transfers
+static uint32_t s_pack_us = 0;                              // time spent packing them
 
 // bezel.cpp owns the shell geometry now; these two keep it honest.  The glass is
 // the guest's 96x96 visible area at 2x and sits where the blitter puts it, so a
@@ -1047,7 +1084,47 @@ static void blit_frame(void)
         if (s_blit_every > 1 && (++s_phase % (uint32_t)s_blit_every) != 0) return;
     }
 
+    // How much of the window is dirty decides which transfer shape is cheaper.
+    int ntiles = 0;
+    for (int ty = 0; ty < kTilesY; ty++)
+        for (int tx = 0; tx < kTilesX; tx++)
+            if (dirty[ty][tx])
+                ntiles++;
+
     esp_err_t err = ESP_OK;
+    // kRot == 0 only: the pack below is a straight row copy with 2x expansion,
+    // which is the identity mapping.  A rotated build keeps the band path, where
+    // rot_map() handles each pixel.
+    if (s_frame_buf != nullptr && kRot == 0 && ntiles >= kWholeWindowTiles) {
+        // Whole window, one queued transfer.  The source is fb[] itself, so the
+        // tiles that did NOT change are packed too - they have to be, the panel
+        // window is the whole picture - but that costs a 32-bit store per two
+        // output pixels and no extra DMA, because the DMA was already going to
+        // be the whole window once this many tiles were dirty.
+        const int64_t t_pack = esp_timer_get_time();
+        uint8_t *dst = s_frame_buf;
+        for (int gy = 0; gy < kWinH; gy++) {
+            const uint16_t *src = fb + (kWinY + gy) * kFbPanel + kWinX;
+            uint32_t *o = reinterpret_cast<uint32_t *>(dst);
+            for (int x = 0; x < kWinW; x++) {
+                const uint16_t c = src[x];
+                const uint16_t sw = (uint16_t)((c >> 8) | (c << 8));   // RGB565 big endian
+                o[x] = (uint32_t)sw | ((uint32_t)sw << 16);            // 2x horizontal
+            }
+            std::memcpy(dst + kRowBytes, dst, kRowBytes);              // 2x vertical
+            dst += kRowBytes * kScale;
+        }
+        s_pack_us += uint32_t(esp_timer_get_time() - t_pack);
+        s_rows_sent += uint32_t(kWinPxH);
+        const int64_t t_blit = esp_timer_get_time();
+        err = display_draw_bitmap_async(left_px(), top_px(), kWinPxW, kWinPxH, s_frame_buf);
+        const int64_t dt_blit = esp_timer_get_time() - t_blit;
+        if (dt_blit > s_blit_max_us)
+            s_blit_max_us = uint32_t(dt_blit);
+        s_blits++;
+        s_blits_total++;
+        s_win_pushes++;
+    } else
     for (int ty = 0; ty < kTilesY && err == ESP_OK; ty++) {
         int bminx = kTilesX, bmaxx = -1;
         for (int tx = 0; tx < kTilesX; tx++) {
@@ -2252,6 +2329,14 @@ static bool lcd_fill_hook(void *opaque, uint16_t value, uint32_t count)
     return static_cast<Gpce4 *>(opaque)->lcd_fill_pixels(value, count);
 }
 
+// Same for the per-pixel push: the guest hands over a run of guest RAM that is
+// already consecutive RGB565 words (the 96 word scan-line buffer), so the whole
+// run lands in fb[] in one call instead of two SPI2 register writes per pixel.
+static bool lcd_push_hook(void *opaque, const uint16_t *src, uint32_t count)
+{
+    return static_cast<Gpce4 *>(opaque)->lcd_push_pixels(src, count);
+}
+
 // Put the CPU back at the ROM's reset vector, exactly as power-on does.  Used
 // by guest_init() and again by the wake-up path: the handset treats a wake-up key
 // as a reset, and the ROM's own power-down tail runs into blank space, so a
@@ -2291,6 +2376,8 @@ static bool guest_init(void)
     // the traffic byte by byte.
     s_cpu.m_lcd_fill = lcd_fill_hook;
     s_cpu.m_lcd_fill_opaque = &s_soc;
+    s_cpu.m_lcd_push = lcd_push_hook;
+    s_cpu.m_lcd_push_opaque = &s_soc;
     guest_reset_cpu();
 
     s_cycle = 0;
@@ -2909,6 +2996,14 @@ static void run_guest_frame(void)
     s_frame_miss0 = s_cpu.m_aot_miss;
     s_frame_fb0 = s_cpu.m_aot_fallback;
     s_frame_tick_us = 0;
+    s_hp_band0 = g_h_band;
+    s_hp_blit0 = g_h_blit;
+    s_hp_push0 = g_h_push;
+    s_hp_fill0 = g_h_fill;
+    s_hp_mul0 = g_h_mul;
+    s_px_rec0 = g_hle_band_recs;
+    s_px_blit0 = g_blit_px_total;
+    s_px_push0 = g_hle_push_px_total;
     // TEMP HLE: the device build never manages to raise INT2 bit 2, so the ROM's
     // 64 Hz tick at [0x0850] stays 0, the guest spins in 0x230321 forever and
     // never reaches the code that reads PORT A.  Feed the tick from the host at
@@ -3101,6 +3196,14 @@ extern "C" void app_main(void)
 
     if (display_init() == ESP_OK) {
         s_display_ok = true;
+        // One contiguous block for the whole-window transfer.  Heap, not .bss: if
+        // it cannot be had the blitter keeps the band path, which is slower for
+        // large moves but still correct.
+        s_frame_buf = static_cast<uint8_t *>(heap_caps_malloc(
+            size_t(kWinBytes), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        ESP_LOGI(TAG, "panel window buffer: %s (%d B, %u B heap free)",
+                 s_frame_buf ? "ready" : "NOT AVAILABLE", kWinBytes,
+                 unsigned(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)));
         // Wipe the panel's random power-on GRAM before the guest draws anything,
         // otherwise the first ~1 s of boot shows coloured noise.
         panel_fill_black();
@@ -3305,7 +3408,8 @@ extern "C" void app_main(void)
         // can be attributed to a frame number instead of a 1 s average.
         if (frame_us > 60000) {
             ESP_LOGW(TAG, "LONGF us=%u pc=%06x slices=%u aotb=%u aoti=%u fallback=%u miss=%u "
-                          "dblk=%u dins=%u dmiss=%u dfb=%u dtick=%u",
+                          "dblk=%u dins=%u dmiss=%u dfb=%u dtick=%u "
+                          "hp=%u/%u/%u/%u/%u ppx=%u/%u/%u",
                      unsigned(frame_us), unsigned(guest_pc()), unsigned(s_slices_frame),
                      unsigned(s_cpu.m_aot_blocks), unsigned(s_cpu.m_aot_insns),
                      unsigned(s_cpu.m_aot_fallback), unsigned(s_cpu.m_aot_miss),
@@ -3313,7 +3417,15 @@ extern "C" void app_main(void)
                      unsigned(s_cpu.m_aot_insns - s_frame_ins0),
                      unsigned(s_cpu.m_aot_miss - s_frame_miss0),
                      unsigned(s_cpu.m_aot_fallback - s_frame_fb0),
-                     unsigned(s_frame_tick_us));
+                     unsigned(s_frame_tick_us),
+                     // host cycles inside the HLE hooks this frame: band / blit /
+                     // push / fill / mul
+                     unsigned(g_h_band - s_hp_band0), unsigned(g_h_blit - s_hp_blit0),
+                     unsigned(g_h_push - s_hp_push0), unsigned(g_h_fill - s_hp_fill0),
+                     unsigned(g_h_mul - s_hp_mul0),
+                     // pixels this frame: band records / blit px / push px
+                     unsigned(g_hle_band_recs - s_px_rec0), unsigned(g_blit_px_total - s_px_blit0),
+                     unsigned(g_hle_push_px_total - s_px_push0));
         }
         s_guest_us += frame_us;
         if (frame_us > s_guest_max_us) s_guest_max_us = frame_us;
@@ -3598,7 +3710,8 @@ extern "C" void app_main(void)
                           "rdf=%u rds=%u wrf=%u wrs=%u "
 
                           "pg=%u riram=%u rflash=%u rram=%u rpush=%u rdraw=%u "
-                          "dac=%u pwm=%u spise=%u spipp=%u spiwren=%u spibyte=%u spiunk=%u pa=%04X d06=%04X d07=%04X r51=%04X r52=%04X r53=%04X",
+                          "dac=%u pwm=%u spise=%u spipp=%u spiwren=%u spibyte=%u spiunk=%u pa=%04X d06=%04X d07=%04X r51=%04X r52=%04X r53=%04X "
+                          "win=%u pk=%u",
                      unsigned(s_frames),
                      unsigned(fps_x100 / 100), unsigned(fps_x100 % 100),
                      unsigned(mis_x100 / 100), unsigned(mis_x100 % 100),
@@ -3660,7 +3773,8 @@ extern "C" void app_main(void)
                      unsigned(s_soc.m_spi.m_n_unknown),
                 unsigned(s_soc.read16(0x3000u)), unsigned(s_soc.read16(0x0D06u)),
                 unsigned(s_soc.read16(0x0D07u)), unsigned(s_soc.read16(0x0851u)),
-                unsigned(s_soc.read16(0x0852u)), unsigned(s_soc.read16(0x0853u)));
+                unsigned(s_soc.read16(0x0852u)), unsigned(s_soc.read16(0x0853u)),
+                unsigned(s_win_pushes), unsigned(s_pack_us));
 
             const SparseRom *rom = romstore::image();
             if (rom)
@@ -3694,6 +3808,8 @@ extern "C" void app_main(void)
             s_blit_max_us = 0;
             s_rows_sent = 0;
             s_blits = 0;
+            s_win_pushes = 0;
+            s_pack_us = 0;
 #if C3_BENCH
             static bool s_benched = false;
             if (!s_benched) {
