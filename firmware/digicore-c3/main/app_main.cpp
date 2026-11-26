@@ -74,7 +74,45 @@ static constexpr uint32_t kCpuClock = 96000000u;             // MAME GPCE4 clock
 // budget it is given, so a smaller budget means more, shorter frames at the
 // same game speed - that is what the "large-area movement is choppy" report
 // responds to.  /120 = 800,000 cycles = 1/120 s of guest time per frame.
-static uint32_t s_frame_cycles = kCpuClock / 60u;            // live: F <hz>
+//
+// Measured on the handset (2026-11-26, round 5): the clock screen (pc=200343)
+// needs ~51 ms of host time for a /60 frame, i.e. the panel only ever saw 18.5
+// frames per second and every frame interval was 51-53 ms.  At /180 (533,333
+// cycles) the same scene runs 19 ms per frame, 51-56 fps, and the guest still
+// advances 27.4 M cycles/s against 29.6 M at /60 - a 7 % slowdown in pet time
+// for a 2.8x shorter frame interval.  That trade is the whole point of this
+// knob, so /180 is the default and `F <hz>` still overrides it live.
+static uint32_t s_frame_cycles = kCpuClock / 180u;           // live: F <hz>
+
+// ---- adaptive frame budget ------------------------------------------------
+// One fixed budget cannot be right for both scenes.  The wait-loop collapse
+// (C3_WAIT_COLLAPSE) made the clock screen cost 2.1 host cycles per guest
+// cycle, so /180 needs 7 ms there and /60 would still fit in 16.7 ms; a redraw
+// scene has no collapse and needs 20-40 ms for the same /60 frame.  Measured
+// 2026-11-26: /180 gave 56 fps and 30 M guest cycles/s on the clock screen,
+// /76 gave 56 fps and 71 M cycles/s.  A proportional step per frame settles on
+// ~14 ms of guest work, which leaves 2.6 ms for the blit and the pacer inside
+// a 60 Hz frame: the panel always gets a fresh frame, and the guest advances as
+// fast as the panel can show it.  `F <hz>` switches the tracker off.
+static bool s_frame_auto = true;
+static int64_t s_frame_us_avg = 0;
+
+static void frame_budget_track(uint32_t frame_us)
+{
+    if (!s_frame_auto || frame_us == 0)
+        return;
+    s_frame_us_avg = s_frame_us_avg ? (s_frame_us_avg * 7 + frame_us) / 8 : frame_us;
+    const int64_t lo = kCpuClock / 240u;      // 400k: redraw scenes still progress
+    const int64_t hi = kCpuClock / 60u;       // 1.6M: one guest frame per rendered frame
+    int64_t next = int64_t(s_frame_cycles);
+    if (s_frame_us_avg < 12500)
+        next += next / 16 + 500;              // ~6 % up, at least 500 cycles
+    else if (s_frame_us_avg > 15500)
+        next -= next / 16;                    // ~6 % down
+    if (next < lo) next = lo;
+    if (next > hi) next = hi;
+    s_frame_cycles = uint32_t(next);
+}
 // 16 kHz rather than the guest's 20 kHz timer_a period: 48,000 guest cycles
 // (= 48,000 instructions in the worst case) measured up to 28 ms of wall clock
 // in a cold AOT scene, so a single slice could blow through the whole frame
@@ -418,7 +456,13 @@ static const char *s_banner_shown = nullptr;
 // Five seconds keeps the trend visible and costs 1.5%; `J 0` turns it off
 // entirely and `J <sec>` sets any period the operator wants (1 = the old
 // behaviour, for a bench run).
-static int s_stat_period_s = 5;
+//
+// Default is now 0.  Even at five seconds that line is ~78 ms of blocking
+// console write, i.e. four to five dropped 60 Hz frames once per period, and
+// that is exactly the periodic hitch a player notices on an otherwise moving
+// picture.  A bench run arms it with `J 5` (or `J 1`); a handset in someone's
+// hand does not pay for telemetry nobody reads.
+static int s_stat_period_s = 0;
 static uint32_t s_hot_calls = 0;   // PRNG block executions since log
 static uint32_t s_tick_us = 0;    // microseconds inside SoC tick() since log
 static uint32_t s_slices = 0;     // scheduler slices since log
@@ -442,6 +486,10 @@ static uint32_t s_guest_max_us = 0;   // worst guest time seen in one frame
 static uint32_t s_slice_max_us = 0;   // worst single execute_run() call
 static uint32_t s_tick_max_us = 0;    // worst single soc.tick() call
 static uint32_t s_guest_us = 0;      // microseconds spent inside the guest since log
+// Per-frame counters for the LONGF diagnostic: the deltas of the AOT counters
+// and the time spent in soc.tick(), so one long frame can be attributed.
+static uint32_t s_frame_blk0 = 0, s_frame_ins0 = 0, s_frame_miss0 = 0, s_frame_fb0 = 0;
+static uint32_t s_frame_tick_us = 0;
 #if C3_PROF
 // Host cycles per frame-loop stage, so a slow frame can be attributed instead
 // of guessed at.  Only compiled in for profiling builds (C3_PROF=1).
@@ -449,6 +497,61 @@ static uint32_t s_prof_slice = 0;    // cycles_to_next_event
 static uint32_t s_prof_exec = 0;     // execute_run
 static uint32_t s_prof_tick = 0;     // soc.tick
 #endif
+// ---- frame-time histogram -------------------------------------------------
+// fps is an average; the stutter a player actually feels is the tail.  One
+// bucket per millisecond up to 31 ms, the last bucket is "32 ms or worse".  A
+// sample is the interval between two consecutive frame-loop starts, so the
+// pacer sleep, the guest, the blit and everything else are inside one number.
+// Percentiles are computed over the STAT window and then cleared, like every
+// other *_max field here.
+static uint32_t s_ft_hist[32];
+static uint32_t s_ft_samples = 0;
+static uint32_t s_ft_over20 = 0, s_ft_over33 = 0, s_ft_over50 = 0, s_ft_over100 = 0;
+static uint32_t s_ft_max_us = 0;
+static int64_t s_ft_last_us = 0;
+
+static void frame_time_note(int64_t dt_us)
+{
+    if (dt_us <= 0)
+        return;
+    uint32_t ms = uint32_t(dt_us / 1000);
+    if (ms > 31u)
+        ms = 31u;
+    s_ft_hist[ms]++;
+    s_ft_samples++;
+    if (dt_us > 20000) s_ft_over20++;
+    if (dt_us > 33000) s_ft_over33++;
+    if (dt_us > 50000) s_ft_over50++;
+    if (dt_us > 100000) s_ft_over100++;
+    if (uint32_t(dt_us) > s_ft_max_us)
+        s_ft_max_us = uint32_t(dt_us);
+}
+
+// Percentile in milliseconds.  The 32nd bucket means "anything from 32 ms up",
+// so a p99 that lands there is a floor, not a measurement.
+static uint32_t frame_time_pct(uint32_t pct)
+{
+    if (!s_ft_samples)
+        return 0;
+    const uint32_t need = (s_ft_samples * pct + 99u) / 100u;
+    uint32_t acc = 0;
+    for (int i = 0; i < 32; i++) {
+        acc += s_ft_hist[i];
+        if (acc >= need)
+            return (i == 31) ? 32u : uint32_t(i);
+    }
+    return 32u;
+}
+
+static void frame_time_clear(void)
+{
+    for (int i = 0; i < 32; i++)
+        s_ft_hist[i] = 0;
+    s_ft_samples = 0;
+    s_ft_over20 = s_ft_over33 = s_ft_over50 = s_ft_over100 = 0;
+    s_ft_max_us = 0;
+}
+
 static uint32_t s_blit_us = 0;
 static uint32_t s_blit_max_us = 0;
 static uint32_t s_rows_sent = 0;       // microseconds spent pushing the panel since log
@@ -917,13 +1020,25 @@ static void blit_frame(void)
         for (int tx = 0; tx < kTilesX; tx++)
             dirty[ty][tx] = (rowmask[ty] >> tx) & 1u;
 
-    if (!any) {
+    // Idle repair sweep, one band per frame.  It used to push all six bands in
+    // one frame: 6 x 12,288 B = 11-15 ms of blocking SPI landing on a single
+    // frame every 120 idle frames (~2 s at 57 fps, ~6 s at 19 fps).  On a still
+    // picture that was the only periodic hitch the display path contributed.
+    // Spreading it over six frames changes nothing semantically - the picture
+    // is static, which is why the sweep started - and no frame pays more than
+    // one band.
+    static int s_repair_ty = -1;
+    if (s_repair_ty >= 0) {
+        for (int tx = 0; tx < kTilesX; tx++)
+            dirty[s_repair_ty][tx] = true;
+        any = true;
+    } else if (!any) {
         if (++s_idle_frames < 120) return;
         s_idle_frames = 0;
-        s_have_prev = false;
-        for (int ty = 0; ty < kTilesY; ty++)
-            for (int tx = 0; tx < kTilesX; tx++)
-                dirty[ty][tx] = true;
+        s_repair_ty = 0;
+        for (int tx = 0; tx < kTilesX; tx++)
+            dirty[0][tx] = true;
+        any = true;
     } else {
         s_idle_frames = 0;
         // Throttled frame: leave the dirty bits alone so the same tiles are
@@ -980,6 +1095,10 @@ static void blit_frame(void)
     }
     if (err == ESP_OK) {
         s_have_prev = true;
+        // Advance the repair sweep only after its band actually reached the
+        // panel; a failed transfer keeps the index so the same band is retried.
+        if (s_repair_ty >= 0 && ++s_repair_ty >= kTilesY)
+            s_repair_ty = -1;
         // Everything marked dirty has now been pushed (the bands above cover
         // every set bit), so the map restarts empty.  A failed transfer leaves
         // the bits set and the next frame retries the same tiles.
@@ -1396,7 +1515,8 @@ static void console_exec(char *line)
         const int hz = std::atoi(a);
         if (hz >= 20 && hz <= 480) {
             s_frame_cycles = kCpuClock / uint32_t(hz);
-            std::printf("ACK F %d %u\n", hz, unsigned(s_frame_cycles));
+            s_frame_auto = false;      // manual: the tracker must not undo it
+            std::printf("ACK F %d %u auto=0\n", hz, unsigned(s_frame_cycles));
         } else {
             std::printf("NAK F\n");
         }
@@ -2784,6 +2904,11 @@ static void clock_seed_step(void)
 static void run_guest_frame(void)
 {
     s_slices_frame = 0;
+    s_frame_blk0 = s_cpu.m_aot_blocks;
+    s_frame_ins0 = s_cpu.m_aot_insns;
+    s_frame_miss0 = s_cpu.m_aot_miss;
+    s_frame_fb0 = s_cpu.m_aot_fallback;
+    s_frame_tick_us = 0;
     // TEMP HLE: the device build never manages to raise INT2 bit 2, so the ROM's
     // 64 Hz tick at [0x0850] stays 0, the guest spins in 0x230321 forever and
     // never reaches the code that reads PORT A.  Feed the tick from the host at
@@ -2835,6 +2960,7 @@ static void run_guest_frame(void)
         s_soc.tick(step);
         const uint32_t tk_us = uint32_t(esp_timer_get_time() - tt0);
         if (tk_us > s_tick_max_us) s_tick_max_us = tk_us;
+        s_frame_tick_us += tk_us;
         s_cycle += step;
         s_insns += s_cpu.take_insns();
 #if C3_PROF
@@ -3047,6 +3173,14 @@ extern "C" void app_main(void)
     uint32_t last_coll_calls = 0;
 
     for (;;) {
+        // Frame interval sample, first statement in the loop: it covers the
+        // pacer sleep of the previous iteration as well as every stage below.
+        {
+            const int64_t t_loop_us = esp_timer_get_time();
+            if (s_ft_last_us)
+                frame_time_note(t_loop_us - s_ft_last_us);
+            s_ft_last_us = t_loop_us;
+        }
         const int64_t t_guest0 = esp_timer_get_time();
         debug_poll();
         if (!guest_ok || dmclink_busy()) {
@@ -3166,6 +3300,21 @@ extern "C" void app_main(void)
         }
 
         const uint32_t frame_us = uint32_t(esp_timer_get_time() - t_guest0);
+        frame_budget_track(frame_us);
+        // Diagnostic: one line per genuinely long frame, so a scene transition
+        // can be attributed to a frame number instead of a 1 s average.
+        if (frame_us > 60000) {
+            ESP_LOGW(TAG, "LONGF us=%u pc=%06x slices=%u aotb=%u aoti=%u fallback=%u miss=%u "
+                          "dblk=%u dins=%u dmiss=%u dfb=%u dtick=%u",
+                     unsigned(frame_us), unsigned(guest_pc()), unsigned(s_slices_frame),
+                     unsigned(s_cpu.m_aot_blocks), unsigned(s_cpu.m_aot_insns),
+                     unsigned(s_cpu.m_aot_fallback), unsigned(s_cpu.m_aot_miss),
+                     unsigned(s_cpu.m_aot_blocks - s_frame_blk0),
+                     unsigned(s_cpu.m_aot_insns - s_frame_ins0),
+                     unsigned(s_cpu.m_aot_miss - s_frame_miss0),
+                     unsigned(s_cpu.m_aot_fallback - s_frame_fb0),
+                     unsigned(s_frame_tick_us));
+        }
         s_guest_us += frame_us;
         if (frame_us > s_guest_max_us) s_guest_max_us = frame_us;
         if (s_slices_frame > s_slices_max) s_slices_max = s_slices_frame;
@@ -3441,13 +3590,14 @@ extern "C" void app_main(void)
             ESP_LOGI(TAG, "frames=%u guest_fps=%u.%02u mi_s=%u.%02u host_fps=%u.%02u "
                           "pc=%06x sr=%04x sp=%04x insns=%u K cyc=%u K mv=%d btn=%d "
                           "int_ctrl=%04x int_stat=%08x guest_pct=%u blit_pct=%u blitmax=%u rows=%u hot=%u tick_pct=%u slices=%u aotb=%u aoti=%u aotfb=%u aotmiss=%u aotuniq=%u "
-                          "blits=%u collapse=%u collcalls=%u colltot=%u spin=%u/%u/%u/%u spinv=%u/%04X/%d/%u stage=%u/%u/%u gmax=%u smax=%u tmax=%u kmax=%u fd=%u "
+                          "blits=%u collapse=%u collcalls=%u colltot=%u spin=%u/%u/%u/%u spinv=%u/%04X/%d/%u stage=%u/%u/%u gmax=%u smax=%u tmax=%u kmax=%u fd=%u fc=%u auto=%u "
+                          "ft=%u/%u/%u/%u ftmx=%u ov20=%u ov33=%u ov50=%u ov100=%u "
                           "blitpx=%u bpx=%u bcyc=%u pgsw=%u pushpx=%u tpushpx=%u fillpx=%u bandc=%u bandb=%u bandr=%u rband=%u "
                           "caot=%u cinf=%u cfast=%u daot=%u dinf=%u "
                           "cpa=%u cpi=%u clk=%u cfn=%u pd=%u pp=%u "
                           "rdf=%u rds=%u wrf=%u wrs=%u "
 
-                          "riram=%u rflash=%u rram=%u rpush=%u rdraw=%u "
+                          "pg=%u riram=%u rflash=%u rram=%u rpush=%u rdraw=%u "
                           "dac=%u pwm=%u spise=%u spipp=%u spiwren=%u spibyte=%u spiunk=%u pa=%04X d06=%04X d07=%04X r51=%04X r52=%04X r53=%04X",
                      unsigned(s_frames),
                      unsigned(fps_x100 / 100), unsigned(fps_x100 % 100),
@@ -3482,6 +3632,11 @@ extern "C" void app_main(void)
                      unsigned(prof_slice), unsigned(prof_exec), unsigned(prof_tick),
                      unsigned(s_guest_max_us), unsigned(s_slices_max),
                      unsigned(s_slice_max_us), unsigned(s_tick_max_us), unsigned(s_frame_drops),
+                     unsigned(s_frame_cycles), unsigned(s_frame_auto ? 1u : 0u),
+                     unsigned(frame_time_pct(50)), unsigned(frame_time_pct(95)),
+                     unsigned(frame_time_pct(99)), unsigned(frame_time_pct(100)),
+                     unsigned(s_ft_max_us), unsigned(s_ft_over20), unsigned(s_ft_over33),
+                     unsigned(s_ft_over50), unsigned(s_ft_over100),
                      unsigned(g_blit_px_win), unsigned(g_blit_px_total),
                      unsigned(g_blit_cyc_per_px),
                      unsigned(g_aot_pg_switch),
@@ -3496,6 +3651,7 @@ extern "C" void app_main(void)
                      unsigned(cyc_lk), unsigned(cyc_fn),
                      unsigned(pct_draw), unsigned(pct_push),
                      unsigned(rdf), unsigned(rds), unsigned(wrf), unsigned(wrs),
+                     unsigned(romstore::image() ? romstore::image()->page_loads() : 0u),
                      unsigned(riram), unsigned(rflash), unsigned(rram),
                      unsigned(rpush), unsigned(rdraw),
                      unsigned(s_soc.audio_writes()), unsigned(s_soc.pwm_writes()),
@@ -3532,6 +3688,7 @@ extern "C" void app_main(void)
             s_blit_us = 0;
             s_guest_max_us = 0;
             s_slices_max = 0;
+            frame_time_clear();
             s_slice_max_us = 0;
             s_tick_max_us = 0;
             s_blit_max_us = 0;

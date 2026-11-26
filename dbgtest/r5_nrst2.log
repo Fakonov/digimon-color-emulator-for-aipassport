@@ -1,0 +1,92 @@
+ESP-ROM:esp32c3-eco7-20230720
+Build:Jul 20 2023
+rst:0x15 (USB_UART_CHIP_RESET),boot:0xa (SPI_FAST_FLASH_BOOT)
+Saved PC:0x403913a8
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fcd5820,len:0x155c
+load:0x403cbf10,len:0xc84
+load:0x403ce710,len:0x2fa4
+entry 0x403cbf1a
+I (24) boot: ESP-IDF HEAD-HASH-NOTFOUND 2nd stage bootloader
+I (24) boot: compile time Nov 22 2026 15:09:01
+I (25) boot: chip revision: v1.1
+I (25) boot: efuse block revision: v1.3
+I (29) boot.esp32c3: SPI Speed      : 80MHz
+I (33) boot.esp32c3: SPI Mode       : DIO
+I (37) boot.esp32c3: SPI Flash Size : 8MB
+I (40) boot: Enabling RNG early entropy source...
+I (45) boot: Partition Table:
+I (48) boot: ## Label            Usage          Type ST Offset   Length
+I (54) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (60) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (67) boot:  2 factory          factory app      00 00 00010000 00200000
+I (73) boot:  3 roms             Unknown data     01 40 00210000 00280000
+I (80) boot:  4 save             Unknown data     01 41 00490000 00020000
+I (86) boot: End of partition table
+I (90) esp_image: segment 0: paddr=00010020 vaddr=3c0a0020 size=4c770h (313200) map
+I (146) esp_image: segment 1: paddr=0005c798 vaddr=3fc95e00 size=01ce8h (  7400) load
+I (148) esp_image: segment 2: paddr=0005e488 vaddr=40380000 size=01b90h (  7056) load
+I (151) esp_image: segment 3: paddr=00060020 vaddr=42000020 size=95704h (612100) map
+I (253) esp_image: segment 4: paddr=000f572c vaddr=40381b90 size=14198h ( 82328) load
+I (268) esp_image: segment 5: paddr=001098cc vaddr=50000000 size=00020h (    32) load
+I (274) boot: Loaded app from partition at offset 0x10000
+I (274) boot: Disabling RNG early entropy source...
+I (286) cpu_start: Unicore app
+I (294) cpu_start: GPIO 20 and 21 are used as console UART I/O pins
+I (295) cpu_start: Pro cpu start user code
+I (295) cpu_start: cpu freq: 160000000 Hz
+I (296) app_init: Application information:
+I (300) app_init: Project name:     digicore-c3
+I (305) app_init: App version:      1.12.0
+I (308) app_init: Compile time:     Nov 26 2026 00:44:30
+I (313) app_init: ELF file SHA256:  b8e277206...
+I (318) app_init: ESP-IDF:          HEAD-HASH-NOTFOUND
+I (323) efuse_init: Min chip rev:     v0.3
+I (326) efuse_init: Max chip rev:     v1.99 
+I (330) efuse_init: Chip rev:         v1.1
+I (334) heap_init: Initializing. RAM available for dynamic allocation:
+I (341) heap_init: At 3FCB3030 len 0000CFD0 (51 KiB): RAM
+I (346) heap_init: At 3FCC0000 len 0001C710 (113 KiB): Retention RAM
+I (352) heap_init: At 3FCDC710 len 0000294C (10 KiB): Retention RAM
+I (358) heap_init: At 50000020 len 00001FC8 (7 KiB): RTCRAM
+I (364) spi_flash: detected chip: generic
+I (367) spi_flash: flash io: dio
+I (370) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (376) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (383) main_task: Started on CPU0
+I (386) main_task: Calling app_main()
+I (389) DIGICORE: Digimon Color on FoloToy AI Passport - esp32c3 rev 1.1, 1 core(s)
+I (396) DIGICORE: build Nov 26 2026 17:47:57, reset cause 11, heap 168396 B (largest block 114688 B)
+I (408) menu: auto-off 30S, bright 60%, volume 20%, auto-save 60S, time-lapse OFF
+I (413) wallclock: clock source=nvs tz=+480 min epoch=1795657205
+I (418) display: init ST7789P3 320x240
+I (552) display: ready, landscape 320x240, backlight off
+I (583) DIGICORE: panel cleared to black (320x240)
+I (640) BUTTONS: ladder on GPIO0: key0 <150 mV, key1 <447 mV, key2 <1900 mV, none above
+I (673) audio: ES8311 id=83 at 0x18
+I (674) audio: ready: ES8311 + I2S0 48000 Hz, amp always on
+I (684) audio: first i2s write: err=0 sent=1024 of 1024
+I (842) batt: CW2017 v0F ready, 3992 mV, SOC 57%
+I (845) DIGICORE: battery 57%
+I (848) ROMSTORE: sparse store mapped at 0x3c0f0000 (2560 KiB), direct read path on, no page cache allocated
+I (849) ROMSTORE: partition `roms` data/0x40 at 0x210000, 2560 KiB
+I (855) ROMSTORE: sparse v1: image 8388608 B, 2048 pages (611 present), data at +0x3100
+I (863) ROMSTORE: image sha1 ebae139f708d36151efcaf2db7c329c6614d7e68
+I (869) DIGICORE: digimon-color-passport v1.12.0
+I (873) DIGICORE: internal ROM 65536 B embedded, reset vector -> PC=00480d
+I (880) saveimg: save partition 131072 bytes at 0x490000
+I (887) saveimg: loaded 2 page(s) from slot 1 seq=321
+I (891) DIGICORE: restored 2/2 flash page(s) of game state
+I (895) gueststate: ring 5 x 12288 B newest seq=2017
+I (904) gueststate: restored snapshot seq=2017 from record 2
+I (916) DIGICORE: resumed at pc=200343 sr=0020 sp=0ff5 int2=0205 frame=restored clock=kept
+STAT frames=0 blits=6 rows=192 blitmax=1728 errs=0 guest_pct=0 blit_pct=0 pc=200343 sr=0020 blitpx=0 bcyc=139
+IRQ isr=0@0 ref=0 rise=0 fall=0 set0=0 set2=0 set9=0 clr0=0 clr2=0 clr9=0 sirq=000 ineq=0 enq=1 pri=8 irqf=0 s31=0 c31=0
+GEST ac=0 fired=0 adown=0 blank=0 ban=30 card=0 menu=0 scr=0001 pad=FFFF
+CLK guest=09:40:04 wall=09:40:05 dev=0 steps=0 holds=0 snapf=0 seed=0 stable=0 tbw=0 src=nvs en=1 lapse=1x ticks=0
+[gpce4] sleep resume point 000000 -> 200300
+I (1019) DIGICORE: banner ""
+I (1036) DIGICORE: BOOT_OK first non-blank guest frame at 1 frames, pc=200343, display_on=1 sleep=0 madctl=00a8
+I (1087) DIGICORE: backlight -> 60%
+I (1342) DIGICORE: clock running 09:40:04 (nvs)

@@ -48,7 +48,7 @@ idf_component_register(
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error=format -O3 -DC3_PROF=0 -DC3_SPLIT=0 -DC3_SKIP_BLIT=0
                        -fjump-tables -ftree-switch-conversion
                        -DAOT_CONST_TABLES -DAOT_NO_HOOKS -DC3_MISS_CENSUS=0 -DC3_BLOCK_CENSUS=0 -DC3_NO_AOT=0
-                       -DC3_BLIT_CYC=139 -DC3_AOTACC=0 -DC3_WAIT_COLLAPSE=0)
+                       -DC3_BLIT_CYC=139 -DC3_AOTACC=0 -DC3_WAIT_COLLAPSE=1)
 
 # aot_blocks.c is generated C++ (nullptr, the AotFn typedef) that keeps the .c
 # name so the PC harness and tools/aot.py can name it without a second code path.

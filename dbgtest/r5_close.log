@@ -1,0 +1,7 @@
+ACK K 2 6
+I (9835) DIGICORE: press 02 -> holding
+I (9835) DIGICORE: port=ffef (mv=2944)
+I (9911) audio: buzzer hz=987 blocks=1 codec=1
+I (10218) DIGICORE: port=ffff (mv=2944)
+I (11283) gueststate: snapshot seq=2015 -> record 0 (280 + 8192 B)
+I (11283) DIGICORE: snapshot pc=200343 frame stored (direct resume)

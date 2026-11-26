@@ -1,0 +1,13 @@
+ACK J 5 s
+VER ver=1.12.0 win=0,18 96x96 scale=2 left=64 top=24 off=0,0 home=64,24 fb=128 chunk=16
+STAT frames=217 blits=18 rows=0 blitmax=0 errs=0 guest_pct=100 blit_pct=0 pc=200343 sr=0020 blitpx=0 bcyc=139
+IRQ isr=0@0 ref=695 rise=231 fall=231 set0=7 set2=231 set9=7233 clr0=7 clr2=231 clr9=7233 sirq=000 ineq=0 enq=1 pri=8 irqf=0 s31=0 c31=0
+GEST ac=0 fired=0 adown=0 blank=0 ban=30 card=0 menu=0 scr=0000 pad=FFFF
+CLK guest=09:37:36 wall=09:37:36 dev=0 steps=4 holds=39 snapf=1 seed=1 stable=0 tbw=0 src=nvs en=1 lapse=1x ticks=0
+I (15880) audio: codec + I2S off after 15 s without a beep
+I (15982) DIGICORE: frames=290 guest_fps=18.51 mi_s=7.45 host_fps=18.51 pc=200343 sr=0020 sp=0ff5 insns=116739 K cyc=464035 K mv=2944 btn=0 int_ctrl=0000 int_stat=a0000000 guest_pct=93 blit_pct=0 blitmax=1926 rows=192 hot=0 tick_pct=0 slices=0 aotb=4748905 aoti=11273332 aotfb=12984 aotmiss=8 aotuniq=0 blits=6 collapse=0 collcalls=0 colltot=0 spin=0/0/0/0 spinv=0/0000/0/0 stage=0/0/0 gmax=77695 smax=336 tmax=2317 kmax=401 fd=0 blitpx=0 bpx=0 bcyc=139 pgsw=0 pushpx=0 tpushpx=0 fillpx=0 bandc=0 bandb=0 bandr=0 rband=0 caot=0 cinf=0 cfast=0 daot=0 dinf=0 cpa=0 cpi=0 clk=0 cfn=0 pd=0 pp=0 rdf=0 rds=0 wrf=0 wrs=0 riram=0 rflash=0 rram=0 rpush=0 rdraw=0 dac=0 pwm=0 spise=0 spipp=0 spiwren=0 spibyte=0 spiunk=0 pa=FFFF d06=0038 d07=0000 r51=0000 r52=0000 r53=0000
+I (17042) DIGICORE: machine would be dark now; banner at 16035 ms idle
+I (17045) DIGICORE: banner "MACHINE DARK"
+I (20121) DIGICORE: banner "" (cleared, shell repainted)
+I (20987) DIGICORE: frames=391 guest_fps=20.17 mi_s=7.64 host_fps=20.17 pc=005f35 sr=0040 sp=0fed insns=154998 K cyc=625646 K mv=2944 btn=0 int_ctrl=0000 int_stat=a0000000 guest_pct=95 blit_pct=0 blitmax=2174 rows=384 hot=0 tick_pct=0 slices=0 aotb=6309244 aoti=14982311 aotfb=17449 aotmiss=85 aotuniq=0 blits=12 collapse=0 collcalls=0 colltot=0 spin=0/0/0/0 spinv=0/0000/0/0 stage=0/0/0 gmax=51304 smax=336 tmax=2008 kmax=401 fd=0 blitpx=0 bpx=0 bcyc=139 pgsw=0 pushpx=0 tpushpx=0 fillpx=0 bandc=0 bandb=0 bandr=0 rband=0 caot=0 cinf=0 cfast=0 daot=0 dinf=0 cpa=0 cpi=0 clk=0 cfn=0 pd=0 pp=0 rdf=0 rds=0 wrf=0 wrs=0 riram=0 rflash=0 rram=0 rpush=0 rdraw=0 dac=0 pwm=1 spise=0 spipp=0 spiwren=0 spibyte=0 spiunk=0 pa=FFFF d06=0038 d07=0000 r51=0000 r52=0000 r53=0000
+[gpce4] first System_Sleep write = 5555

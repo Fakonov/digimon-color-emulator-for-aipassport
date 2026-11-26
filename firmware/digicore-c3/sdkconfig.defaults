@@ -3,9 +3,14 @@ CONFIG_IDF_TARGET="esp32c3"
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=y
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
-# QIO: the XMC 8 MB part supports it, and XIP instruction fetch shares this SPI
-# controller.  DIO spends four transfers per 32-bit word where QIO needs two, so
-# every ICache line fill costs twice as long in DIO.
+# QIO was expected to halve ICache line fill time (DIO spends four transfers per
+# 32-bit word, QIO two).  Tried on 2026-11-26: a full QIO image (bootloader +
+# app, merge_bin --flash_mode qio) does not boot on this handset - the ROM loads
+# the bootloader ("mode:QIO") and then resets in a TG0WDT loop, i.e. the flash
+# part (JEDEC 0x204017, 8 MB) answers DIO correctly but not QIO as the boot ROM
+# drives it.  That is consistent with the QE bit never being set (esptool does
+# not touch it).  Until someone proves a QE-enable step works, DIO stays.
+# CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
 CONFIG_COMPILER_OPTIMIZATION_PERF=y

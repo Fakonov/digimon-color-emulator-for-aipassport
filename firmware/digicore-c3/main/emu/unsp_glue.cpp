@@ -779,6 +779,12 @@ UNSP_HOT bool unsp_device::wait_loop_collapse(uint32_t lpc)
 	}
 
 	m_collapse_passes += done;
+	// Keep mi_s comparable with the AOT path: the collapsed passes really do
+	// execute 68 instructions of the PRNG block plus the six wrapper
+	// instructions of the wait loop, they just never reach the dispatcher that
+	// normally counts them.  74 = 68 (0x2002F4..0x200342) + 1 (0x230321) + 5
+	// (0x230323..0x230327).
+	m_insn_count += 74ull * done;
 	m_collapse_calls++;
 	return true;
 #endif // C3_WAIT_COLLAPSE
