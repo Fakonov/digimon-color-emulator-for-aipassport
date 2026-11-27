@@ -10,7 +10,7 @@ ROM 用你自己的镜像，通过网页（Web Serial）写进设备。
 |---|---|
 | 目标板 | FoloToy AI Passport（ESP32-C3, 8 MB flash, 无 PSRAM） |
 | 屏幕 | ST7789P3 320×240，玻璃窗口 192×192 @ (64,24)（guest 96×96 ×2） |
-| 版本 | 1.17.0 |
+| 版本 | 1.17.1 |
 | 许可 | GPL-2.0-or-later（核心移植自 MAME） |
 
 ---
@@ -61,7 +61,7 @@ ROM 格式要求：**8 MiB、4 KiB 对齐**。非零页超过 637 页会被拒�
 
 | 手势 | 行为 |
 |---|---|
-| **长按 A 1.2 秒** | 打开设置卡（8 行）：SEND A+C / SEND A+B / TIME LAPSE / AUTO OFF / BRIGHT / VOLUME / AUTO SAVE / VERSION |
+| **长按 A 1.2 秒** | 打开设置卡（7 行）：SEND A+C / SEND A+B / TIME LAPSE / AUTO OFF / BRIGHT / VOLUME / AUTO SAVE（版本号显示在卡片右上角） |
 | **长按 B** | 归还给游戏，不弹任何东西 |
 | **16 秒无输入** | 进入待机：**只有游戏窗口**变成黑底 + 居中白色 `STANDBY`（砖墙边框不变），任意键唤醒（见第五节） |
 
@@ -121,7 +121,7 @@ ROM 自己会在 16 秒无输入后请求 System_Sleep。帧循环一直拒绝�
 | 网页提示不支持 Web Serial | 换 Chrome / Edge；或用本地服务器打开（`python -m http.server 8000`，再访问 `http://127.0.0.1:8000/dmc_web.html`） |
 | 上传到一半失败 | 重新上传即可；分区在 `END` 之前不会被认为是完整的 |
 | 设备一直停在 NO ROM | 用 `digicore-c3-full.bin` 整片重烧，或重传 ROM |
-| 游戏很慢 | 先确认版本：设置卡 `VERSION` 一行应显示 `1.17.0`。v1.14.0 在时钟画面约 56 fps、游戏速度约原机 94%；v1.15.0 把「整屏重绘」那一帧的 14 ms SPI 阻塞改成与 guest 重叠；v1.17.0 清掉了每次 dispatch 的记账税（HLE 入口判定、wait-loop 调用、逐像素脏块写）。更旧的版本只有 18 fps |
+| 游戏很慢 | 先确认版本：设置卡右上角的版本号应显示 `1.17.1`。v1.14.0 在时钟画面约 56 fps、游戏速度约原机 94%；v1.15.0 把「整屏重绘」那一帧的 14 ms SPI 阻塞改成与 guest 重叠；v1.17.0 清掉了每次 dispatch 的记账税（HLE 入口判定、wait-loop 调用、逐像素脏块写）。更旧的版本只有 18 fps |
 | 画面偏出玻璃 | 别用调试命令 `E` 挪窗口；`E` 只用于校准 |
 
 ## 八、目录

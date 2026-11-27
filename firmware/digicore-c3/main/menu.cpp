@@ -214,8 +214,9 @@ void menu_press_b()
         break;
 
     default:
-        // ABOUT has nothing to change; pressing B just re-pushes the row so the
-        // bar blinks, which is the same feedback the other rows give.
+        // Every row now has a value, so this is only the out-of-range guard: a
+        // stale s_sel from a corrupted NVS byte must do nothing rather than
+        // fall into a value change.  Re-pushing the row still blinks the bar.
         break;
     }
 }
@@ -265,19 +266,19 @@ static constexpr int kAdvance = 6 * kTextScale;    // 12
 static constexpr int kCardX = 10;
 static constexpr int kCardY = 16;
 static constexpr int kCardW = 300;
-static constexpr int kCardH = 212;
+static constexpr int kCardH = 192;
 static constexpr int kCardR = 8;
 static constexpr int kEdge = 2;
 static constexpr int kPad = 3;
 static constexpr int kRowX = kCardX + kEdge + kPad + 8;    // 23
 static constexpr int kRowW = 278;
-// Nine rows now that both chords are in the card (A+C and A+B), and the 20/22
-// that fitted eight does not: 45 + 8*22 + 20 = 241 against a card bottom of 228.
-// 18 px rows at a 20 px pitch put the last row's bottom at 223, five px clear of
-// the border, and still leave the 14 px glyphs 2 px of air above and below.
+// Seven rows since v1.17.1 (the VERSION row went away: the card already prints
+// the version as a muted tag in the top-right corner).  18 px rows at a 20 px
+// pitch put the last row's bottom at 183, nine px clear of the 192 px card's
+// border, and still leave the 14 px glyphs 2 px of air above and below.
 static constexpr int kRowH = 18;
-static constexpr int kRowY0 = kCardY + kEdge + kPad + 24;  // 45; nine 18 px rows, 20 px apart
-static constexpr int kRowPitch = 20;                       // 45 + 8*20 + 18 = 223, inside the 212 px card
+static constexpr int kRowY0 = kCardY + kEdge + kPad + 24;  // 45; seven 18 px rows, 20 px apart
+static constexpr int kRowPitch = 20;                       // 45 + 6*20 + 18 = 183, inside the 192 px card
 static constexpr int kTitleY = kCardY + kEdge + kPad - 1;  // 24, TOP_MID offset -1
 static constexpr int kVerY = kCardY + kEdge + kPad + 1;    // 26, TOP_RIGHT offset +1
 static constexpr int kVerRight = kCardX + kCardW - kEdge - kPad - 6;  // 299
@@ -492,7 +493,7 @@ static void label_for(char *buf, size_t n, int item)
     case MENU_IDX_BRIGHT:   snprintf(buf, n, "%d%%", kBrightChoices[s_bright_idx]); break;
     case MENU_IDX_VOLUME:   snprintf(buf, n, "%d%%", kVolumeChoices[s_volume_idx]); break;
     case MENU_IDX_AUTOSAVE: snprintf(buf, n, "%s", kAutoSaveNames[s_save_idx]); break;
-    default:                snprintf(buf, n, "%s", DIGICORE_VERSION); break;
+    default:                buf[0] = '\0'; break;
     }
 }
 
@@ -506,7 +507,7 @@ static const char *name_for(int item)
     case MENU_IDX_BRIGHT:   return "BRIGHT";
     case MENU_IDX_VOLUME:   return "VOLUME";
     case MENU_IDX_AUTOSAVE: return "AUTO SAVE";
-    default:                return "VERSION";
+    default:                return "";
     }
 }
 

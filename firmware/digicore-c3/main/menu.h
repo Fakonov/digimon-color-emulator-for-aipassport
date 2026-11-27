@@ -22,7 +22,11 @@
 // the same second-carry pulse, so they accelerate together and keep their
 // original order - unlike editing the clock, which the ROM explicitly does not
 // let affect growth.
-enum { MENU_ITEMS = 8 };
+// Seven rows.  The firmware version used to be an eighth row (ABOUT/VERSION),
+// but the card already prints it as a muted tag in the top-right corner next to
+// the SETTINGS title, so the row only repeated what the header said (removed in
+// v1.17.1).
+enum { MENU_ITEMS = 7 };
 enum {
     MENU_IDX_CHORD    = 0,   // SEND A+C
     MENU_IDX_CHORD_AB = 1,   // SEND A+B
@@ -31,7 +35,6 @@ enum {
     MENU_IDX_BRIGHT   = 4,
     MENU_IDX_VOLUME   = 5,
     MENU_IDX_AUTOSAVE = 6,
-    MENU_IDX_ABOUT    = 7,
 };
 // SAVE OUT / SAVE IN were rows 6 and 7 until 2026-11-25.  A manual load restores
 // the newest snapshot, which is the autosave one, and those are taken while the
