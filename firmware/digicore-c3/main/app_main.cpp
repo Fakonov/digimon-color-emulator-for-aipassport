@@ -219,7 +219,6 @@ static constexpr int kPressFrames = 6;
 // without a reflash.  1.2 s matches the reference port, whose notes measured the
 // same ROM family ignoring a 700 ms chord and only reacting at 3.2 s.
 static int64_t s_ac_hold_us = 1200000;
-static constexpr int64_t kAcHoldDefaultUs = 1200000;
 // How long A+C is injected when menu row 0 is chosen.  The reference port
 // measured this ROM family ignoring a 700 ms chord and only reacting at 3.2 s,
 // and the device runs the guest well below real time, so the window is generous.
@@ -268,13 +267,6 @@ static bool s_ac_fired = false;
 // tap) or by the release below it (the press is delivered as a kPressFrames
 // pulse).  This is what keeps the menu gesture out of the ROM.
 static bool s_a_withheld = false;
-// Set by the (now unused) chord confirmation card when a B press accepted it.
-// The menu no longer opens on a B hold, so nothing reads this any more; it is
-// kept because the card code path still sets it and may come back.
-static bool s_b_hold_locked = false;
-// diagnostic: press B1 once at this guest frame (0 = disabled)
-static constexpr uint32_t kAutoPressAt = 0;   // diagnostic auto-press, off by default
-
 // ---- state ----------------------------------------------------------------
 static Gpce4 s_soc;
 extern uint32_t g_aot_uniq;
@@ -503,9 +495,6 @@ static constexpr int kStandbyGraceMs = 3000;
 // picture.  A bench run arms it with `J 5` (or `J 1`); a handset in someone's
 // hand does not pay for telemetry nobody reads.
 static int s_stat_period_s = 0;
-static uint32_t s_hot_calls = 0;   // PRNG block executions since log
-static uint32_t s_tick_us = 0;    // microseconds inside SoC tick() since log
-static uint32_t s_slices = 0;     // scheduler slices since log
 
 // Wall-clock budget for one guest frame.  A heavy scene needs ~60 ms of
 // emulation for a 16.7 ms frame; without a cap the slice loop drains the
@@ -1207,10 +1196,6 @@ static void blit_frame(void)
 // The host drives the handset over the same UART the log goes out on.  Reading
 // through the LL layer instead of driver/uart keeps this from fighting the
 // console driver for the port.  One command per line, no echo.
-enum {
-    kCmdNone = 0,
-};
-
 static int s_inject_mask = 0;      // key bits the host wants held down
 static int s_inject_left = 0;      // guest frames still to hold them
 static volatile bool s_force_full = false;
@@ -2296,7 +2281,11 @@ static void update_buttons(void)
         s_hold_mask = tap;
         s_hold_left = kPressFrames;
         s_held_frames = 0;
-        ESP_LOGI(TAG, "tap %02x -> holding %d guest frames", unsigned(tap), kPressFrames);
+        // DEBUG, not INFO: this fires on every key press, and a log line at
+        // 115200 baud blocks the render loop for ~5 ms (R7 audit: the key path
+        // was writing 1-3 INFO lines per press, i.e. 10-20 ms, more than a whole
+        // frame budget).  The pad state is still visible in STAT's GEST line.
+        ESP_LOGD(TAG, "tap %02x -> holding %d guest frames", unsigned(tap), kPressFrames);
     } else {
         s_hold_mask = 0;
         s_held_frames = 0;
@@ -2334,7 +2323,6 @@ static void update_buttons(void)
             // transition it drops on the floor.  The card's sequence was
             // B -> 700 ms of nothing -> chord, and that is the one that worked.
             start_chord(BTN_KEY0 | BTN_KEY2, kPadBlankUs + kAcChordUs);
-            s_b_hold_locked = true;   // this B chose a row, it is not a menu request
             s_pad_blank_us = esp_timer_get_time() + kPadBlankUs;
             menu_close();
             s_blit_repaint_all = true;
@@ -2347,7 +2335,6 @@ static void update_buttons(void)
             // pair - because what the ROM is picky about is the transition into
             // the chord, not what the chord means on that screen.
             start_chord(BTN_KEY0 | BTN_KEY1, kPadBlankUs + kAcChordUs);
-            s_b_hold_locked = true;
             s_pad_blank_us = esp_timer_get_time() + kPadBlankUs;
             menu_close();
             s_blit_repaint_all = true;
@@ -2379,7 +2366,6 @@ static void update_buttons(void)
         } else if ((edge & BTN_KEY1) != 0) {
             start_chord(BTN_KEY0 | BTN_KEY2, kAcChordUs);
             menu_confirm_set(false);
-            s_b_hold_locked = true;      // this B accepts the chord, it does not open the menu
             s_pad_blank_us = esp_timer_get_time() + kPadBlankUs;
             s_blit_repaint_all = true;
             ESP_LOGI(TAG, "chord card: B -> A+C sent (%lld ms)",
@@ -2389,7 +2375,6 @@ static void update_buttons(void)
             // the finger is still on it, and a single noisy re-latch of the
             // ladder reads as a fresh edge and dismisses the card by itself.
             menu_confirm_set(false);
-            s_b_hold_locked = true;
             s_pad_blank_us = esp_timer_get_time() + kPadBlankUs;
             s_blit_repaint_all = true;
             ESP_LOGI(TAG, "chord card: cancelled");
@@ -2401,11 +2386,9 @@ static void update_buttons(void)
         return;
     }
 
-    // diagnostic: emulate a physical B1 hold for a few guest frames
-    if (kAutoPressAt != 0 && s_frames >= kAutoPressAt && s_frames < kAutoPressAt + 4) {
-        s_hold_mask = BTN_KEY0;
-        s_hold_left = kPressFrames;
-    }
+    // (the diagnostic auto-press that used to live here was compiled out by
+    // kAutoPressAt == 0 since v1.2; the constant and the branch are gone.  The
+    // console K command does the same job at runtime.)
 
     // A chord the user asked for outranks the physical pad.  The menu closed as
     // soon as the row was chosen, so there is no finger on it any more and the
@@ -2678,7 +2661,6 @@ static bool load_panel_frame(uint32_t expect_crc)
 static int64_t s_snap_next_us = 0;
 static constexpr int64_t kFirstSnapshotUs = 10 * 1000000;    // 10 s after boot
 static constexpr int64_t kSnapshotRetryUs = 5 * 1000000;     // after a failure
-static uint32_t s_snap_count = 0;
 static uint32_t s_snap_ram_crc = 0;
 static bool s_snap_ram_crc_valid = false;
 
@@ -2737,7 +2719,6 @@ static bool snapshot_machine_state(bool force)
              resumable ? "frame stored (direct resume)" : "frame skipped (power-on replay)");
     s_snap_ram_crc = crc;
     s_snap_ram_crc_valid = true;
-    s_snap_count++;
     // Keep the wall clock in step with the save: after a power cut this is the
     // epoch a cold boot resumes from.  Under time lapse the guest clock is the
     // only thing that knows how far virtual time has run, so take it first -
@@ -3828,7 +3809,7 @@ extern "C" void app_main(void)
             // panel overlay runs on its own 1 Hz window above.
             ESP_LOGI(TAG, "frames=%u guest_fps=%u.%02u mi_s=%u.%02u host_fps=%u.%02u "
                           "pc=%06x sr=%04x sp=%04x insns=%u K cyc=%u K mv=%d btn=%d "
-                          "int_ctrl=%04x int_stat=%08x guest_pct=%u blit_pct=%u blitmax=%u rows=%u hot=%u tick_pct=%u slices=%u aotb=%u aoti=%u aotfb=%u aotmiss=%u aotuniq=%u "
+                          "int_ctrl=%04x int_stat=%08x guest_pct=%u blit_pct=%u blitmax=%u rows=%u aotb=%u aoti=%u aotfb=%u aotmiss=%u aotuniq=%u "
                           "blits=%u collapse=%u collcalls=%u colltot=%u spin=%u/%u/%u/%u spinv=%u/%04X/%d/%u stage=%u/%u/%u gmax=%u smax=%u tmax=%u kmax=%u fd=%u fc=%u auto=%u "
                           "ft=%u/%u/%u/%u ftmx=%u ov20=%u ov33=%u ov50=%u ov100=%u "
                           "blitpx=%u bpx=%u bcyc=%u pgsw=%u pushpx=%u tpushpx=%u fillpx=%u bandc=%u bandb=%u bandr=%u rband=%u "
@@ -3856,9 +3837,6 @@ extern "C" void app_main(void)
                      unsigned(uint32_t((uint64_t(s_blit_us) * 100u) / dt_us)),
                      unsigned(s_blit_max_us),
                      unsigned(rows_prev),
-                     unsigned(s_hot_calls),
-                     unsigned(uint32_t((uint64_t(s_tick_us) * 100u) / dt_us)),
-                     unsigned(s_slices),
                      unsigned(s_cpu.m_aot_blocks), unsigned(s_cpu.m_aot_insns),
                      unsigned(s_cpu.m_aot_fallback), unsigned(s_cpu.m_aot_miss),
                      unsigned(g_aot_uniq),
@@ -3917,14 +3895,11 @@ extern "C" void app_main(void)
             last_coll_calls = s_cpu.m_collapse_calls;
             last_host = s_host_frames;
             last_insns = s_insns;
-            s_hot_calls = 0;
 #if C3_PROF
             s_prof_slice = 0;
             s_prof_exec = 0;
             s_prof_tick = 0;
 #endif
-            s_tick_us = 0;
-            s_slices = 0;
             s_guest_us = 0;
             s_blit_us = 0;
             s_guest_max_us = 0;

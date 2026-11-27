@@ -74,3 +74,6 @@ firmware/*/sdkconfig.bak-*
 dbgtest/**/*.bmp
 dbgtest/**/*.png
 dbgtest/**/*.txt
+
+# ---- local release tree (external artifact, not in git) ----
+dist/

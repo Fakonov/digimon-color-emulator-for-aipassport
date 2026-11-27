@@ -145,8 +145,13 @@ uint32_t g_rd_fast = 0, g_rd_slow = 0, g_wr_fast = 0, g_wr_slow = 0;
 // how many pixels went through each hook, but not where the *host* time went.
 // Two rounds of auditing guessed at that ("must be the sprite data reads") and
 // could not settle it.  One cycle-counter read around each hook call answers it
-// directly: the hook is entered once per row/blit, not once per pixel, so the
-// cost is ~3 host cycles per call - noise against a 14 ms frame.
+// directly: the hook is entered once per row/blit, not once per pixel.
+//
+// Cost, measured in the R7 audit: 2 rdcycle reads + one .bss read-modify-write
+// per entry, i.e. 8-12 host cycles and not the "~3" this comment used to claim.
+// A redraw frame enters the hooks ~2,650 times, so it is ~25 K cycles (0.33 %);
+// the only consumer is the LONGF line's hp= field (STAT does not use it).
+// Off by default since v1.17.0; -DC3_HLEPROF=1 brings the attribution back.
 #ifndef C3_HLEPROF
 #define C3_HLEPROF 0
 #endif
@@ -360,7 +365,7 @@ void unsp_device::execute_one(const uint16_t op)
 	if (op0 == 0xf)
 		return execute_fxxx_group(op);
 
-	if (op0 < 0xf && opa == 0x7 && op1 < 2)
+	if (opa == 0x7 && op1 < 2)         // op0 == 0xf already returned above
 		return execute_jumps(op);
 
 	if (op0 == 0xe)
@@ -1228,7 +1233,12 @@ bool unsp_device::hle_blit_key()
 	// same loop exactly where this one left off, which is what the interpreter
 	// does one instruction at a time.
 	const int32_t budget = core->m_icount > 0 ? core->m_icount : 0;
-	if (budget < (int32_t)g_blit_cyc_per_px)
+	// Snapshot the per-pixel charge once.  It is a mutable global (console "B"
+	// trims it live), and reading it per pixel put a load + multiply in the
+	// innermost loop of every sprite (R7 audit R7-06).  Within one hook entry it
+	// cannot change, so a local is bit-for-bit equivalent.
+	const uint32_t cyc_per_px = g_blit_cyc_per_px;
+	if (budget < (int32_t)cyc_per_px)
 		return false;                   // no room for even one pixel: interpret
 	// Sprite source window.  The clip check above already decided there is work
 	// to do; the source itself is read one 16 bit word per pixel out of the flash
@@ -1268,7 +1278,7 @@ bool unsp_device::hle_blit_key()
 		}
 		src = (src + 1u) & 0xFFFFFFu;
 		i++;
-		cycles += g_blit_cyc_per_px;
+		cycles += cyc_per_px;
 		if (++pixels > 0x10000u)
 			return false;
 	}
@@ -1859,7 +1869,14 @@ UNSP_HOT void unsp_device::execute_run()
 				}
 			}
 #endif
+			// The block histogram belongs to the PC harness (--block-hist); on
+			// the device nobody ever assigns m_block_hist, so this was a DRAM
+			// load + branch on every dispatch for a guaranteed "no" (R7 audit
+			// R7-07).  AOT_NO_HOOKS already removed the per-instruction copy of
+			// the same test from aot.h.
+#ifndef ESP_PLATFORM
 			if (m_block_hist) m_block_hist[lpc & 0x3ffffu]++;
+#endif
 			// The PRNG block runs from flash (0x2002F4) and, in the scenes that
 			// relocate it, from its RAM copy (0x0002F4).  Same code, same data
 			// area - the recompiled block only touches registers and m_ram, so
@@ -1894,7 +1911,13 @@ UNSP_HOT void unsp_device::execute_run()
 				continue;
 			}
 #if C3_WAIT_COLLAPSE
-			if (wait_loop_collapse(lpc))
+			// Two-PC filter inline: the collapse only ever fires on the PRNG
+			// key-wait head (0x230321) and its RAM relocation (0x000321).  On
+			// every other dispatch this reads one DRAM flag and fails, and it
+			// used to pay a real cross-TU call for that "no" (R7 audit: 838 B
+			// function, ~11 cycles, 1.0 % of a redraw frame).  Same shape as the
+			// spin_collapse call below, which has always pre-filtered.
+			if ((lpc == 0x230321u || lpc == 0x000321u) && wait_loop_collapse(lpc))
 			{
 				if (core->m_sirq)
 					check_irqs();
@@ -1915,57 +1938,69 @@ UNSP_HOT void unsp_device::execute_run()
 				continue;
 			}
 #ifdef ESP_PLATFORM
-			// Keyed sprite blit: one C loop instead of ~150k interpreted
-			// instructions per 96x96 sprite (see hle_blit_key).
-			if (m_hle_blit && lpc == AOT_HLE_BLIT_ENTRY)
+			// Five HLE entry points, one bit test.  Shifted right by one, their
+			// guest PCs land on bits {5, 15, 17, 26} of a 32-bit mask:
+			//   0x005B4A->5  0x005B1E->15  0x005F8B->5  0x207CA3->17  0x207A35->26
+			// One shift/and/bit-test rejects 87.5 % of the dispatches before any
+			// global is read.  The old shape ran five (bool && pc) tests plus
+			// five DRAM loads on every dispatch - measured ~22 cycles, 1.9 % of a
+			// redraw frame (R7 audit R7-02).  A mask hit still runs all five
+			// exact tests, so every hook keeps its own guard and its own flag,
+			// and a new hook only needs its bit added here.
+			if ((0x04028020u >> ((lpc >> 1) & 31u)) & 1u)
 			{
-				HLE_T0();
-				const bool hit = hle_blit_key();
-				HLE_ADD(g_h_blit);
-				if (hit)
-					continue;
-			}
-			// LCD pixel push: 65 virtual cycles per pixel in C instead of
-			// fourteen guest instructions (see hle_push_pixels).
-			if (g_hle_push_px && lpc == AOT_HLE_PUSH_ENTRY)
-			{
-				HLE_T0();
-				const bool hit = hle_push_pixels(this);
-				HLE_ADD(g_h_push);
-				if (hit)
-					continue;
-			}
-			// Constant-colour fill: 0x005B1D runs once per pixel of a redraw and
-			// never reads memory, so the whole span collapses to two writes per
-			// pixel (see hle_fill_span).
-			if (g_hle_fill_px && lpc == AOT_HLE_FILL_ENTRY)
-			{
-				HLE_T0();
-				const bool hit = hle_fill_span(this);
-				HLE_ADD(g_h_fill);
-				if (hit)
-					continue;
-			}
-			// 32x32->32 multiply: 0x005F8B is called for every sprite offset and
-			// every fill pixel.  Replaces the arithmetic only; the push and both
-			// pops stay in the guest, so the stack stays balanced.
-			if (g_hle_mul32 && lpc == AOT_HLE_MUL_ENTRY)
-			{
-				HLE_T0();
-				const bool hit = hle_mul32(this);
-				HLE_ADD(g_h_mul);
-				if (hit)
-					continue;
-			}
-			// Sprite record loop: consume every remaining record for this scan
-			// line in C, then let the guest re-test and push the line buffer.
-			if (g_hle_render_band && lpc == AOT_HLE_BAND_LOOP)
-			{
-				HLE_T0();
-				const bool hit = hle_render_band(this);
-				HLE_ADD(g_h_band);
-				if (hit)
-					continue;
+				// LCD pixel push: 65 virtual cycles per pixel in C instead of
+				// fourteen guest instructions (see hle_push_pixels).
+				if (g_hle_push_px && lpc == AOT_HLE_PUSH_ENTRY)
+				{
+					HLE_T0();
+					const bool hit = hle_push_pixels(this);
+					HLE_ADD(g_h_push);
+					if (hit)
+						continue;
+				}
+				// Constant-colour fill: 0x005B1D runs once per pixel of a redraw
+				// and never reads memory, so the whole span collapses to two
+				// writes per pixel (see hle_fill_span).
+				if (g_hle_fill_px && lpc == AOT_HLE_FILL_ENTRY)
+				{
+					HLE_T0();
+					const bool hit = hle_fill_span(this);
+					HLE_ADD(g_h_fill);
+					if (hit)
+						continue;
+				}
+				// Keyed sprite blit: one C loop instead of ~150k interpreted
+				// instructions per 96x96 sprite (see hle_blit_key).
+				if (m_hle_blit && lpc == AOT_HLE_BLIT_ENTRY)
+				{
+					HLE_T0();
+					const bool hit = hle_blit_key();
+					HLE_ADD(g_h_blit);
+					if (hit)
+						continue;
+				}
+				// 32x32->32 multiply: 0x005F8B is called for every sprite offset
+				// and every fill pixel.  Replaces the arithmetic only; the push and
+				// both pops stay in the guest, so the stack stays balanced.
+				if (g_hle_mul32 && lpc == AOT_HLE_MUL_ENTRY)
+				{
+					HLE_T0();
+					const bool hit = hle_mul32(this);
+					HLE_ADD(g_h_mul);
+					if (hit)
+						continue;
+				}
+				// Sprite record loop: consume every remaining record for this scan
+				// line in C, then let the guest re-test and push the line buffer.
+				if (g_hle_render_band && lpc == AOT_HLE_BAND_LOOP)
+				{
+					HLE_T0();
+					const bool hit = hle_render_band(this);
+					HLE_ADD(g_h_band);
+					if (hit)
+						continue;
+				}
 			}
 #endif
 			{

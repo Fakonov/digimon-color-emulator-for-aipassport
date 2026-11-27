@@ -23,9 +23,13 @@
 
 | 文件 | 说明 |
 |---|---|
-| `digicore-c3-v1.6.0.bin` | 只含 app 分区（0x10000），不含 ROM |
-| `dmc_web.html` | 网页工具，托管在 https（GitHub Pages / 本地 `http://127.0.0.1`） |
+| `digicore-c3-v1.17.0.bin` | 只含 app 分区（0x10000），不含 ROM |
+| `dmc_web.html` + `dmc_assets.js` | 网页工具 V2（传输 + 攻略），两者必须放在同一目录；托管在 https（GitHub Pages / 本地 `http://127.0.0.1`） |
+| `DMC_CN_GUIDE.md` | 中文攻略手册（与网页同一份内容，离线可读） |
 | `README` | 给用户的步骤：烧固件 → 打开网页 → 传 ROM |
+
+> `dmc_assets.js` 是 V2 的图片资源（96×96 截图 / 8 个图标 / 19 只精灵，约 85 KB 内联 base64）。
+> 只发 `.html` 不发它，图标与进化页会全空——发布清单里这两个文件是一组。
 
 网页必须是 **https 或 localhost**（`navigator.serial` 要求 secure context），
 Chrome / Edge 桌面版才支持 Web Serial。
@@ -97,7 +101,7 @@ save round trip identical: True
 
 ---
 
-## 8. 网页里的攻略页（v1.16.0 起）
+## 8. 网页里的攻略页（V2 版起）
 
 `tools/dmc_web.html` 不再只是传输工具，还带三个只在前端跑的标签页（不需要连设备）：
 

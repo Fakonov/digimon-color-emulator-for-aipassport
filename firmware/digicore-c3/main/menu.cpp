@@ -783,13 +783,22 @@ void menu_set_capture(int frames)
 // ===========================================================================
 //  A+C confirmation card
 //
-//  The chord used to be injected the moment A had been held for 1.2 s, which
-//  broke the handset outright: the cartridge's title screen only accepts a
+//  Historic context: the chord used to be injected the moment A had been held
+//  for 1.2 s, which broke the handset outright - the title screen only accepts a
 //  plain A, so a pad reading A+C looked like no key at all and the game never
-//  started.  The chord is now a two step gesture instead - long A raises this
-//  card and the guest receives nothing at all while it is up, B sends A+C, A or
-//  C drops it.
+//  started.  The card was the two step gesture that replaced it.
+//
+//  It has been unreachable since the chord became row 0 of the settings menu
+//  (v1.5): nothing calls menu_confirm_set(true) any more, so s_confirm is
+//  always false and the whole card - 1,868 B of .flash.text measured in the R7
+//  audit - could never paint.  C3_CONFIRM_CARD=0 compiles the body out and
+//  leaves the two predicates as constants; -DC3_CONFIRM_CARD=1 brings the card
+//  back exactly as it was.
 // ===========================================================================
+#ifndef C3_CONFIRM_CARD
+#define C3_CONFIRM_CARD 0
+#endif
+#if C3_CONFIRM_CARD
 static constexpr int kCfmX = 44;
 static constexpr int kCfmY = 72;
 static constexpr int kCfmW = 232;
@@ -856,9 +865,17 @@ bool menu_confirm_is_open()
 {
     return s_confirm;
 }
+#else  // !C3_CONFIRM_CARD: the card is unreachable, keep the API as constants.
+void menu_confirm_set(bool) {}
+bool menu_confirm_is_open() { return false; }
+#endif // C3_CONFIRM_CARD
 
 void menu_confirm_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg)
 {
+#if !C3_CONFIRM_CARD
+    (void)strip; (void)w; (void)h; (void)bg;
+    return;
+#else
     if (!s_confirm || !s_confirm_dirty)
         return;
     s_confirm_dirty = false;
@@ -894,4 +911,5 @@ void menu_confirm_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg)
         if (s_capture > 0 && --s_capture == 0)
             printf("CAPTURE DONE\n");
     }
+#endif // C3_CONFIRM_CARD
 }

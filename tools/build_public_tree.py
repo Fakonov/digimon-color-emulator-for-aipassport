@@ -10,7 +10,7 @@
 
 用法：
 
-    python tools/build_public_tree.py "D:\\path\\to\\aip-color-v1.6.0-github"
+    python tools/build_public_tree.py "D:\\path\\to\\aip-color-v1.17.0-github"
 
 脚本只负责铺结构 + 复制 + 脱敏 + 重算 SHA256SUMS；
 README / CHANGELOG / THIRD-PARTY / .gitignore / LICENSE / VERSION 由人写，
@@ -30,18 +30,26 @@ FW_TREES = [
 ]
 
 DOCS = ["HANDOFF_2026-11-24.md", "HANDOFF_UI_POSITION.md", "RESEARCH_DMC_MANUAL.md",
-        "RESEARCH_SCREEN_AND_ROUNDING.md", "WEB_TOOL.md", "C3_PORT.md", "EMU.md", "AUDIO.md"]
+        "RESEARCH_SCREEN_AND_ROUNDING.md", "WEB_TOOL.md", "C3_PORT.md", "EMU.md", "AUDIO.md",
+        "DMC_CN_GUIDE.md"]
 
-TOOLS = ["dmc_web.html", "gen_brick_a8.py", "make_sparse_rom.py", "aot.py"]
+# dmc_web.html is useless on its own: its images live in dmc_assets.js (V2, ~85 KB
+# of inline base64), and build_web_assets.py is what regenerates that file.  The
+# earlier list shipped only the .html, i.e. a release whose icon/sprite tabs were
+# blank (R7 release pass, 2026-11-27).
+TOOLS = ["dmc_web.html", "dmc_assets.js", "build_web_assets.py", "mame_shots.lua",
+         "gen_brick_a8.py", "make_sparse_rom.py", "aot.py"]
 
-# 本机路径在源码注释里出现过三种写法
+# 本机路径在源码注释里出现过两种写法。  The backslash pattern must be a raw
+# string with a single backslash: the previous r"C:\\Users\\..." spelled two and
+# never matched, so the desensitisation step silently did nothing.
 DESENSITIZE = [
-    (r"C:\\Users\\DuWeisi", "<home>"),
-    (r"C:/Users/DuWeisi", "<home>"),
     (r"C:\Users\DuWeisi", "<home>"),
+    ("C:/Users/DuWeisi", "<home>"),
 ]
 
-TEXT_EXT = (".md", ".txt", ".c", ".cpp", ".h", ".inc", ".py", ".ps1", ".csv", ".json", "")
+TEXT_EXT = (".md", ".txt", ".c", ".cpp", ".h", ".inc", ".py", ".ps1", ".csv", ".json",
+            ".lua", ".js", ".html", ".css", "")
 
 # The only .bin that belongs in the public tree: the GPCE4 SoC's 64 KiB internal
 # mask ROM, which ships with MAME.  The cartridge image and the sparse page store

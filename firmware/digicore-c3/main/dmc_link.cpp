@@ -88,7 +88,9 @@ bool     s_have_sha1 = false;
 uint32_t *s_index = nullptr;    // page_count * 4, allocated per transfer
 uint8_t   s_bitmap[kMaxPages / 8];
 alignas(4) uint8_t s_page[kPageSize];
-alignas(4) uint8_t s_header[kPageSize];
+// Header staging: 60 B of StoreHeader in a 64 B buffer.  See rom_end() for why
+// the old 4 KiB page-sized buffer was 4 KB of DRAM for nothing.
+alignas(4) uint8_t s_header[64];
 
 uint8_t hex_nibble(char c)
 {
@@ -255,10 +257,16 @@ void rom_end()
     h.flags = 0;
     h.present_pages = s_present;
 
+    // Only sizeof(StoreHeader) (60 B) is meaningful here: rom_esp::mount()
+    // reads exactly that many bytes, and the rest of the erased 4 KiB header
+    // sector stays 0xFF.  Staging a whole page cost 4,096 B of .bss, which is
+    // the scarcest resource on this part (R7 audit).  Keep the buffer 4-byte
+    // aligned and a multiple of 4, as esp_partition_write() requires.
+    static_assert(sizeof(StoreHeader) <= sizeof(s_header), "header staging buffer too small");
     std::memset(s_header, 0, sizeof(s_header));
     std::memcpy(s_header, &h, sizeof(h));
 
-    esp_err_t err = esp_partition_write(s_rom_part, 0, s_header, kPageSize);
+    esp_err_t err = esp_partition_write(s_rom_part, 0, s_header, sizeof(s_header));
     if (err == ESP_OK)
         err = esp_partition_write(s_rom_part, kBitmapOffset, s_bitmap, sizeof(s_bitmap));
     if (err == ESP_OK)

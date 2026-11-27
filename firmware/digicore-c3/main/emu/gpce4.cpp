@@ -590,11 +590,15 @@ uint16_t Gpce4::spi_direct_r(uint32_t offset)
 
 bool Gpce4::note_unmapped(uint32_t *list, int &count, uint32_t addr)
 {
+    // The "full" test comes first: once the log is full every later call
+    // returned false anyway, but only after scanning all 64 entries (R7 audit
+    // R7-08).  Reordering is behaviour-preserving - a full list never records
+    // and never frees a slot.
+    if (count >= UNMAPPED_LOG_MAX)
+        return false;
     for (int i = 0; i < count; i++)
         if (list[i] == addr)
             return false;
-    if (count >= UNMAPPED_LOG_MAX)
-        return false;
     list[count++] = addr;
     return true;
 }

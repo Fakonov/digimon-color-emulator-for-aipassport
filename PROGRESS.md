@@ -446,3 +446,16 @@
 - 新增诊断：`LONGF`（帧 > 60 ms 打一行，含 dblk/dins/dmiss/dfb/dtick）；`tools/r5_keyseq.py`（定时按键序列，单端口内比较首次/第二次切换）。
 - 实测（v1.14.0，COM4）：切换帧 73/88/72 ms；静止 56.2 fps / `gmax` 15.8 ms / 帧间隔 p50 16 ms；`aotmiss` 从 4 万+ 降到 823~994。构建 app 1,139,280 B（`AECFDE24…`）、Flash Code 694,606 B、DRAM 232,856 / 321,296（余 88,440 B）。
 - 注意：生成 AOT 只跑 `tools/aot.py` + 环境变量，**不要跑 `tools/sync_c3_emu.py`**（会用 PC 侧副本覆盖设备侧 `unsp_glue.cpp`，`m_insn_count` 与 `LONGF` 会丢）。
+
+
+## 2026-11-27 - 第七轮审计（v1.17.0）：清掉热路径记账税与不可达代码
+
+- 五路并行审计（应用层 / 模拟器核心 / AOT 表 / 外设资源 / 构建画像），分报告 docs/notes/R7_app.md、
+  R7_core.md、R7_aot.md、R7_periph.md、R7_build.md；总报告 docs/AUDIT_PERF_2026-11-27_R7.md。
+- 改动：HLE 入口 32 位掩码预筛、wait_loop 内联预筛、st7735 脏块按 16 像素行合并、
+  g_blit_cyc_per_px 入口局部化、C3_HLEPROF=0、A+C 确认卡 C3_CONFIRM_CARD=0（省 1,868 B）、
+  STAT 三个恒零字段删除、编译期日志上限 INFO（按键 tap 降 DEBUG）、DMC1 header 暂存页 4,096 -> 64 B。
+- 体积 1,144,944 -> 1,134,128 B；DRAM 静态余量 82,306 -> 87,200 B；execute_run 5,434 -> 5,142 B。
+- 真机（COM4）验收：v1.17.0 启动 BOOT_OK、截图、菜单、按键、存档全部正常；
+  稳定态 56.4-56.7 fps、ft p50/p95 = 16/16 ms；切界面最坏帧 44-55 ms（与基线 38-79 ms 重叠，噪声内）。
+- 下一轮：AOT 重叠块 1,097 块 / 277,946 B 改入口桩；入口表区间裁剪 64.6 KB；LTO 单独 A/B。

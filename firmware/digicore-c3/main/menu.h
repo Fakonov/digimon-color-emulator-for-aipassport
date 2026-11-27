@@ -130,13 +130,14 @@ void menu_standby_present(uint8_t *strip, int x, int y, int w, int h, const char
 // serial console.  0 turns it back off.
 void menu_set_capture(int frames);
 
-// ---- A+C confirmation card (currently unused) -----------------------------
+// ---- A+C confirmation card (compiled out: C3_CONFIRM_CARD = 0) -------------
 //
-// Superseded by row 0 of the settings menu: the chord is now a command inside
-// the card, so nothing raises this modal any more.  It is kept because it is
-// the only code path that paints a modal over the guest without the menu's
-// furniture, and the chord may need a confirmation step again if the cartridge
-// turns out to dislike a bare A+C from a menu row.
+// Superseded by row 0 of the settings menu: the chord is a command inside the
+// card now, so nothing raises this modal any more - menu_confirm_set(true) has
+// no caller, menu_confirm_is_open() is constant false, and the 1,868 B card
+// body could never paint (R7 audit).  menu.cpp compiles it out unless
+// -DC3_CONFIRM_CARD=1; the two predicates stay so call sites do not need an
+// #if of their own.
 void menu_confirm_set(bool on);
 bool menu_confirm_is_open();
 void menu_confirm_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg);

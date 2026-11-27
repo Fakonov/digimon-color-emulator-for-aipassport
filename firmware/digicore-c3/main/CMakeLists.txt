@@ -38,17 +38,21 @@ idf_component_register(
 # chain).  The ISA decoder is one giant nested switch, so re-enable both for
 # this component; the two flags must come after the IDF defaults to win.
 #
-# C3_AOTACC / C3_PROF are PERMANENT-TAX switches, not features: with C3_AOTACC=1
-# every guest load and store in a generated block does an extra DRAM
-# read-modify-write (aot.h AOT_ACC_*), and C3_PROF=1 puts four cycle-counter
-# reads into every scheduler slice.  Both answered their question in the
-# 2026-11-22/23 rounds (AUDIT_PERF_2026-11-24 section 0.3 lists the same class
-# of leftover).  Off by default now; the STAT line keeps printing rdf/rds/wrf/wrs
-# as zeros so log parsers do not have to change.
+# C3_AOTACC / C3_PROF / C3_HLEPROF are PERMANENT-TAX switches, not features:
+# with C3_AOTACC=1 every guest load and store in a generated block does an extra
+# DRAM read-modify-write (aot.h AOT_ACC_*); C3_PROF=1 puts four cycle-counter
+# reads into every scheduler slice; C3_HLEPROF=1 puts two rdcycle reads and a
+# BSS read-modify-write into every HLE hook entry (8-12 cycles x ~2,650 entries
+# on a redraw frame, and its only consumer is the LONGF line's hp= field).
+# All three answered their question in the 2026-11-22..27 rounds; they are off
+# in the shipped image.  The STAT line keeps printing the fields they fed as
+# zeros (rdf/rds/wrf/wrs, caot/cinf/..., hp=) so log parsers keep working, and
+# -DC3_xxx=1 brings any of them back for a bench run.
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error=format -O3 -DC3_PROF=0 -DC3_SPLIT=0 -DC3_SKIP_BLIT=0
                        -fjump-tables -ftree-switch-conversion
                        -DAOT_CONST_TABLES -DAOT_NO_HOOKS -DC3_MISS_CENSUS=0 -DC3_BLOCK_CENSUS=0 -DC3_NO_AOT=0
-                       -DC3_BLIT_CYC=139 -DC3_AOTACC=0 -DC3_WAIT_COLLAPSE=1 -DC3_HLEPROF=1)
+                       -DC3_BLIT_CYC=139 -DC3_AOTACC=0 -DC3_WAIT_COLLAPSE=1 -DC3_HLEPROF=0
+                       -DC3_CONFIRM_CARD=0)
 
 # aot_blocks.c is generated C++ (nullptr, the AotFn typedef) that keeps the .c
 # name so the PC harness and tools/aot.py can name it without a second code path.

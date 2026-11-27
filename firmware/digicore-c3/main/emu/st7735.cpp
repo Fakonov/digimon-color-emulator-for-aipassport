@@ -287,6 +287,14 @@ void St7735::fill_run(uint16_t pixel, uint32_t count)
 
     m_px_writes += count;
     const bool mv = (m_madctl & 0x0020) != 0;
+    // Dirty bits are a pure OR mask.  A span walks one 16-pixel tile row at a
+    // time (16 consecutive pixels share m_dirty[ry>>4]), so coalescing the
+    // read-modify-write costs one compare per pixel and one store per tile row
+    // instead of lbu/ori/sb per pixel - 27.3 K pixels in a full redraw, ~3
+    // host cycles each (R7 audit R7-05).  The flush at the end is what makes
+    // it bit-for-bit equal to writing every pixel through.
+    unsigned dirty_row = 0xFFu;
+    uint8_t dirty_acc = 0;
     for (uint32_t i = 0; i < count; i++)
     {
         const int idx = (mv ? (m_posx + m_posy * GRAM_W)
@@ -296,7 +304,17 @@ void St7735::fill_run(uint16_t pixel, uint32_t count)
         if (rx < unsigned(PANEL) && ry < unsigned(PANEL))
         {
             fb[ry * PANEL + rx] = pixel;
-            m_dirty[ry >> 4] |= uint8_t(1u << (rx >> 4));
+            const unsigned db = ry >> 4;
+            const uint8_t bit = uint8_t(1u << (rx >> 4));
+            if (db == dirty_row)
+                dirty_acc = uint8_t(dirty_acc | bit);
+            else
+            {
+                if (dirty_row != 0xFFu)
+                    m_dirty[dirty_row] |= dirty_acc;
+                dirty_row = db;
+                dirty_acc = bit;
+            }
         }
 
         m_posx++;
@@ -308,6 +326,8 @@ void St7735::fill_run(uint16_t pixel, uint32_t count)
                 m_posy = m_posminy;
         }
     }
+    if (dirty_row != 0xFFu)
+        m_dirty[dirty_row] |= dirty_acc;
 
     m_pixellatch = pixel;
     m_commandstep += int(count * 2u);
@@ -343,6 +363,9 @@ void St7735::write_run(const uint16_t *src, uint32_t count)
     const uint32_t xmin = uint32_t(m_posminx), xmax = uint32_t(m_posmaxx);
     const uint32_t ymin = uint32_t(m_posminy), ymax = uint32_t(m_posmaxy);
 
+    // Same tile-row coalescing as fill_run(): see the comment there.
+    unsigned dirty_row = 0xFFu;
+    uint8_t dirty_acc = 0;
     for (uint32_t i = 0; i < count; i++)
     {
         const uint16_t pixel = src[i];
@@ -354,7 +377,17 @@ void St7735::write_run(const uint16_t *src, uint32_t count)
         if (rx < unsigned(PANEL) && ry < unsigned(PANEL))
         {
             fb[ry * PANEL + rx] = pixel;
-            m_dirty[ry >> 4] |= uint8_t(1u << (rx >> 4));
+            const unsigned db = ry >> 4;
+            const uint8_t bit = uint8_t(1u << (rx >> 4));
+            if (db == dirty_row)
+                dirty_acc = uint8_t(dirty_acc | bit);
+            else
+            {
+                if (dirty_row != 0xFFu)
+                    m_dirty[dirty_row] |= dirty_acc;
+                dirty_row = db;
+                dirty_acc = bit;
+            }
         }
 
         if (++px > xmax)
@@ -364,6 +397,8 @@ void St7735::write_run(const uint16_t *src, uint32_t count)
                 py = ymin;
         }
     }
+    if (dirty_row != 0xFFu)
+        m_dirty[dirty_row] |= dirty_acc;
 
     m_posx = int(px);
     m_posy = int(py);
