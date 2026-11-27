@@ -434,6 +434,8 @@ void Gpce4::save_state(Gpce4State &st) const
     st.timer_ctrl = m_timer_ctrl;
     st.cache_ctrl = m_cache_ctrl;
     st.wait_ctrl = m_wait_ctrl;
+    st.pwm0_ctrl = m_pwm0_ctrl;
+    st.timerb_raw = m_timerb_raw;
     st.wake_mask_a = m_wake_mask_a;
     st.wake_mask_b = m_wake_mask_b;
     st.wake_mask_c = m_wake_mask_c;
@@ -492,6 +494,8 @@ bool Gpce4::restore_state(const Gpce4State &st)
     m_timer_ctrl = st.timer_ctrl;
     m_cache_ctrl = st.cache_ctrl;
     m_wait_ctrl = st.wait_ctrl;
+    m_pwm0_ctrl = st.pwm0_ctrl;
+    m_timerb_raw = st.timerb_raw;
     m_wake_mask_a = st.wake_mask_a;
     m_wake_mask_b = st.wake_mask_b;
     m_wake_mask_c = st.wake_mask_c;

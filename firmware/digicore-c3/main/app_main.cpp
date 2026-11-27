@@ -1230,6 +1230,8 @@ static void clock_seed_step();
 static int64_t guest_clock_sec();
 static void sync_time_lapse(bool force = false);
 static void time_lapse_step();
+// Defined next to the standby helpers; the console 'U' resume needs it too.
+static void publish_buzzer_state(void);
 // Defined with paint_pattern(); the G command pushes it once on demand.
 static void panel_edge_test(void);
 static void panel_align_test(void);
@@ -1546,6 +1548,7 @@ static void console_exec(char *line)
         }
         clock_drop_backlog();
         sync_time_lapse(true);
+        publish_buzzer_state();     // the note lives in the audio task, not in RAM
         s_force_full = true;
         const bool frame = load_panel_frame(s_snap_blob.fb_crc);
         s_blit_repaint_all = true;
@@ -1965,6 +1968,15 @@ static void panel_align_test(void)
 // ---------------------------------------------------------------------------
 //  input
 // ---------------------------------------------------------------------------
+// The buzzer note is split across two places: the gate/pitch registers live in
+// the SoC, the square wave lives in the audio task.  A restore rebuilds the SoC
+// half, so the other half has to be told about it - the ROM keeps thinking the
+// note is already playing (its copy is in guest RAM) and never re-issues it.
+static void publish_buzzer_state(void)
+{
+    audio_set_buzzer(s_soc.buzzer_hz());
+}
+
 // ---- standby card ---------------------------------------------------------
 // Enter leaves the guest running (it has been running behind the dark screen
 // all along) and replaces the panel content.  Leave repaints the shell and asks
@@ -2897,11 +2909,17 @@ static void restore_machine_state(void)
         ESP_LOGW(TAG, "snapshot pc=%06x outside the cartridge; replaying power-on", pc);
         guest_reset_cpu();
         clock_kept = false;                // power-on re-seeds from the anchor
+        // The power-on path programs the buzzer itself; publishing the restored
+        // registers here would start a note the replay is about to overwrite.
+        s_soc.set_buzzer_regs(0, 0);
     } else if (was_asleep) {
         // Asleep but with a cartridge PC: treat it as a wake-up.  set_sleep_
         // inhibit first so wake_from_sleep() only clears the flag.
         s_soc.set_sleep_inhibit(kGuestResumePc);
         s_soc.wake_from_sleep();
+        publish_buzzer_state();
+    } else {
+        publish_buzzer_state();
     }
     // The panel still shows the previous power-on frame and the ST7735 window
     // state knows nothing about the restored RAM, so ask for a full repaint.

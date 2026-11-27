@@ -188,7 +188,11 @@ struct Gpce4SpiFlash {
 //  what it needs from its own RAM once the interrupt chain works again.
 // ===========================================================================
 enum : uint32_t { GPCE4_STATE_MAGIC = 0x34435047u };   // 'GPC4'
-enum : uint16_t { GPCE4_STATE_VERSION = 1 };
+// 2: added the buzzer registers (pwm0_ctrl, timerb_raw).  A version bump makes
+// older records fail the check in restore_state() instead of resuming with a
+// silently wrong buzzer, and gueststate_load() rejects them too (the payload
+// length changed).
+enum : uint16_t { GPCE4_STATE_VERSION = 2 };
 
 struct Gpce4State {
     uint32_t magic;
@@ -201,6 +205,13 @@ struct Gpce4State {
     uint16_t ioa_attribute, iob_attribute, ioc_attribute;
     uint16_t io_ctrl, iob_out;
     uint16_t timer_ctrl, cache_ctrl, wait_ctrl;
+    // Buzzer hardware: TimerB reload is the pitch, PWM0_Ctrl is the gate, and
+    // buzzer_hz() needs both plus io_ctrl bit 3.  They used to be left out of
+    // the record, so a snapshot taken while a note was sounding restored a
+    // machine whose RAM believed the note was still playing while the model
+    // had closed the gate - and the ROM only programs these on the event that
+    // starts a note, so it never re-issued it (measured 2026-11-27).
+    uint16_t pwm0_ctrl, timerb_raw;
     uint16_t wake_mask_a, wake_mask_b, wake_mask_c;
     uint16_t dac_cha1, dac_cha2;
 
@@ -354,6 +365,14 @@ struct Gpce4 : public UnspBus {
     uint16_t m_pwm0_ctrl = 0;
     uint16_t m_timerb_raw = 0;
     uint16_t pwm0_value() const { return m_pwm0_ctrl; }
+    // Forget the note.  Used when a restore falls back to replaying power-on:
+    // the replay programs the buzzer itself, and a stale gate would start a
+    // note it is about to overwrite.
+    void set_buzzer_regs(uint16_t pwm0, uint16_t timerb)
+    {
+        m_pwm0_ctrl = pwm0;
+        m_timerb_raw = timerb;
+    }
     uint16_t timerb_value() const { return m_timerb_raw; }
     uint32_t pwm_events() const { return m_pwm_ev_n; }
     // Current buzzer note in Hz, 0 when silent.  TimerB reload is a signed
