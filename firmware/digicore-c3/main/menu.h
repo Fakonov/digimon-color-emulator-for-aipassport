@@ -110,11 +110,18 @@ void menu_banner_present(uint8_t *strip, int width, const char *text);
 
 // Single-line time-lapse notice: 240x22 in the 24 px strip below the guest
 // window (the window ends at y = 216 of 240), so it covers neither the pet nor
-// the bottom status-icon row.  It is modal - app_main swallows every key except
-// B while it is up - and it is redrawn every frame on top of the live picture,
-// which is cheap at this size (5.3 k pixels against the 37 k of the blit).
-// `strip` needs 2 * 240 * 22 bytes.
+// the bottom status-icon row.  It is modal while it is up: C stops the lapse,
+// B only dismisses the notice, everything else is swallowed.  It is redrawn
+// every frame on top of the live picture, which is cheap at this size
+// (5.3 k pixels against the 37 k of the blit).  `strip` needs 2 * 240 * 22.
 void menu_lapse_toast_present(uint8_t *strip, int w, int h, const char *speed);
+
+// Standby card: the whole panel black with one line of white text in the middle.
+// This is what the handset shows instead of a dead black screen once its own
+// 16 s idle timeout has passed, and it replaces the old top-margin "MACHINE
+// DARK" banner.  Pushed straight at the panel in 24-row bands, so `strip` needs
+// 2 * w * 24 bytes; the caller must not blit over it afterwards.
+void menu_standby_present(uint8_t *strip, int w, int h, const char *text);
 
 // Debug aid: dump the next `frames` menu pushes to the console as downsampled
 // hex rows ("B <band> <y> <pixels>").  The menu paints straight to the panel

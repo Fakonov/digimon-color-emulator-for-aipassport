@@ -479,13 +479,16 @@ static int s_brightness_pct = 80;
 static constexpr int kMachineIdleSec = 16;   // what a real handset does
 static int64_t s_last_input_us = 0;
 static bool s_lit = true;                    // panel backlight currently on
-static bool s_off_notice_done = false;       // "machine is dark by now" shown
-static int64_t s_notice_until_us = 0;
-// Banner text currently on the panel's top margin.  Comparing the pointer is
-// enough: the only two values are two string literals, and the banner is only
-// pushed when it changes.
-static const char *s_banner_text = "";
-static const char *s_banner_shown = nullptr;
+// The handset own idle state, drawn rather than left as a dead screen: the
+// panel shows the standby card and any key brings the picture back.  The ROM
+// asks for System_Sleep at the same moment (16 s) and the frame loop refuses
+// it, so this flag is the emulator way of showing that state honestly.
+static bool s_standby = false;
+static int64_t s_standby_since_us = 0;
+// How long the card is guaranteed on screen before AUTO OFF may kill the
+// backlight.  With the default AUTO OFF = 16 s both would land on the same
+// frame and the card would never be seen.
+static constexpr int kStandbyGraceMs = 3000;
 // Seconds between the periodic STAT line.  It was once per second, and that one
 // line is ~900 bytes of formatted text pushed down a 115200 baud UART, i.e.
 // roughly 78 ms of console time in every second - 7-8% of the wall clock burnt
@@ -1955,32 +1958,110 @@ static void panel_align_test(void)
 // ---------------------------------------------------------------------------
 //  input
 // ---------------------------------------------------------------------------
+// ---- standby card ---------------------------------------------------------
+// Enter leaves the guest running (it has been running behind the dark screen
+// all along) and replaces the panel content.  Leave repaints the shell and asks
+// for a full window push: the dirty map says nothing about a picture that a
+// card has just overwritten.
+static void standby_enter(int64_t idle_us);
+static void standby_leave(void);
+
+// Short C is the time-lapse cancel: the card row is three presses away and the
+// whole point of a lapse is that it runs away from you.  The press is swallowed
+// so it cannot also cancel something inside the game.
+static void cancel_time_lapse(const char *why)
+{
+    if (s_lapse_x <= 1)
+        return;
+    const int was = s_lapse_x;
+    menu_set_time_lapse_idx(0);
+    sync_time_lapse(true);
+    s_lapse_toast = false;
+    s_lapse_repaint = true;
+    ESP_LOGI(TAG, "%s -> time lapse off (was %dx)", why, was);
+}
+
+static void standby_enter(int64_t idle_us)
+{
+    if (s_standby)
+        return;
+    s_standby = true;
+    s_standby_since_us = esp_timer_get_time();
+    if (!s_lit) {
+        s_lit = true;
+        display_backlight_set(s_brightness_pct);
+    }
+    menu_standby_present(s_strip, kDstW, kDstH, "STANDBY");
+    ESP_LOGI(TAG, "standby up after %lld ms idle", (long long)(idle_us / 1000));
+}
+
+static void standby_leave(void)
+{
+    if (!s_standby)
+        return;
+    const int64_t held = esp_timer_get_time() - s_standby_since_us;
+    s_standby = false;
+    if (!s_lit) {
+        s_lit = true;
+        display_backlight_set(s_brightness_pct);
+    }
+    bezel_paint(s_strip, sizeof(s_strip), s_batt_pct);
+    s_blit_repaint_all = true;
+    ESP_LOGI(TAG, "standby off after %lld ms", (long long)(held / 1000));
+}
+
 static void update_buttons(void)
 {
+    // Standby owns every key: the first press only wakes the panel, it is not
+    // forwarded, and no gesture is reachable from here.  The guest keeps
+    // running underneath, exactly as it did behind the old dark screen.
+    if (s_standby) {
+        const int edge = buttons_take_latched();
+        buttons_state();                     // keep the poller's debounce fed
+        const bool key = (edge != 0) ||
+                         (s_inject_left > 0 && s_inject_mask != 0);
+        if (s_port_bits != 0xffff) {
+            s_port_bits = 0xffff;
+            s_soc.set_port(0, 0xffff);
+        }
+        if (key) {
+            s_inject_left = 0;
+            s_inject_mask = 0;
+            standby_leave();
+            s_last_input_us = esp_timer_get_time();
+        }
+        return;
+    }
+
     // The lapse notice is modal: while it is up the only thing a key may do is
-    // dismiss it (B) and stop the lapse.  Everything else is swallowed, the pad
-    // stays released, and the settings gesture is not reachable.
+    // stop the lapse (C) or dismiss the notice (B).  Everything else is
+    // swallowed, the pad stays released, and the settings gesture is not
+    // reachable.
     if (s_lapse_toast) {
         const int edge = buttons_take_latched();
         buttons_state();                     // keep the poller's debounce fed
         // The console injector (K <mask> <frames>) counts as a finger here too.
         const bool b_tap = (edge & BTN_KEY1) != 0 ||
                            (s_inject_left > 0 && (s_inject_mask & BTN_KEY1) != 0);
-        if (b_tap) {
-            s_lapse_toast = false;
+        const bool c_tap = (edge & BTN_KEY2) != 0 ||
+                           (s_inject_left > 0 && (s_inject_mask & BTN_KEY2) != 0);
+        if (c_tap) {
             s_inject_left = 0;
             s_inject_mask = 0;
-            menu_set_time_lapse_idx(0);
-            sync_time_lapse(true);
+            cancel_time_lapse("C on the lapse notice");
+        } else if (b_tap) {
+            // B only puts the notice away; the lapse keeps running.  Stopping
+            // it is C (or the card row), which is the key the notice now names.
+            s_lapse_toast = false;
             s_lapse_repaint = true;
-            ESP_LOGI(TAG, "B on the lapse notice -> time lapse off");
+            ESP_LOGI(TAG, "B on the lapse notice -> notice dismissed, lapse %dx",
+                     s_lapse_x);
         }
         if (s_port_bits != 0xffff) {
             s_port_bits = 0xffff;
             s_soc.set_port(0, 0xffff);
         }
         s_last_input_us = esp_timer_get_time();
-        s_off_notice_done = false;
         return;
     }
 
@@ -2118,11 +2199,24 @@ static void update_buttons(void)
     // press cannot wake the panel and the check tests nothing.
     if (instant != 0 || latched != 0) {
         s_last_input_us = esp_timer_get_time();
-        s_off_notice_done = false;
         if (!s_lit) {
             s_lit = true;
             display_backlight_set(s_brightness_pct);
             ESP_LOGI(TAG, "key -> panel lit");
+        }
+    }
+
+    // A short C tap stops a running lapse and is consumed here, so the game
+    // never sees the key.  Only while a lapse runs: the rest of the time C is
+    // the game cancel and must reach it.
+    if (s_lapse_x > 1 && ((instant | latched) & BTN_KEY2) != 0) {
+        cancel_time_lapse("C");
+        instant = instant & ~BTN_KEY2;
+        latched = latched & ~BTN_KEY2;
+        if (s_hold_mask == BTN_KEY2) {
+            s_hold_mask = 0;
+            s_hold_left = 0;
+            s_held_frames = 0;
         }
     }
 
@@ -2673,32 +2767,27 @@ static void update_sleep_backlight(void)
         }
     }
 
-    // When the emulator is set to stay lit past the handset's own 16 s, mark
-    // the moment the real machine would have gone dark.  The notice is a line
-    // of text in the panel's top margin: that strip is outside the guest
-    // window, so it covers no game pixels, it survives whatever the guest
-    // pushes next, and fb[] -- and therefore the frame CRC -- is untouched.
-    // NEVER (0) means "keep the panel lit", which is also longer than the
-    // handset's own 16 s, so it needs the notice just as much as 30 s and up.
-    const bool past_machine = (auto_off == 0) || (auto_off > kMachineIdleSec);
-    if (past_machine && !s_off_notice_done &&
-        idle >= int64_t(kMachineIdleSec) * 1000000) {
-        s_off_notice_done = true;
-        s_notice_until_us = now + 3000000;
-        s_banner_text = "MACHINE DARK";
-        ESP_LOGI(TAG, "machine would be dark now; banner at %lld ms idle",
-                 (long long)(idle / 1000));
-    } else if (s_notice_until_us != 0 && now >= s_notice_until_us) {
-        s_notice_until_us = 0;
-        s_banner_text = "";
-    } else if (s_notice_until_us == 0) {
-        // Nothing to announce.  Without this the last banner stayed on screen
-        // forever: turning the lapse off fell through every branch above and the
-        // "LAPSE 300X" line kept its pointer, so the repaint never happened.
-        s_banner_text = "";
+    // The handset's own idle timeout (16 s) is where the retail machine goes
+    // dark, and the ROM asks for System_Sleep right there.  The frame loop
+    // refuses that request (its power-down tail runs off the end of its own
+    // code), so the emulator draws the state instead: the panel becomes the
+    // standby card and any key brings the picture back.  This replaces the old
+    // top-margin "MACHINE DARK" banner, which nobody could see from across a
+    // desk and which left the game picture running underneath.
+    if (!s_standby && idle >= int64_t(kMachineIdleSec) * 1000000 &&
+        !menu_is_open() && !menu_confirm_is_open()) {
+        standby_enter(idle);
     }
 
-    const bool dark = auto_off > 0 && idle >= int64_t(auto_off) * 1000000;
+    // AUTO OFF still owns the backlight, but never before the card has been on
+    // screen for kStandbyGraceMs: with the default AUTO OFF = 16 s both would
+    // land on the same frame and the card would never be seen.  NEVER (0) keeps
+    // the card lit until a key, which is what that setting promises.
+    const int64_t dark_at = int64_t(auto_off) * 1000000;
+    const int64_t card_at =
+        int64_t(kMachineIdleSec + (kStandbyGraceMs / 1000)) * 1000000;
+    const int64_t dark_from = dark_at > card_at ? dark_at : card_at;
+    const bool dark = auto_off > 0 && idle >= dark_from;
     // Brightness can change while the panel stays lit, so the level needs its
     // own change detector; without it a BRIGHT edit does nothing until the
     // screen happens to go dark and come back.
@@ -3352,8 +3441,10 @@ extern "C" void app_main(void)
         } else {
             if (s_menu_was_open) {
                 s_menu_was_open = false;
-                bezel_paint(s_strip, sizeof(s_strip), s_batt_pct);
-                s_blit_repaint_all = true;
+                if (!s_standby) {
+                    bezel_paint(s_strip, sizeof(s_strip), s_batt_pct);
+                    s_blit_repaint_all = true;
+                }
                 // A lapse picked inside the card gets its notice now that the
                 // card is gone; while it was up the row itself was the feedback.
                 if (s_lapse_x > 1 && !s_lapse_toast) {
@@ -3364,7 +3455,7 @@ extern "C" void app_main(void)
                              s_lapse_toast_text);
                 }
             }
-            if (s_lapse_repaint) {
+            if (s_lapse_repaint && !s_standby) {
                 // The notice card covers rows the game window does not, so
                 // dismissing it needs the shell repainted, not just a blit.
                 s_lapse_repaint = false;
@@ -3440,7 +3531,9 @@ extern "C" void app_main(void)
         // While the lapse strip is up the blit and the strip have to be pushed
         // together, or the game repaint wipes it.  At 240x22 that is 5.3 k extra
         // pixels against the window's 37 k, so every frame is affordable.
-        if (s_display_ok && !menu_is_open() && !menu_confirm_is_open()) {
+        // Standby owns the panel: no blit, no toast, no battery corner, no fps
+        // overlay - anything pushed here would paint over the card.
+        if (s_display_ok && !s_standby && !menu_is_open() && !menu_confirm_is_open()) {
             const int64_t t_blit0 = esp_timer_get_time();
             blit_frame();
             // The edge frame has to go out after the blit, or the tiles paint
@@ -3477,25 +3570,8 @@ extern "C" void app_main(void)
         // draw current from boot to switch-off for no reason (AUDIT_PERF_2026-11
         // section 5 item 4: the largest switchable standing load on the board).
         audio_idle_poll();
-        // The top margin belongs to us, not to the guest: pushing the banner
-        // once is enough because nothing else ever draws there.
-        if (s_banner_text != s_banner_shown) {
-            const bool clearing =
-                s_banner_text[0] == '\0' && s_banner_shown != nullptr &&
-                s_banner_shown[0] != '\0';
-            if (clearing && !menu_is_open() && !menu_confirm_is_open()) {
-                // The banner is black-backed, so "no banner" has to restore the
-                // wall underneath rather than leave a dark strip.  bezel_paint()
-                // blanks the glass, hence the full repaint request.
-                bezel_paint(s_strip, sizeof(s_strip), s_batt_pct);
-                s_blit_repaint_all = true;
-            } else {
-                menu_banner_present(s_strip, kDstW, s_banner_text);
-            }
-            ESP_LOGI(TAG, "banner \"%s\"%s", s_banner_text,
-                     clearing ? " (cleared, shell repainted)" : "");
-            s_banner_shown = s_banner_text;
-        }
+        // The top-margin banner is gone with the standby card (v1.16.0): its
+        // only user was the "MACHINE DARK" notice, which the card replaced.
 
         // Pace to the handset's frame rate.  The model can run a 60 Hz frame faster
         // than 60 times a second, and letting it run flat out would make the
@@ -3598,7 +3674,7 @@ extern "C" void app_main(void)
                 const uint32_t df = s_frames - s_fps_win_frames;
                 s_fps_win_us = now;
                 s_fps_win_frames = s_frames;
-                if (dt)
+                if (dt && !s_standby)
                     draw_fps_overlay(int((uint64_t(df) * 100000000ull / dt) / 100));
             }
         }

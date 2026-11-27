@@ -604,7 +604,7 @@ void menu_lapse_toast_present(uint8_t *strip, int w, int h, const char *speed)
     const int y0 = h - kToastH - 2;
 
     char text[32];
-    snprintf(text, sizeof(text), "LAPSE %s  B=STOP", speed);
+    snprintf(text, sizeof(text), "LAPSE %s  C=STOP", speed);
     const int tx = x0 + (kToastW - text_width(text)) / 2;
     const int ty = (kToastH - kTextH) / 2;
 
@@ -644,6 +644,74 @@ void menu_lapse_toast_present(uint8_t *strip, int w, int h, const char *speed)
     const esp_err_t err = display_draw_bitmap(x0, y0, kToastW, kToastH, strip);
     if (err != ESP_OK)
         ESP_LOGE(TAG, "lapse toast push failed: %d", int(err));
+}
+
+
+// Standby card: black panel, one line of white text, centred.  Drawn 4x from the
+// same 5x7 set the card uses, so "STANDBY" comes out 168x28 and reads from a
+// metre away; the band loop exists because the caller strip only holds 24 rows
+// (2 * 320 * 24 = 15,360 B) and the panel is 240 rows tall.
+void menu_standby_present(uint8_t *strip, int w, int h, const char *text)
+{
+    constexpr int kScale = 4;                 // 4x the 1x glyphs: 20x28 per cell
+    constexpr int kBandRows = 24;             // must match the caller strip
+    constexpr int kMaxCols = 120;             // 1x glyph columns, plenty for one line
+
+    // Rasterise the string once at 1x into a bit map: the per-pixel loop below
+    // is then a table lookup instead of a walk down the string for every pixel.
+    static uint8_t s_bits[7][kMaxCols];
+    for (int r = 0; r < 7; ++r)
+        for (int c = 0; c < kMaxCols; ++c)
+            s_bits[r][c] = 0;
+
+    int pen = 0;
+    for (const char *s = text; *s != '\0'; ++s) {
+        const unsigned char code = (unsigned char)*s;
+        if (code >= 32 && code <= 90) {
+            int first = 0, last = 0;
+            glyph_span(code, &first, &last);
+            const uint8_t *g = &kFont5x7[(code - 32) * 5];
+            for (int col = first; col <= last; ++col) {
+                const int px = pen + (col - first);
+                if (px < 0 || px >= kMaxCols)
+                    continue;
+                for (int row = 0; row < 7; ++row)
+                    if ((g[col] & (1u << row)) != 0)
+                        s_bits[row][px] = 1;
+            }
+        }
+        pen += glyph_advance(code) / kTextScale;
+    }
+
+    const int tw = pen * kScale;
+    const int th = 7 * kScale;
+    const int tx = (w - tw) / 2;
+    const int ty = (h - th) / 2;
+
+    for (int y0 = 0; y0 < h; y0 += kBandRows) {
+        const int rows = (h - y0) < kBandRows ? (h - y0) : kBandRows;
+        uint8_t *p = strip;
+        for (int r = 0; r < rows; ++r) {
+            const int y = y0 + r;
+            const bool in_band = (y >= ty) && (y < ty + th);
+            const int gy = in_band ? (y - ty) / kScale : -1;
+            for (int x = 0; x < w; ++x) {
+                uint16_t c = 0x0000;
+                if (in_band && x >= tx && x < tx + tw) {
+                    const int gx = (x - tx) / kScale;
+                    if (gx >= 0 && gx < kMaxCols && s_bits[gy][gx] != 0)
+                        c = 0xFFFF;
+                }
+                *p++ = (uint8_t)(c >> 8);
+                *p++ = (uint8_t)(c & 0xFF);
+            }
+        }
+        const esp_err_t err = display_draw_bitmap(0, y0, w, rows, strip);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "standby band y=%d failed: %d", y0, int(err));
+            return;
+        }
+    }
 }
 
 void menu_present(uint8_t *strip, int w, int h, const MenuBackdrop *bg)
