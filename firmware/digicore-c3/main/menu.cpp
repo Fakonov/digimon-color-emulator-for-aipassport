@@ -651,7 +651,7 @@ void menu_lapse_toast_present(uint8_t *strip, int w, int h, const char *speed)
 // same 5x7 set the card uses, so "STANDBY" comes out 168x28 and reads from a
 // metre away; the band loop exists because the caller strip only holds 24 rows
 // (2 * 320 * 24 = 15,360 B) and the panel is 240 rows tall.
-void menu_standby_present(uint8_t *strip, int w, int h, const char *text)
+void menu_standby_present(uint8_t *strip, int x, int y, int w, int h, const char *text)
 {
     constexpr int kScale = 4;                 // 4x the 1x glyphs: 20x28 per cell
     constexpr int kBandRows = 24;             // must match the caller strip
@@ -685,7 +685,7 @@ void menu_standby_present(uint8_t *strip, int w, int h, const char *text)
 
     const int tw = pen * kScale;
     const int th = 7 * kScale;
-    const int tx = (w - tw) / 2;
+    const int tx = (w - tw) / 2;          // relative to the window
     const int ty = (h - th) / 2;
 
     for (int y0 = 0; y0 < h; y0 += kBandRows) {
@@ -695,10 +695,10 @@ void menu_standby_present(uint8_t *strip, int w, int h, const char *text)
             const int y = y0 + r;
             const bool in_band = (y >= ty) && (y < ty + th);
             const int gy = in_band ? (y - ty) / kScale : -1;
-            for (int x = 0; x < w; ++x) {
+            for (int px = 0; px < w; ++px) {
                 uint16_t c = 0x0000;
-                if (in_band && x >= tx && x < tx + tw) {
-                    const int gx = (x - tx) / kScale;
+                if (in_band && px >= tx && px < tx + tw) {
+                    const int gx = (px - tx) / kScale;
                     if (gx >= 0 && gx < kMaxCols && s_bits[gy][gx] != 0)
                         c = 0xFFFF;
                 }
@@ -706,9 +706,9 @@ void menu_standby_present(uint8_t *strip, int w, int h, const char *text)
                 *p++ = (uint8_t)(c & 0xFF);
             }
         }
-        const esp_err_t err = display_draw_bitmap(0, y0, w, rows, strip);
+        const esp_err_t err = display_draw_bitmap(x, y + y0, w, rows, strip);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "standby band y=%d failed: %d", y0, int(err));
+            ESP_LOGE(TAG, "standby band y=%d failed: %d", y + y0, int(err));
             return;
         }
     }

@@ -681,6 +681,12 @@ static uint32_t s_lapse_ticks = 0; // injected tick pairs this session (diagnost
 // menu_lapse_toast_present), not the top-margin banner: the banner's first rows
 // sit under the panel's rounded-corner mask and were being clipped.
 static bool s_lapse_toast = false;
+// Set when the notice appears and cleared the first frame the pad is released.
+// The key that raised it is often still down - the C that closed the settings
+// card is a latch that stays for kPressFrames - and without this the notice
+// reads that same press as "stop" and the lapse dies the instant you picked
+// a speed (measured 2026-11-27).
+static bool s_lapse_hold_off = false;
 static bool s_lapse_repaint = false;   // one-shot: the card covered whole screen rows
 static char s_lapse_toast_text[16] = "";
 static int64_t s_lapse_log_us = 0;     // next LAPSE bench line
@@ -747,6 +753,7 @@ static void sync_time_lapse(bool force)
     // hide the menu.
     if (want > 1 && prev <= 1 && !menu_is_open()) {
         s_lapse_toast = true;
+        s_lapse_hold_off = true;
         std::snprintf(s_lapse_toast_text, sizeof(s_lapse_toast_text), "%dX", want);
         ESP_LOGI(TAG, "lapse notice up (%s)", s_lapse_toast_text);
     } else if (want <= 1) {
@@ -1991,8 +1998,13 @@ static void standby_enter(int64_t idle_us)
         s_lit = true;
         display_backlight_set(s_brightness_pct);
     }
-    menu_standby_present(s_strip, kDstW, kDstH, "STANDBY");
-    ESP_LOGI(TAG, "standby up after %lld ms idle", (long long)(idle_us / 1000));
+    // The card covers the guest window only: the wall, the rim and the battery
+    // corner keep what they show, so this reads as the game picture being
+    // replaced rather than the machine being off.  Waking it therefore only has
+    // to push the window back, not repaint the shell.
+    menu_standby_present(s_strip, left_px(), top_px(), kWinPxW, kWinPxH, "STANDBY");
+    ESP_LOGI(TAG, "standby up after %lld ms idle (card %dx%d at %d,%d)",
+             (long long)(idle_us / 1000), kWinPxW, kWinPxH, left_px(), top_px());
 }
 
 static void standby_leave(void)
@@ -2005,9 +2017,25 @@ static void standby_leave(void)
         s_lit = true;
         display_backlight_set(s_brightness_pct);
     }
-    bezel_paint(s_strip, sizeof(s_strip), s_batt_pct);
+    // Only the window was covered, so the shell is untouched: ask the blitter
+    // for a full window push and nothing else.  (The 1.16.0 first cut repainted
+    // the whole shell here, which cost ~30 ms of blocking SPI on the wake frame.)
     s_blit_repaint_all = true;
     ESP_LOGI(TAG, "standby off after %lld ms", (long long)(held / 1000));
+}
+
+// The console injector (K <mask> <frames>) is normally drained in the main
+// input path, far below.  Every modal branch returns before that, so it has to
+// drain its own copy - otherwise s_inject_left keeps its value forever and the
+// modal state never sees the pad released (measured 2026-11-27: one C injected
+// into the lapse notice armed the hold-off and never cleared it).
+static int drain_injector(void)
+{
+    if (s_inject_left <= 0)
+        return 0;
+    const int mask = s_inject_mask;
+    s_inject_left--;
+    return mask;
 }
 
 static void update_buttons(void)
@@ -2018,8 +2046,8 @@ static void update_buttons(void)
     if (s_standby) {
         const int edge = buttons_take_latched();
         buttons_state();                     // keep the poller's debounce fed
-        const bool key = (edge != 0) ||
-                         (s_inject_left > 0 && s_inject_mask != 0);
+        const int inj = drain_injector();
+        const bool key = (edge != 0) || (inj != 0);
         if (s_port_bits != 0xffff) {
             s_port_bits = 0xffff;
             s_soc.set_port(0, 0xffff);
@@ -2033,29 +2061,29 @@ static void update_buttons(void)
         return;
     }
 
-    // The lapse notice is modal: while it is up the only thing a key may do is
-    // stop the lapse (C) or dismiss the notice (B).  Everything else is
-    // swallowed, the pad stays released, and the settings gesture is not
-    // reachable.
+    // The lapse notice is modal and C is the only key it acts on: C stops the
+    // lapse (and the notice goes with it).  Everything else is swallowed, the
+    // pad stays released, and the settings gesture is not reachable.
     if (s_lapse_toast) {
         const int edge = buttons_take_latched();
-        buttons_state();                     // keep the poller's debounce fed
+        const int level = buttons_state();   // keeps the poller's debounce fed
+        const int inj = drain_injector();
+        if (s_lapse_hold_off) {
+            if (level == 0 && inj == 0)
+                s_lapse_hold_off = false;
+            if (s_port_bits != 0xffff) {
+                s_port_bits = 0xffff;
+                s_soc.set_port(0, 0xffff);
+            }
+            s_last_input_us = esp_timer_get_time();
+            return;
+        }
         // The console injector (K <mask> <frames>) counts as a finger here too.
-        const bool b_tap = (edge & BTN_KEY1) != 0 ||
-                           (s_inject_left > 0 && (s_inject_mask & BTN_KEY1) != 0);
-        const bool c_tap = (edge & BTN_KEY2) != 0 ||
-                           (s_inject_left > 0 && (s_inject_mask & BTN_KEY2) != 0);
+        const bool c_tap = ((edge | inj) & BTN_KEY2) != 0;
         if (c_tap) {
             s_inject_left = 0;
             s_inject_mask = 0;
             cancel_time_lapse("C on the lapse notice");
-        } else if (b_tap) {
-            // B only puts the notice away; the lapse keeps running.  Stopping
-            // it is C (or the card row), which is the key the notice now names.
-            s_lapse_toast = false;
-            s_lapse_repaint = true;
-            ESP_LOGI(TAG, "B on the lapse notice -> notice dismissed, lapse %dx",
-                     s_lapse_x);
         }
         if (s_port_bits != 0xffff) {
             s_port_bits = 0xffff;
@@ -2207,9 +2235,13 @@ static void update_buttons(void)
     }
 
     // A short C tap stops a running lapse and is consumed here, so the game
-    // never sees the key.  Only while a lapse runs: the rest of the time C is
-    // the game cancel and must reach it.
-    if (s_lapse_x > 1 && ((instant | latched) & BTN_KEY2) != 0) {
+    // never sees the key.  Two conditions keep it from stealing the key: a
+    // lapse has to be running (otherwise C is the game cancel), and the
+    // settings card must be closed - inside the card C is the "leave the
+    // card" key, and eating it there meant picking a speed left you stuck in
+    // the card with the row back on OFF (measured 2026-11-27).
+    if (s_lapse_x > 1 && !menu_is_open() &&
+        ((instant | latched) & BTN_KEY2) != 0) {
         cancel_time_lapse("C");
         instant = instant & ~BTN_KEY2;
         latched = latched & ~BTN_KEY2;
@@ -3449,6 +3481,7 @@ extern "C" void app_main(void)
                 // card is gone; while it was up the row itself was the feedback.
                 if (s_lapse_x > 1 && !s_lapse_toast) {
                     s_lapse_toast = true;
+                    s_lapse_hold_off = true;   // the closing key is still down
                     std::snprintf(s_lapse_toast_text, sizeof(s_lapse_toast_text),
                                   "%dX", s_lapse_x);
                     ESP_LOGI(TAG, "lapse notice up (%s) after the card closed",
@@ -3674,7 +3707,7 @@ extern "C" void app_main(void)
                 const uint32_t df = s_frames - s_fps_win_frames;
                 s_fps_win_us = now;
                 s_fps_win_frames = s_frames;
-                if (dt && !s_standby)
+                if (dt)
                     draw_fps_overlay(int((uint64_t(df) * 100000000ull / dt) / 100));
             }
         }

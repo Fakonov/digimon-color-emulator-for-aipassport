@@ -116,12 +116,13 @@ void menu_banner_present(uint8_t *strip, int width, const char *text);
 // (5.3 k pixels against the 37 k of the blit).  `strip` needs 2 * 240 * 22.
 void menu_lapse_toast_present(uint8_t *strip, int w, int h, const char *speed);
 
-// Standby card: the whole panel black with one line of white text in the middle.
-// This is what the handset shows instead of a dead black screen once its own
-// 16 s idle timeout has passed, and it replaces the old top-margin "MACHINE
-// DARK" banner.  Pushed straight at the panel in 24-row bands, so `strip` needs
-// 2 * w * 24 bytes; the caller must not blit over it afterwards.
-void menu_standby_present(uint8_t *strip, int w, int h, const char *text);
+// Standby card: one line of white text on black, drawn inside the guest window
+// only - the brick wall, the metal rim and the battery corner stay as they are,
+// so this reads as the game picture being replaced rather than the machine
+// being off.  (x,y,w,h) is the window on the panel (192x192 at 64,24).  Pushed
+// straight at the panel in 24-row bands, so `strip` needs 2 * w * 24 bytes; the
+// caller must not blit the window again until it wakes.
+void menu_standby_present(uint8_t *strip, int x, int y, int w, int h, const char *text);
 
 // Debug aid: dump the next `frames` menu pushes to the console as downsampled
 // hex rows ("B <band> <y> <pixels>").  The menu paints straight to the panel
