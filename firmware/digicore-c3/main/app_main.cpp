@@ -45,6 +45,7 @@
 #include "rom_esp.h"
 #include "saveimg.h"
 #include "gueststate.h"
+#include "manualsave.h"
 #include "fbsave.h"
 #include "menu.h"
 #include "bezel.h"
@@ -1206,6 +1207,8 @@ static int s_pattern = 0;          // 0 = guest picture, 1 = fb pattern, 2 = pan
 // Defined next to the snapshot code below; the console needs them here.
 static bool snapshot_machine_state(bool force);
 static void restore_machine_state(void);
+static bool manual_save_now(void);
+static bool manual_load_last(void);
 static bool load_panel_frame(uint32_t expect_crc);
 static bool snapshot_clock_valid(void);
 static void guest_reset_cpu(void);
@@ -1465,6 +1468,20 @@ static void console_exec(char *line)
                     snapshot_machine_state(true) ? "stored" : "skipped",
                     unsigned(gueststate_newest_seq()));
         break;
+    case 'm': {                    // m s | m l: the manual (user-owned) slot
+        char what = 0;
+        if (sscanf(line + 1, " %c", &what) == 1) {
+            if (what == 's' || what == 'S')
+                std::printf("ACK m %s\n", manual_save_now() ? "saved" : "failed");
+            else if (what == 'l' || what == 'L')
+                std::printf("ACK m %s\n", manual_load_last() ? "loaded" : "failed");
+            else
+                std::printf("NAK m (usage: m s | m l)\n");
+        } else {
+            std::printf("NAK m (usage: m s | m l)\n");
+        }
+        break;
+    }
     case 'y': {                    // y <hh> <mm> <ss>: replay the ROM's clock commit
         // Exactly what flash 0x204179 does, in one call: the RTC registers, the
         // enable bit, the half-second counter, then Timebase_Clear.  Doing it
@@ -2343,6 +2360,17 @@ static void update_buttons(void)
             ESP_LOGI(TAG, "menu row 1 -> A+B in %lld ms, held %lld ms",
                      (long long)(kPadBlankUs / 1000), (long long)(kAcChordUs / 1000));
             break;
+        case MENU_ACTION_SAVE_NOW:
+            // The card stays open so the row can say SAVED/FAILED; nothing else
+            // changes - the autosave deadline and its ring are untouched.
+            manual_save_now();
+            break;
+        case MENU_ACTION_LOAD_SAVE:
+            // Restores the slot, then writes the same state into the autosave
+            // ring as the newest record (see manual_load_last).  The card is
+            // closed by the load path so the player sees the restored picture.
+            manual_load_last();
+            break;
         default:
             break;
         }
@@ -2729,6 +2757,93 @@ static bool snapshot_machine_state(bool force)
     if (s_lapse_x > 1)
         wallclock_adopt_local(guest_clock_sec());
     wallclock_persist();
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+//  manual save slot (SAVE NOW / LOAD SAVE)
+//
+//  The autosave ring is a rolling history: a manual save stored there would be
+//  overwritten within one period.  manualsave.cpp keeps it in its own 12 KiB
+//  slot at the tail of the partition instead.  The contract the user asked for:
+//    * saving leaves the game running and does not touch the autosave schedule;
+//    * loading restores the slot, then writes the same state into the ring as
+//      the newest record, so the next autosave continues from there.
+//  No panel frame is stored with the manual slot (24.5 KiB does not fit); a load
+//  asks for a full repaint instead, which is what the direct-resume path does
+//  anyway.
+// ---------------------------------------------------------------------------
+static bool manual_save_now(void)
+{
+    if (!manualsave_ready()) {
+        menu_set_manual_note("NO SLOT");
+        ESP_LOGW(TAG, "manual save: no slot (partition table too old?)");
+        return false;
+    }
+    if (s_soc.asleep()) {
+        menu_set_manual_note("ASLEEP");
+        return false;
+    }
+    s_snap_blob.cpu = *s_cpu.m_core;
+    s_soc.save_state(s_snap_blob.io);
+    s_snap_blob.fb_crc = 0;             // no frame in the manual slot
+    const uint32_t tod = uint32_t(wallclock_local_sec());
+    const bool ok = manualsave_store(&s_snap_blob, uint32_t(sizeof(s_snap_blob)),
+                                     s_soc.ram, uint32_t(sizeof(s_soc.ram)), tod);
+    menu_set_manual_note(ok ? "SAVED" : "FAILED");
+    ESP_LOGI(TAG, "manual save %s pc=%06x tod=%u", ok ? "stored" : "failed",
+             unsigned(guest_pc()), unsigned(tod));
+    return ok;
+}
+
+static bool manual_load_last(void)
+{
+    if (!manualsave_ready()) {
+        menu_set_manual_note("NO SLOT");
+        return false;
+    }
+    SnapBlob blob{};
+    uint32_t tod = 0;
+    if (!manualsave_load(&blob, uint32_t(sizeof(blob)), s_soc.ram,
+                         uint32_t(sizeof(s_soc.ram)), &tod)) {
+        menu_set_manual_note("EMPTY");
+        return false;
+    }
+
+    *s_cpu.m_core = blob.cpu;
+    bool replay = false;
+    if (!s_soc.restore_state(blob.io)) {
+        // The SoC block is unusable; RAM already holds the slot's contents, so
+        // replay power-on rather than running a mixed machine.
+        replay = true;
+    } else {
+        const uint32_t pc = guest_pc();
+        if (pc < 0x200000u || pc >= 0x400000u) {
+            replay = true;              // ROM park loop: no resumable frame
+        } else if (blob.io.asleep) {
+            s_soc.set_sleep_inhibit(kGuestResumePc);
+            s_soc.wake_from_sleep();
+        }
+    }
+    if (replay) {
+        s_soc.reset();
+        s_soc.set_cpu(&s_cpu);
+        guest_reset_cpu();
+    }
+    s_force_full = true;
+    s_blit_repaint_all = true;
+    s_snap_ram_crc_valid = false;
+    // The slot carries the guest clock; make the host anchor agree with it, or
+    // clock_sync() would drag the restored machine back to the pre-load time.
+    wallclock_adopt_local(guest_clock_sec());
+    wallclock_persist();
+
+    // The user's contract: the loaded state becomes the newest autosave too.
+    const bool ring = snapshot_machine_state(true);
+    menu_set_manual_note("LOADED");
+    menu_close();
+    ESP_LOGI(TAG, "manual load pc=%06x tod=%u%s autosave=%s", unsigned(guest_pc()),
+             unsigned(tod), replay ? " replay" : "", ring ? "newest" : "failed");
     return true;
 }
 
@@ -3635,7 +3750,12 @@ extern "C" void app_main(void)
             static uint32_t s_crc_frames = 0;
             static uint32_t s_stall = 0;
             static uint32_t s_stall_fixes = 0;
-            if (++s_crc_frames >= 30u) {      // ~0.5 s at this board's frame rate
+            // The settings card parks the guest and paints over the window; the
+            // standby card is a still picture by design.  Neither is a stalled
+            // guest, so the watchdog stays quiet and the 32 KiB CRC is skipped.
+            const bool ui_owns_panel =
+                s_standby || menu_is_open() || menu_confirm_is_open();
+            if (!ui_owns_panel && ++s_crc_frames >= 30u) {      // ~0.5 s at this board's frame rate
                 s_crc_frames = 0;
                 // The framebuffer CRC, not the pixel counters: the HLE push
                 // counter keeps moving on the guest's own redraws even when the
@@ -3678,6 +3798,9 @@ extern "C" void app_main(void)
                         ESP_LOGW(TAG, "framebuffer frozen on scr=%04X; kicking [0x0851] (%u)",
                                  unsigned(hscr), unsigned(s_stall_fixes));
                 }
+            } else if (ui_owns_panel) {
+                s_crc_frames = 0;
+                s_stall = 0;
             }
         }
         persist_save_image();

@@ -77,6 +77,7 @@ static bool s_open = false;
 // The menu owns the panel through menu_present(), so it only has to be pushed
 // again when something on it changed -- the values, or which row is selected.
 static bool s_dirty = true;
+static char s_manual_note[16] = "";   // last SAVE NOW / LOAD SAVE result
 static int s_capture = 0;   // non-zero: dump the next menu pushes to the console
 static nvs_handle_t s_nvs;
 static bool s_nvs_ok = false;
@@ -150,6 +151,7 @@ void menu_open()
     // Row 0 is the A+C chord and it is the reason most people open this card, so
     // the cursor starts there.  The value rows are one A press away.
     s_sel = MENU_IDX_CHORD;
+    s_manual_note[0] = '\0';
     s_dirty = true;
     ESP_LOGI(TAG, "open");
 }
@@ -212,6 +214,14 @@ void menu_press_b()
         persist_u8("save", (uint8_t)s_save_idx);
         ESP_LOGI(TAG, "auto-save -> %s", kAutoSaveNames[s_save_idx]);
         break;
+    case MENU_IDX_SAVE_NOW:
+        s_action = MENU_ACTION_SAVE_NOW;
+        ESP_LOGI(TAG, "manual save requested");
+        break;
+    case MENU_IDX_LOAD_SAVE:
+        s_action = MENU_ACTION_LOAD_SAVE;
+        ESP_LOGI(TAG, "manual load requested");
+        break;
 
     default:
         // Every row now has a value, so this is only the out-of-range guard: a
@@ -226,6 +236,12 @@ int menu_take_action()
     const int a = s_action;
     s_action = MENU_ACTION_NONE;
     return a;
+}
+
+void menu_set_manual_note(const char *note)
+{
+    snprintf(s_manual_note, sizeof(s_manual_note), "%s", note ? note : "");
+    s_dirty = true;
 }
 
 void menu_press_c()
@@ -264,21 +280,24 @@ static constexpr int kAdvance = 6 * kTextScale;    // 12
 // so the row origin works out to 10+2+3 laterally and 20+2+3 vertically; the
 // rows themselves are 278x24 at a 30 px pitch (36..180 inside the card).
 static constexpr int kCardX = 10;
-static constexpr int kCardY = 16;
+// 6, not 16: the nine-row card is 214 px tall, and at y=16 its bottom edge
+// (230) would cover the battery corner at y=220..235.  y=6 puts the bottom at
+// 220, so the corner stays visible while the card is open.
+static constexpr int kCardY = 6;
 static constexpr int kCardW = 300;
-static constexpr int kCardH = 192;
+static constexpr int kCardH = 214;
 static constexpr int kCardR = 8;
 static constexpr int kEdge = 2;
 static constexpr int kPad = 3;
 static constexpr int kRowX = kCardX + kEdge + kPad + 8;    // 23
 static constexpr int kRowW = 278;
-// Seven rows since v1.17.1 (the VERSION row went away: the card already prints
-// the version as a muted tag in the top-right corner).  18 px rows at a 20 px
-// pitch put the last row's bottom at 183, nine px clear of the 192 px card's
-// border, and still leave the 14 px glyphs 2 px of air above and below.
-static constexpr int kRowH = 18;
-static constexpr int kRowY0 = kCardY + kEdge + kPad + 24;  // 45; seven 18 px rows, 20 px apart
-static constexpr int kRowPitch = 20;                       // 45 + 6*20 + 18 = 183, inside the 192 px card
+// Nine rows since v1.19.0 (SAVE NOW / LOAD SAVE appended).  16 px rows at an
+// 18 px pitch put the last row's bottom at 205, inside the 214 px card
+// (16 + 214 = 230, so the card still clears the 240 px panel).  The 14 px
+// glyphs keep 1 px of air above and below.
+static constexpr int kRowH = 16;
+static constexpr int kRowY0 = kCardY + kEdge + kPad + 24;  // 45; nine 16 px rows, 18 px apart
+static constexpr int kRowPitch = 18;                       // 45 + 8*18 + 16 = 205, inside the 214 px card
 static constexpr int kTitleY = kCardY + kEdge + kPad - 1;  // 24, TOP_MID offset -1
 static constexpr int kVerY = kCardY + kEdge + kPad + 1;    // 26, TOP_RIGHT offset +1
 static constexpr int kVerRight = kCardX + kCardW - kEdge - kPad - 6;  // 299
@@ -300,7 +319,7 @@ static constexpr uint16_t kPage      = 0x0000;   // everything outside the card
 // Integer approximations of r - sqrt(r^2 - (r-dy)^2); four rows are enough at
 // this size because the arc is only a few pixels tall.
 static const uint8_t kCardRound[8] = {8, 4, 3, 2, 1, 1, 0, 0};
-static const uint8_t kRowRound[5] = {5, 2, 1, 0, 0};
+static const uint8_t kRowRound[5] = {4, 2, 1, 0, 0};
 
 // The reference port lets the game show through its settings card, so the card
 // is a 90 % wash of kPanelBg over the guest pixels instead of a flat fill, plus
@@ -493,6 +512,11 @@ static void label_for(char *buf, size_t n, int item)
     case MENU_IDX_BRIGHT:   snprintf(buf, n, "%d%%", kBrightChoices[s_bright_idx]); break;
     case MENU_IDX_VOLUME:   snprintf(buf, n, "%d%%", kVolumeChoices[s_volume_idx]); break;
     case MENU_IDX_AUTOSAVE: snprintf(buf, n, "%s", kAutoSaveNames[s_save_idx]); break;
+    case MENU_IDX_SAVE_NOW:
+    case MENU_IDX_LOAD_SAVE:
+        snprintf(buf, n, "%s", s_manual_note[0] ? s_manual_note
+                 : (item == MENU_IDX_SAVE_NOW ? "B=SAVE" : "B=LOAD"));
+        break;
     default:                buf[0] = '\0'; break;
     }
 }
@@ -507,6 +531,8 @@ static const char *name_for(int item)
     case MENU_IDX_BRIGHT:   return "BRIGHT";
     case MENU_IDX_VOLUME:   return "VOLUME";
     case MENU_IDX_AUTOSAVE: return "AUTO SAVE";
+    case MENU_IDX_SAVE_NOW: return "SAVE NOW";
+    case MENU_IDX_LOAD_SAVE: return "LOAD SAVE";
     default:                return "";
     }
 }

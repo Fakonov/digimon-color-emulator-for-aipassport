@@ -22,11 +22,12 @@
 // the same second-carry pulse, so they accelerate together and keep their
 // original order - unlike editing the clock, which the ROM explicitly does not
 // let affect growth.
-// Seven rows.  The firmware version used to be an eighth row (ABOUT/VERSION),
+// Nine rows.  The firmware version used to be an eighth row (ABOUT/VERSION),
 // but the card already prints it as a muted tag in the top-right corner next to
 // the SETTINGS title, so the row only repeated what the header said (removed in
-// v1.17.1).
-enum { MENU_ITEMS = 7 };
+// v1.17.1).  v1.19.0 appends SAVE NOW / LOAD SAVE: a user-owned slot, separate
+// from the autosave ring.
+enum { MENU_ITEMS = 9 };
 enum {
     MENU_IDX_CHORD    = 0,   // SEND A+C
     MENU_IDX_CHORD_AB = 1,   // SEND A+B
@@ -35,6 +36,9 @@ enum {
     MENU_IDX_BRIGHT   = 4,
     MENU_IDX_VOLUME   = 5,
     MENU_IDX_AUTOSAVE = 6,
+    MENU_IDX_SAVE_NOW = 7,   // manual save: B stores into the independent slot
+    MENU_IDX_LOAD_SAVE = 8,  // manual load: B restores it, then overwrites the
+                             // newest autosave record with the same state
 };
 // SAVE OUT / SAVE IN were rows 6 and 7 until 2026-11-25.  A manual load restores
 // the newest snapshot, which is the autosave one, and those are taken while the
@@ -52,8 +56,14 @@ enum {
     MENU_ACTION_NONE = 0,
     MENU_ACTION_CHORD = 1,
     MENU_ACTION_CHORD_AB = 2,
+    MENU_ACTION_SAVE_NOW = 3,
+    MENU_ACTION_LOAD_SAVE = 4,
 };
 int  menu_take_action();      // returns the queued action and clears it
+
+// Result of the last manual save/load, shown on the two manual rows until the
+// card is opened again ("SAVED" / "LOADED" / "EMPTY" / "FAILED").
+void menu_set_manual_note(const char *note);
 
 // Reads the persisted values out of NVS.  Safe to call once at boot; on any
 // failure the compile-time defaults stay in place.

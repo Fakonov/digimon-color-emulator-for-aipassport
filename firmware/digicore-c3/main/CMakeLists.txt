@@ -10,6 +10,7 @@ idf_component_register(
          "rom_esp.cpp"
          "saveimg.cpp"
          "gueststate.cpp"
+         "manualsave.cpp"
          "fbsave.cpp"
          "wallclock.cpp"
          "menu.cpp"
