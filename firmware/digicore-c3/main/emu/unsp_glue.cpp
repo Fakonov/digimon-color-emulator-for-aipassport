@@ -652,21 +652,33 @@ static inline void hot_prng_n(HotState *s, uint32_t n, uint16_t tick)
 
 	uint16_t ylo = 0, yhi = 0, r4_rot = 0;
 
+	// The eight LFSR words live in locals for the whole run.  The loop below
+	// used to touch m[0x0600..0x0607] on every pass (11 reads + 8 writes); on
+	// the C3 that is DRAM with no data cache, and at ~285k collapsed passes/s
+	// it was the largest remaining idle-scene cost (R8 audit R8-C1).  Nothing
+	// outside this function can observe the intermediate words: the collapse
+	// defers interrupts and only calls check_irqs() after it returns, so
+	// writing them back once at the end is equivalent to writing per pass.
+	uint16_t w0 = m[0x0600], w1 = m[0x0601];
+	const uint16_t w2 = m[0x0602], w3 = m[0x0603];
+	uint16_t w4 = m[0x0604], w5 = m[0x0605];
+	uint16_t w6 = m[0x0606], w7 = m[0x0607];
+
 	for (uint32_t k = 0; k < n; k++)
 	{
-		const uint32_t a = ((uint32_t)m[0x0603] << 16) | m[0x0602];
+		const uint32_t a = ((uint32_t)w3 << 16) | w2;
 		const uint32_t y = (a << 11) ^ a;
 		ylo = (uint16_t)y;
 		yhi = (uint16_t)(y >> 16);
 
 		// Shift the 4-word state down and feed the newest word in at 0x0606.
-		const uint16_t w0 = m[0x0600], w1 = m[0x0601];
-		m[0x0600] = m[0x0604];
-		m[0x0601] = m[0x0605];
-		m[0x0604] = m[0x0606];
-		m[0x0605] = m[0x0607];
-		m[0x0606] = w0;
-		m[0x0607] = w1;
+		const uint16_t t0 = w0, t1 = w1;
+		w0 = w4;
+		w1 = w5;
+		w4 = w6;
+		w5 = w7;
+		w6 = t0;
+		w7 = t1;
 
 		// r3 = yhi >> 7, r4 = ylo ror 7, r3 >>= 7, r4 ror= 7 (16-bit, via sb).
 		uint32_t sh = ((uint32_t)yhi << 4) | sb;
@@ -694,18 +706,25 @@ static inline void hot_prng_n(HotState *s, uint32_t n, uint16_t tick)
 		r4_rot = r4;
 
 		// r4 = [0x0601] >> 9 (through sb), then mixed into the two words.
-		sh = ((uint32_t)m[0x0601] << 4) | sb;
+		sh = ((uint32_t)w1 << 4) | sb;
 		sh >>= 3;
 		sb = (uint16_t)(sh & 0x0fu);
 		r4 = (uint16_t)(sh >> 4);
-		r4 ^= m[0x0600];
-		r2 = m[0x0601];
+		r4 ^= w0;
+		r2 = w1;
 		r1 = (uint16_t)(r4_rot ^ r4);
 		r3 ^= r2;
 
-		m[0x0600] = r1;
-		m[0x0601] = r3;
+		w0 = r1;
+		w1 = r3;
 	}
+
+	m[0x0600] = w0;
+	m[0x0601] = w1;
+	m[0x0604] = w4;
+	m[0x0605] = w5;
+	m[0x0606] = w6;
+	m[0x0607] = w7;
 
 	// The scratch locals live at [bp+0..2]; only the last pass survives.
 	m[(uint16_t)(sp0 + 1) & 0x0fffu] = ylo;

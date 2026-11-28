@@ -10,7 +10,7 @@ ROM 用你自己的镜像，通过网页（Web Serial）写进设备。
 |---|---|
 | 目标板 | FoloToy AI Passport（ESP32-C3, 8 MB flash, 无 PSRAM） |
 | 屏幕 | ST7789P3 320×240，玻璃窗口 192×192 @ (64,24)（guest 96×96 ×2） |
-| 版本 | 1.17.1 |
+| 版本 | 1.19.0 |
 | 许可 | GPL-2.0-or-later（核心移植自 MAME） |
 
 ---

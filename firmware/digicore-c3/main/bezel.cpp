@@ -27,7 +27,9 @@
 #include "display.h"
 #include "esp_log.h"
 
-#include "font5x7.inc"
+// One definition lives in menu.cpp (it includes font5x7.inc); including the
+// table here too made a second 295-byte copy in .rodata (R8 audit AP-01).
+extern const uint8_t kFont5x7[];
 
 namespace {
 

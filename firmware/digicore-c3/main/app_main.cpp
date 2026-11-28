@@ -670,6 +670,11 @@ static uint32_t s_lapse_ticks = 0; // injected tick pairs this session (diagnost
 // menu_lapse_toast_present), not the top-margin banner: the banner's first rows
 // sit under the panel's rounded-corner mask and were being clipped.
 static bool s_lapse_toast = false;
+// Set when something painted over the notice (the settings card fills the whole
+// panel), so the push-once cache has to re-send it.  The battery corner is
+// deliberately not an invalidator: it sits on the notice's right edge and the
+// corner wins, which is what the old per-frame push effectively did too.
+static bool s_toast_invalidate = true;
 // Set when the notice appears and cleared the first frame the pad is released.
 // The key that raised it is often still down - the C that closed the settings
 // card is a latch that stays for kPressFrames - and without this the notice
@@ -3562,6 +3567,10 @@ extern "C" void app_main(void)
         // pixels against the window's 37 k, so every frame is affordable.
         // Standby owns the panel: no blit, no toast, no battery corner, no fps
         // overlay - anything pushed here would paint over the card.
+        // A card that covered the notice (the settings card paints the whole
+        // panel) has to force one re-push, or the notice never comes back.
+        if (menu_is_open() || menu_confirm_is_open())
+            s_toast_invalidate = true;
         if (s_display_ok && !s_standby && !menu_is_open() && !menu_confirm_is_open()) {
             const int64_t t_blit0 = esp_timer_get_time();
             blit_frame();
@@ -3575,8 +3584,26 @@ extern "C" void app_main(void)
             s_host_frames++;
             // The card sits on top of the picture the blit just painted, so it
             // has to follow it in the same frame.
-            if (s_lapse_toast)
-                menu_lapse_toast_present(s_strip, kDstW, kDstH, s_lapse_toast_text);
+            // The notice is a static card: push it once per text change, not
+            // once per frame.  It sits at y 216..238, below the 192x192 game
+            // window, so the blit can never cover it; the only thing that does
+            // is the shell repaint on dismissal (s_lapse_repaint), and that
+            // runs after the toast is gone.  At 60 fps the old unconditional
+            // push spent 10,560 B of blocking SPI (~2.1 ms) on every lapse
+            // frame - 12 % of the frame budget for a card that never changes.
+            {
+                static char s_toast_up[16] = "";
+                if (s_lapse_toast) {
+                    if (s_toast_invalidate || std::strcmp(s_toast_up, s_lapse_toast_text) != 0) {
+                        menu_lapse_toast_present(s_strip, kDstW, kDstH, s_lapse_toast_text);
+                        std::snprintf(s_toast_up, sizeof(s_toast_up), "%s", s_lapse_toast_text);
+                        s_toast_invalidate = false;
+                    }
+                } else {
+                    s_toast_up[0] = '\0';
+                    s_toast_invalidate = true;
+                }
+            }
             // Battery: one register read every 30 s, and the corner is only
             // pushed when the number actually moves.  Deliberately inside this
             // block - while the card owns the panel it paints over the wall,
@@ -3687,12 +3714,15 @@ extern "C" void app_main(void)
             // one-shot was tried and measured slower (task dispatch costs
             // ~0.4 ms of extra wake-up latency), which is why the tick delay
             // plus a short spin is still the shape of this.
-            // Spin the last 1.5 ms, not the last 5.5: a spun wait is the CPU
+            // Spin the last 1.0 ms, not the last 5.5: a spun wait is the CPU
             // burning at 160 MHz for nothing.  5.5 ms of spin per frame at 58 fps
-            // was a third of the wall clock idling in a busy loop.
+            // was a third of the wall clock idling in a busy loop.  1.0 ms is
+            // the floor at CONFIG_FREERTOS_HZ=1000: vTaskDelay rounds down, so
+            // the actual spin is 1.0-1.99 ms, which still covers the 1 ms tick
+            // quantum plus scheduling jitter (R8 audit, F4).
             const int64_t wait = s_deadline_us - esp_timer_get_time();
-            if (wait > 1500) {
-                vTaskDelay(pdMS_TO_TICKS((wait - 1500) / 1000));
+            if (wait > 1000) {
+                vTaskDelay(pdMS_TO_TICKS((wait - 1000) / 1000));
             }
             while (esp_timer_get_time() < s_deadline_us) {
             }
@@ -3765,7 +3795,7 @@ extern "C" void app_main(void)
                 const uint32_t df = s_frames - s_fps_win_frames;
                 s_fps_win_us = now;
                 s_fps_win_frames = s_frames;
-                if (dt)
+                if (dt && !s_standby && !menu_is_open())
                     draw_fps_overlay(int((uint64_t(df) * 100000000ull / dt) / 100));
             }
         }
