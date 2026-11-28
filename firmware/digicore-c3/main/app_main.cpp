@@ -748,9 +748,15 @@ static void sync_time_lapse(bool force)
     } else if (want <= 1) {
         s_lapse_toast = false;
     }
-    // Every preset runs the ROM in its 60x-carry mode; the multiplier is the
-    // injection period, not the flag.
-    const uint16_t flag = (want > 1) ? 1u : 0u;
+    // The ROM's own +0x3C "one carry is a whole minute" mode (0x0D03) is no
+    // longer used.  It makes the software RTC jump 60 s per carry, and a jump of
+    // that size is what wedges the guest: the picture freezes mid-animation and
+    // nothing repaints until the next key (measured repeatedly on COM4, and it
+    // reproduces at 1x with a plain clock commit, so the jump - not the lapse -
+    // is the trigger).  The presets now feed the plain one-second carry every
+    // frame instead, so the clock still runs far faster than real time but stays
+    // continuous.  See docs/FIX_LAPSE_FREEZE.md.
+    const uint16_t flag = 0;
     // Kept in place, not just written on change: a few of the ROM's own
     // state-machine branches clear 0x0D03 (0x2302A8), and one of them runs while
     // the pet screen is up, which would silently end the lapse a few seconds in.
@@ -760,44 +766,35 @@ static void sync_time_lapse(bool force)
     }
 }
 
-// microseconds times carries-per-second so the multiplier does not depend on
-// the frame rate; at most one pair is injected per frame because 0x5BE2 only
-// consumes one pair per call, and asking for more would just pile up in
-// [0x0CB1] for clock_drop_backlog() to throw away.
+// Frame-counted, not time-counted.  0x5BE2 consumes exactly one pair of
+// half-second ticks per frame-body call, so one carry per frame is the ceiling
+// this board can reach; asking for more only piles up in [0x0CB1] for
+// clock_drop_backlog() to throw away.  The resulting multiplier is "carries per
+// second", i.e. the frame rate - the honest number here, and a continuous clock
+// instead of 60-second jumps.
+static uint32_t s_lapse_frames = 0;   // frames since the last injected carry
+
 static void time_lapse_step()
 {
-    const LapseMode &m = lapse_mode(s_lapse_x);
-    if (m.period_us == 0) {
+    if (s_lapse_x <= 1) {
+        s_lapse_frames = 0;
         s_lapse_acc = 0;
         s_lapse_last_us = 0;
         return;
     }
     if (s_soc.ram[0x0CB0] != 1)      // RTC disabled: 0x5BE2 would drop the tick
         return;
-    const int64_t now = esp_timer_get_time();
-    if (s_lapse_last_us == 0) {
-        s_lapse_last_us = now;
-        return;
-    }
-    uint32_t dt = uint32_t(now - s_lapse_last_us);
-    s_lapse_last_us = now;
-    if (dt > 250000)
-        dt = 250000;                 // a stall must not be paid out in one burst
-    s_lapse_acc += dt;
-    if (s_lapse_acc >= m.period_us) {
-        // Keep the remainder so the period does not drift with the frame rate,
-        // but never let a stall pay out in a burst.
-        s_lapse_acc -= m.period_us;
-        if (s_lapse_acc > m.period_us)
-            s_lapse_acc = 0;
-        s_soc.ram[0x0CB1] = 2;       // "two half seconds are due": one carry
-        s_lapse_ticks++;
-    } else {
+    const uint32_t every = (s_lapse_x >= 60) ? 1u : 4u;   // 15X: one frame in four
+    if (++s_lapse_frames < every) {
         // Swallow the ROM's own half-second tick.  Without this the multiplier
         // was whatever the cartridge's `int off` windows happened to let through
         // (measured swings from 5.9x to 51x for the same nominal preset).
         s_soc.ram[0x0CB1] = 0;
+        return;
     }
+    s_lapse_frames = 0;
+    s_soc.ram[0x0CB1] = 2;           // "two half seconds are due": one carry, +1 s
+    s_lapse_ticks++;
 }
 
 // One-shot framebuffer dump over the console, so the host can prove the guest
@@ -3591,6 +3588,68 @@ extern "C" void app_main(void)
                     ESP_LOGI(TAG, "battery %d%% -> %d%%", s_batt_pct, pct);
                     s_batt_pct = pct;
                     bezel_draw_battery(s_strip, sizeof(s_strip), s_batt_pct);
+                }
+            }
+        }
+        // ---- repaint stall watchdog ----------------------------------------
+        // The frame body looks at [0x0851] to decide whether anything happened
+        // this frame: bit 0 = a key, bit 1 = the RTC carried a second
+        // (irom 0x5357 sets bit 1 from [0x0CB2], 0x539F sets bit 0 on a key
+        // edge).  When both are clear it takes the "nothing to do" path at
+        // 0x53B0 -> 0x5217 and the panel keeps the last picture - the sleeping
+        // pet's Z animation stops while the SoC and the guest clock keep
+        // running.  It cannot get out by itself: the second carry that would
+        // set bit 1 is produced by the very frame body it just left.  Kicking
+        // the bit from here puts it back on the drawing path (measured on COM4:
+        // blitpx 188472 -> 238777 and the framebuffer CRC changed on the next
+        // frame).
+        {
+            static uint32_t s_fb_crc = 0;
+            static uint32_t s_crc_frames = 0;
+            static uint32_t s_stall = 0;
+            static uint32_t s_stall_fixes = 0;
+            if (++s_crc_frames >= 30u) {      // ~0.5 s at this board's frame rate
+                s_crc_frames = 0;
+                // The framebuffer CRC, not the pixel counters: the HLE push
+                // counter keeps moving on the guest's own redraws even when the
+                // picture it produces is identical, and "identical" is exactly
+                // the symptom.  32 KiB of CRC twice a second is ~0.05 % of this
+                // core and only runs while the guest is already suspect.
+                const uint32_t crc = esp_rom_crc32_le(
+                    0, reinterpret_cast<const uint8_t *>(s_soc.lcd.fb),
+                    uint32_t(sizeof(s_soc.lcd.fb)));
+                const uint16_t hscr = s_soc.ram[0x0C88];
+                static uint32_t s_dbg = 0;
+                if (++s_dbg % 10u == 0u)
+                    ESP_LOGI(TAG, "crcwatch crc=%08X scr=%04X stall=%u fixes=%u",
+                             unsigned(crc), unsigned(hscr), unsigned(s_stall),
+                             unsigned(s_stall_fixes));
+                if (crc != s_fb_crc) {
+                    s_fb_crc = crc;
+                    s_stall = 0;
+                } else if ((hscr == 0x0004u || hscr == 0x001Du) &&
+                           ++s_stall >= 2u) {
+                    // Three identical CRC samples on a screen that is supposed
+                    // to animate: the frame body took its "nothing happened"
+                    // branch and parked at 0x5217.  Bit 1 of [0x0851] is the
+                    // clock event it is waiting for; setting it puts the guest
+                    // back on the drawing path (verified on COM4: blitpx
+                    // 188472 -> 238777, framebuffer CRC changed next frame).
+                    s_stall = 0;
+                    // Both bits: bit 1 is the clock event, bit 0 the "a key
+                    // arrived" event.  Bit 1 alone did not move the guest in the
+                    // bench run on COM4 - the drawing path also gates on bit 0 -
+                    // and [0x0853] (the key value the ROM reads) is zero here, so
+                    // the stroke cannot invent a button action.
+                    s_soc.ram[0x0851] |= 3;
+                    // Put the screen id back as well: the guest had already
+                    // switched to 0x1D for a screen it then failed to draw, and
+                    // leaving it there makes it re-freeze on the next frame.
+                    if (hscr != 0x0004u)
+                        s_soc.ram[0x0C88] = 0x0004u;
+                    if (++s_stall_fixes <= 8)
+                        ESP_LOGW(TAG, "framebuffer frozen on scr=%04X; kicking [0x0851] (%u)",
+                                 unsigned(hscr), unsigned(s_stall_fixes));
                 }
             }
         }
